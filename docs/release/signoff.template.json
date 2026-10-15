@@ -1,0 +1,29 @@
+{
+  "release": "REPLACE_WITH_RELEASE_TAG",
+  "gates": {
+    "governance": {
+      "status": "pending",
+      "evidence": "",
+      "signedOffBy": "",
+      "signedOffAt": ""
+    },
+    "wallet": {
+      "status": "pending",
+      "evidence": "",
+      "signedOffBy": "",
+      "signedOffAt": ""
+    },
+    "indexer": {
+      "status": "pending",
+      "evidence": "",
+      "signedOffBy": "",
+      "signedOffAt": ""
+    },
+    "accessibility": {
+      "status": "pending",
+      "evidence": "",
+      "signedOffBy": "",
+      "signedOffAt": ""
+    }
+  }
+}
