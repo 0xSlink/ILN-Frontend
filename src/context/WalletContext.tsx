@@ -19,6 +19,7 @@ import {
 } from '@/utils/network';
 import { getWalletRoles, type WalletRole } from '@/utils/soroban';
 import { trackEvent } from '@/lib/analytics';
+import { journeyRecovery } from '@/lib/journey-recovery-slos';
 import {
   clearWalletStorage,
   getStoredWalletProvider,
@@ -204,6 +205,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
     }
 
     setIsReconnecting(true);
+    // The stored session was interrupted (fresh load / extension reset); start
+    // measuring how long until it is restored (#1160).
+    journeyRecovery.markInterruption('wallet', 'silent_reconnect');
 
     try {
       const installed = extractConnectionState(await isConnected());
@@ -212,6 +216,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
       if (!installed) {
         clearWalletStorage();
         setSelectedProvider(null);
+        journeyRecovery.clear('wallet');
         return;
       }
 
@@ -219,16 +224,19 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
       if (!address) {
         clearWalletStorage();
         setSelectedProvider(null);
+        journeyRecovery.clear('wallet');
         return;
       }
 
       setAddress(address);
       localStorage.setItem(STORAGE_KEY, address);
       await checkNetwork();
+      journeyRecovery.markRecovered('wallet');
     } catch (e) {
       console.error('Silent reconnect failed', e);
       clearWalletStorage();
       setSelectedProvider(null);
+      journeyRecovery.clear('wallet');
     } finally {
       setIsReconnecting(false);
     }
@@ -424,6 +432,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
         const { address, error: freighterError } = await getAddress();
 
         if (freighterError) {
+          journeyRecovery.markInterruption('auth', 'access_error');
           setError(freighterError);
           updateToast(toastId, {
             type: 'error',
@@ -438,6 +447,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
           localStorage.setItem(STORAGE_KEY, address);
           setSelectedProvider('freighter');
           setStoredWalletProvider('freighter');
+          // Authorization now succeeds — close any earlier denial window (#1160).
+          journeyRecovery.markRecovered('auth');
 
           const isCorrectNetwork = await checkNetwork();
           if (!isCorrectNetwork) {
@@ -454,12 +465,14 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
           }
         }
       } else {
+        journeyRecovery.markInterruption('auth', 'access_denied');
         const msg = 'Connection rejected by user.';
         setError(msg);
         updateToast(toastId, { type: 'error', title: 'Connection Failed', message: msg });
       }
     } catch (e: any) {
       console.error('Connection error:', e);
+      journeyRecovery.markInterruption('auth', 'access_error');
       const msg = e.message || 'Connection failed';
       setError(msg);
       updateToast(toastId, { type: 'error', title: 'Connection Failed', message: msg });
