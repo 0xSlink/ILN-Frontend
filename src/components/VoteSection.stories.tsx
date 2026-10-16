@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import VoteSection from './VoteSection';
 import type { Proposal, VoteChoice } from '@/utils/governance';
 

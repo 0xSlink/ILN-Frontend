@@ -4,9 +4,29 @@ Thank you for your interest in contributing to the Invoice Liquidity Network (IL
 
 ## Prerequisites
 
-- **Node.js**: Version 18 or higher (recommended: Node.js 20 LTS)
-- **npm**: Version 9 or higher
+- **Node.js**: Version 20 LTS (`.nvmrc` specified: `20.20.2`)
+- **pnpm**: Version 9 or higher
 - **Git**: For version control
+
+## Issue Leveling and Label Curation
+
+To help contributors find tasks aligned with their experience and available time, we triage issues by **Complexity** and **Context/Familiarity requirements**.
+
+### "Good First Issue" vs. "Trivial Complexity"
+
+- **Good First Issue**:
+
+  - **Context Requirement**: Low. A newcomer with no previous knowledge of our domain (Stellar/Soroban, invoice factoring, localized routing configurations) should be able to solve it using common web development skills.
+  - **Self-Contained**: The task has a clear start and end point, affects isolated files, and does not require complex integrations or cross-cutting structural modifications.
+  - **Examples**: Implementing helper scripts (such as `pnpm run clean`), writing troubleshooting documentation, adding static content/badges, fixing localized stylesheets.
+  - **Label**: `good-first-issue`
+
+- **Trivial Complexity**:
+  - **Context Requirement**: Variable (often High). While the code changes themselves might be extremely small (e.g. changing 2 lines in a React context or smart contract call), it requires specific familiarity with the codebase, history, or integration layers to understand _why_ the change is needed and how to do it safely.
+  - **Examples**: Tweaking a Freighter smart contract connection event listener, altering a specific Supabase permission or RLS script.
+  - **Label**: `complexity: trivial`
+
+For a curated list of candidate issues matching these criteria, see [good-first-issue-candidates.md](docs/good-first-issue-candidates.md).
 
 ## Getting Started
 
@@ -28,19 +48,28 @@ Thank you for your interest in contributing to the Invoice Liquidity Network (IL
 ### 2. Install Dependencies
 
 ```bash
-npm install
+pnpm install
 ```
 
 The `prepare` script runs `husky` automatically, registering the hooks in `.husky/`.
 
 ### What the hooks do
 
-| Hook         | Trigger      | Action                                                               |
-| ------------ | ------------ | -------------------------------------------------------------------- |
-| `pre-commit` | `git commit` | Runs `eslint --fix` and `prettier --write` on staged files only      |
-| `pre-push`   | `git push`   | Runs `tsc --noEmit` to catch type errors before the branch is pushed |
+| Hook         | Trigger      | Action                                                                 |
+| ------------ | ------------ | ---------------------------------------------------------------------- |
+| `pre-commit` | `git commit` | Runs `eslint --fix` and `prettier --write` on staged files only        |
+| `pre-push`   | `git push`   | Runs `tsc --incremental` to cache and catch type errors before pushing |
 
-Hooks are scoped to staged files via `lint-staged`, so they typically complete in well under 10 seconds.
+### Husky Hook Performance & Caching
+
+To optimize the contributor experience, we audited the performance of the Husky hooks:
+
+- **`pre-commit` (`npx lint-staged`)**: Takes ~1.9s to run when no staged files need formatting, and typically under 5–10s for formatted staged edits.
+- **`pre-push` (`tsc`)**: Switching from a full typecheck (`npx tsc --noEmit`) to an incremental typecheck (`npx tsc --incremental`) improves performance significantly:
+  - **Cold Run (Full check / clean config)**: ~32.3 seconds.
+  - **Warm Run (Incremental / local cache)**: ~8.4 seconds (a ~74% speedup).
+
+The generated `tsconfig.tsbuildinfo` build cache file is ignored in `.gitignore` to keep git diffs clean.
 
 ### Skipping hooks (not recommended)
 
@@ -132,7 +161,7 @@ If working on Testnet, fund your account using the Friendbot:
 All shared UI components are documented in Storybook. Browse them locally:
 
 ```bash
-npm run storybook
+pnpm run storybook
 ```
 
 A Storybook is also deployed to GitHub Pages on every merge to `main` — check the repo's Pages link for the latest published version.
@@ -140,12 +169,94 @@ A Storybook is also deployed to GitHub Pages on every merge to `main` — check 
 ### 6. Start Development Server
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Development Workflow
+
+### Lockfile Integrity & Package Manager Conventions
+
+To prevent silent dependency version drift and ensure deterministic reproducible builds across all developer environments and CI/CD pipelines, this repository enforces strict lockfile integrity:
+
+- **Authoritative Lockfile**: `pnpm-lock.yaml` is the sole source of truth for installed dependency versions. Never use `npm install`, `yarn`, or manual edits on `pnpm-lock.yaml`.
+- **Enforced `--frozen-lockfile` in CI**: All GitHub Actions CI jobs install dependencies with `pnpm install --frozen-lockfile`. If a pull request modifies `package.json` without committing a corresponding update to `pnpm-lock.yaml`, the CI install step will fail.
+- **Drift Detection**: CI runs an explicit check (`git diff --exit-code pnpm-lock.yaml`) verifying that a fresh install produces zero diffs against the committed lockfile.
+- **Adding or Updating Dependencies**: Always use `pnpm add <pkg>` or `pnpm update <pkg>` locally, verify the changes with `pnpm run verify`, and commit both `package.json` and `pnpm-lock.yaml` together.
+
+### Pre-Push Checklist: `pnpm run verify`
+
+Before pushing a branch or opening a PR, run:
+
+```bash
+pnpm run verify
+```
+
+This runs the same checks as CI, in the same order, in a single command: `lint` → `env:check` → `format:check` → `tsc --incremental` → `test`. A passing `pnpm run verify` locally means the CI `lint` and `tests` jobs will pass too, so use it instead of running each check separately to avoid round-trips on avoidable CI failures.
+
+### Troubleshooting Local vs CI Build Mismatch
+
+If a build or test run succeeds in the GitHub Actions CI environment but fails locally on your machine, it is often due to stale build artifact caches, Next.js build caches, or outdated storybook/test caches.
+
+To resolve this, run the clean script to clear out all generated build files and caches:
+
+```bash
+pnpm run clean
+```
+
+This clears the following paths:
+
+- `.next/` (Next.js build cache)
+- `.turbo/` (Turborepo execution cache)
+- `storybook-static/` (Storybook static build)
+- `coverage/` (Vitest coverage reports)
+- `test-results/` & `playwright-report/` (Playwright E2E test artifacts)
+- `.lighthouseci/` (Lighthouse audit report caches)
+- `tsconfig.tsbuildinfo` (TypeScript incremental compilation info)
+
+After cleaning, run a fresh install with frozen lockfile and verify:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm run verify
+```
+
+### Makefile Support
+
+For contributors who prefer using `make`, a top-level `Makefile` is available mirroring standard `pnpm` tasks:
+
+| Target         | Executed Command | Purpose                     |
+| :------------- | :--------------- | :-------------------------- |
+| `make install` | `pnpm install`   | Install dependencies        |
+| `make dev`     | `pnpm dev`       | Start development server    |
+| `make build`   | `pnpm build`     | Build production bundle     |
+| `make test`    | `pnpm test`      | Run Vitest unit tests       |
+| `make lint`    | `pnpm lint`      | Run ESLint check            |
+| `make format`  | `pnpm format`    | Run Prettier formatter      |
+| `make verify`  | `pnpm verify`    | Run full verification suite |
+
+### Component Scaffolding
+
+To quickly create a new React component along with its matching Storybook story and Vitest test stub following project conventions:
+
+```bash
+pnpm scaffold:component <ComponentName>
+# Or for nested components:
+pnpm scaffold:component ui/CustomCard
+```
+
+This command generates:
+
+- Component file: `src/components/<ComponentName>.tsx`
+- Storybook file: `src/components/<ComponentName>.stories.tsx`
+- Test stub file: `src/components/__tests__/<ComponentName>.test.tsx` (or inside the target subdirectory)
+
+### Issue and PR Assignment Policy
+
+Issues that are assigned to a contributor are expected to move forward promptly. If an issue remains assigned without a linked PR update for 7 days, the repository automation will post a reminder comment. If the issue still shows no linked PR activity after 14 days, the assignee is automatically removed so the issue can be claimed by someone else.
+
+The thresholds and message text are configurable through the workflow inputs and repository variables used by [.github/workflows/stale-assignments.yml](.github/workflows/stale-assignments.yml). Contributors should keep assignments current, open or update a linked PR early, and unassign themselves if they can no longer work on the issue.
 
 ### Code Style and Formatting
 
@@ -155,20 +266,20 @@ We use **ESLint** and **Prettier** to maintain consistent code quality.
 
 ```bash
 # Check for linting errors
-npm run lint
+pnpm run lint
 
 # Auto-fix linting errors
-npm run lint:fix
+pnpm run lint:fix
 ```
 
 #### Formatting
 
 ```bash
 # Format all files
-npm run format
+pnpm run format
 
 # Check formatting without modifying files
-npm run format:check
+pnpm run format:check
 ```
 
 #### Pre-commit Hooks
@@ -176,7 +287,7 @@ npm run format:check
 We recommend using Husky for pre-commit hooks (optional but recommended):
 
 ```bash
-npm install --save-dev husky lint-staged
+pnpm add --save-dev husky lint-staged
 npx husky install
 npx husky add .husky/pre-commit "npx lint-staged"
 ```
@@ -201,42 +312,88 @@ Add to `package.json`:
 
 ```bash
 # Run all unit tests
-npm test
+pnpm test
 
 # Run tests in watch mode
-npm test -- --watch
+pnpm run test:watch
 
 # Run tests with coverage
-npm test -- --coverage
+pnpm test -- --coverage
 
 # Update snapshots after intentional UI changes
-npm test -- --update-snapshots
+pnpm test -- --update-snapshots
 ```
+
+#### Test File Organization
+
+This codebase currently has two coexisting test location conventions. Both are
+intentional and supported - use the one that matches what you're testing:
+
+1. **Colocated `__tests__/`** - next to the module under test, e.g.
+   `src/hooks/__tests__/useFoo.test.ts` for `src/hooks/useFoo.ts`, or
+   `src/components/governance/__tests__/Bar.test.tsx` for
+   `src/components/governance/Bar.tsx`. This is the default for unit tests of a
+   single hook, util, or component: `src/utils/__tests__`, `src/lib/__tests__`,
+   `src/hooks/__tests__`, and the various `src/components/**/__tests__` folders all
+   follow this pattern, as do `app/offline/__tests__` and
+   `app/pay/[id]/__tests__` for route-level components.
+2. **Centralized top-level `__tests__/`** - for suites that don't map 1:1 to a
+   single source file: cross-page or integration-style tests, and grouped
+   cross-cutting concerns in a named subdirectory, e.g. `__tests__/contract/`
+   (on-chain/contract integration tests), `__tests__/accessibility/` (per-page a11y
+   audits, `*.a11y.test.tsx`), and `__tests__/error-boundaries/`. Fixtures shared
+   across these live in `__tests__/fixtures/`.
+
+**When adding a new test**, prefer colocation (1) if it exercises a single
+hook/util/component in isolation. Use the centralized directory (2) if it's an
+integration suite spanning multiple modules/pages, or belongs to one of the
+existing grouped concerns above - add a new named subdirectory under `__tests__/`
+rather than a new flat top-level file if you're starting a new cross-cutting
+concern.
+
+Note: a number of component tests still live as flat files directly under
+`__tests__/` (not colocated) from before this convention was documented. Those are
+**not** being mass-moved as part of documenting this convention - this section
+only governs where _new_ tests should go. Bulk migration to colocation is a
+candidate for a future dedicated issue.
+
+#### Flaky Test Detection & Quarantine Process
+
+- **Automated Detection**: A scheduled CI workflow (`flaky-test-detection.yml`) runs the full test suite 3× sequentially on a weekly schedule (every Sunday at 03:00 UTC) to identify intermittent test failures without burdening per-PR CI run times.
+- **Quarantining a Flaky Test**:
+  1. Open a GitHub Issue titled `flaky: <Test Description / Suite Name>` detailing the failure log and frequency.
+  2. Mark the flaky test using `.skip` (e.g. `it.skip(...)` or `describe.skip(...)`) in code.
+  3. Include a comment above the `.skip` referencing the tracking issue URL:
+     ```typescript
+     // Quarantined due to flakiness - see https://github.com/Invoice-Liquidity-Network/ILN-Frontend/issues/<issue_number>
+     it.skip('handles dynamic timer updates without race conditions', () => { ... });
+     ```
+  4. Fix the underlying timing or async race condition in a follow-up PR and remove `.skip`.
 
 #### End-to-End Tests (Playwright)
 
 ```bash
 # Run all E2E tests
-npm run test:e2e
+pnpm run test:e2e
 
 # Run E2E tests in headed mode (for debugging)
-npm run test:e2e -- --headed
+pnpm run test:e2e -- --headed
 
 # Run specific test file
-npm run test:e2e -- invoice-submission.spec.ts
+pnpm run test:e2e -- invoice-submission.spec.ts
 ```
 
 #### Visual Regression Tests (Storybook + Chromatic)
 
 ```bash
 # Start Storybook locally
-npm run storybook
+pnpm run storybook
 
 # Build Storybook
-npm run build-storybook
+pnpm run build-storybook
 
 # Run Chromatic visual tests
-npm run chromatic
+pnpm run chromatic
 ```
 
 ### Commit message format
@@ -248,7 +405,7 @@ This repository uses Conventional Commits to power changelog generation via `git
 - Example: `chore: add CHANGELOG and git-cliff automation for frontend repo`
 - After adding release-worthy commits, update the changelog with:
   ```bash
-  npm run generate:changelog
+  pnpm run generate:changelog
   ```
 
 ## Branch Naming Convention
@@ -265,6 +422,7 @@ To maintain consistency and enable automated tooling, all branches should follow
 - `refactor/` - Code refactoring (no functional changes)
 
 Examples:
+
 - `feat/add-invoice-submission-form`
 - `fix/stellar-wallet-connection`
 - `docs/update-contributing-guide`
@@ -277,18 +435,22 @@ This convention aligns with our commit message format and helps with changelog g
 ### Before Submitting a PR
 
 1. **Code Quality**:
-   - Run `npm run lint:fix` to fix all linting errors
-   - Run `npm run format` to ensure consistent formatting
+
+   - Run `pnpm run verify` (lint, env:check, format:check, tsc --noEmit, test) and ensure it passes — this mirrors CI exactly
+   - Run `pnpm run lint:fix` to fix all linting errors
+   - Run `pnpm run format` to ensure consistent formatting
    - Ensure zero ESLint warnings
 
 2. **Testing**:
-   - Run `npm test` and ensure all tests pass
-   - Run `npm run test:e2e` for critical user flows
+
+   - Run `pnpm test` and ensure all tests pass
+   - Run `pnpm run test:e2e` for critical user flows
    - Add tests for new features or bug fixes
    - Maintain test coverage above thresholds (90% lines, 90% functions, 80% branches)
 
 3. **Visual Changes**:
-   - If your PR includes UI changes, run `npm run storybook`
+
+   - If your PR includes UI changes, run `pnpm run storybook`
    - Ensure Storybook stories are updated or added for new components
    - Chromatic will automatically run visual regression tests on your PR
 
@@ -339,6 +501,7 @@ ILN supports multiple languages using i18next. All user-facing strings must be e
 ### Adding New Translations
 
 1. **Add strings to translation files**:
+
    - English: `public/locales/en/translation.json`
    - Spanish: `public/locales/es/translation.json`
    - Add new locales by creating corresponding directories
@@ -395,6 +558,7 @@ ILN supports multiple languages using i18next. All user-facing strings must be e
 2. Copy `translation.json` from English locale
 3. Translate all strings
 4. Update `src/i18n.ts`:
+
    ```typescript
    import [locale] from "../public/locales/[locale]/translation.json";
 
@@ -454,6 +618,7 @@ MSW is configured for both Node (Vitest) and browser (Playwright) environments:
    ```
 
 3. **Use in tests**:
+
    ```typescript
    import { server } from '@/mocks/server';
 
@@ -557,11 +722,13 @@ Visual regression tests run automatically on:
 #### When Visual Changes Are Detected
 
 1. **Review Changes:**
+
    - Chromatic will comment on your PR with a link to review changes
    - Click the link to see before/after comparisons
    - Review each component change carefully
 
 2. **Approve Intentional Changes:**
+
    - If changes are intentional (new features, design updates):
      - Click "Accept" for each intended change in Chromatic
      - Add a comment explaining the change
@@ -577,17 +744,20 @@ Visual regression tests run automatically on:
 #### Best Practices
 
 1. **Component Stories:**
+
    - Write comprehensive stories covering all component states
    - Include edge cases (loading, error, empty states)
    - Test different prop combinations
    - Use realistic data in stories
 
 2. **Responsive Testing:**
+
    - Test components at different viewport sizes
    - Include mobile, tablet, and desktop breakpoints
    - Use Storybook's viewport addon for consistent testing
 
 3. **Accessibility:**
+
    - All stories are automatically tested with axe-core
    - Fix accessibility violations before merging
    - Use semantic HTML and proper ARIA attributes
@@ -666,11 +836,13 @@ export const Variant: Story = {
 #### Common Issues
 
 1. **Flaky Tests:**
+
    - Use `chromatic --exit-zero-on-changes` for non-blocking tests
    - Add delays for animations: `parameters: { chromatic: { delay: 300 } }`
    - Disable animations in test environment
 
 2. **Large Diffs:**
+
    - Check for font loading issues
    - Ensure consistent test environment
    - Use fixed dimensions for dynamic content
@@ -706,6 +878,7 @@ export const Variant: Story = {
 
 If you need help:
 
+- Check the consolidated troubleshooting guide: [docs/troubleshooting.md](docs/troubleshooting.md) for local environment setup issues, Freighter, Supabase or Resend gotchas.
 - Check existing [GitHub Issues](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/issues)
 - Review the [architecture documentation](docs/architecture.md)
 - Read the [design system guide](DESIGN.md)
@@ -742,6 +915,101 @@ When you open a PR, GitHub will automatically suggest reviewers based on the fil
 
 If you become a regular contributor to a specific area of the codebase, you can request to be added as a code owner. Contact a maintainer to discuss this.
 
+## Stale Assignment Policy
+
+To maintain effective Wave throughput and ensure issues don't get claimed and abandoned, this repository uses an automated stale assignment reclaimer.
+
+### How It Works
+
+The stale assignment bot runs daily and monitors assigned issues:
+
+1. **Warning Stage (7 days of inactivity)**
+
+   - If an issue has been assigned for 7+ days with no linked PR activity, a warning comment is added
+   - The issue is labeled with `stale-assignment-warning`
+   - The assignee is notified with instructions to either:
+     - Open a draft PR
+     - Comment with a progress update
+     - Unassign themselves if no longer working on it
+
+2. **Reclaim Stage (14 days of inactivity)**
+   - If no activity is detected for 14+ days, the assignment is automatically removed
+   - The issue is labeled with `assignment-reclaimed`
+   - Other contributors can then claim the issue
+
+### Configuration
+
+The timeout periods are configurable in `.github/workflows/stale-assignments.yml`:
+
+- `WARNING_DAYS`: Days before warning comment (default: 7)
+- `RECLAIM_DAYS`: Days before unassignment (default: 14)
+
+### For Contributors
+
+- **When claiming an issue**: Open a draft PR within 7 days to show active work
+- **If you need more time**: Comment on the issue with a progress update to reset the timer
+- **If you can't complete it**: Unassign yourself promptly so others can claim it
+- **After reclamation**: If your assignment was reclaimed but you're still working on it, re-assign yourself and open a PR promptly
+
+### Exemptions
+
+Issues with linked open PRs are automatically exempt from the stale assignment check.
+
 ## Code of Conduct
 
 Please be respectful and constructive in all interactions. We aim to create a welcoming environment for all contributors.
+
+---
+
+## Feature Flag Lifecycle
+
+ILN uses `NEXT_PUBLIC_*_ENABLED` environment variable flags to gate features that are not yet live. Flags are a short-term tool — they must not accumulate indefinitely.
+
+### Current flags
+
+| Flag                                 | Default | Purpose                               |
+| ------------------------------------ | ------- | ------------------------------------- |
+| `NEXT_PUBLIC_INSURANCE_POOL_ENABLED` | `false` | Liquidity insurance pooling panel     |
+| `NEXT_PUBLIC_NFT_ENABLED`            | `false` | Soroban Invoice NFT metadata displays |
+| `NEXT_PUBLIC_ORACLE_ENABLED`         | `false` | Oracle verification badges            |
+
+### Lifecycle stages
+
+```
+[Draft]  →  [Gated / false]  →  [Gated / true (canary)]  →  [Shipped → removed]
+```
+
+1. **Gated / false** — Feature is in development. All code paths are wrapped with `if (env.NEXT_PUBLIC_*_ENABLED)`. The flag defaults to `false` in `src/lib/env.ts` and is listed in `.env.local.example`.
+2. **Gated / true (canary)** — Feature is complete and under observation. The flag is set to `true` in production environment variables but the conditional code paths remain.
+3. **Shipped** — Feature has been stable for at least one full sprint. **The flag must be removed.** See the removal checklist below.
+
+### Adding a new flag
+
+1. Add the env var to `src/lib/env.ts` using `booleanEnv('NEXT_PUBLIC_MY_FEATURE_ENABLED')`.
+2. Add an entry to `.env.local.example` with value `false` and a comment describing the feature.
+3. Document it in the table above in this section.
+4. Open an issue to track the flag's removal, linked to the shipping milestone.
+
+### Removing a flag (cleanup checklist)
+
+When a feature ships and the flag is no longer needed:
+
+- [ ] Remove the `NEXT_PUBLIC_*_ENABLED` entry from `src/lib/env.ts`.
+- [ ] Remove the entry from `.env.local.example`.
+- [ ] Delete all `if (env.NEXT_PUBLIC_*_ENABLED)` conditional branches and their `else` paths (keep only the enabled code).
+- [ ] Remove the flag from the table in this section of `CONTRIBUTING.md`.
+- [ ] Update `README.md` if the flag appeared in the Environment Variables Reference table.
+- [ ] Run the audit script to confirm no stale references remain:
+  ```bash
+  pnpm exec tsx scripts/audit-feature-flags.ts
+  ```
+
+### Automated auditing
+
+The repo includes `scripts/audit-feature-flags.ts`, which scans the codebase and reports:
+
+- Which flags exist and where they are referenced.
+- Flags with zero code references (candidates for cleanup).
+- Flags whose default is `true` (candidates for full removal).
+
+This script runs as an **informational, non-blocking** CI step on every PR that touches flag-gated code (see `.github/workflows/feature-flag-audit.yml`). The report appears in the GitHub Actions job summary.

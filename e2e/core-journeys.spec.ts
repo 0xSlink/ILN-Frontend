@@ -1,4 +1,4 @@
-import { expect, test, devices } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 async function waitForHydration(page: import('@playwright/test').Page) {
   await page.waitForFunction(

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import PayerPerformanceTable from './PayerPerformanceTable';
 import type { PayerPerformance } from '@/utils/lp-analytics';
 

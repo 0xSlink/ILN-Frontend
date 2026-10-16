@@ -13,6 +13,7 @@ type SelectProps = {
   value?: string;
   defaultValue?: string;
   onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLSelectElement | HTMLButtonElement>) => void;
   disabled?: boolean;
   required?: boolean;
   name?: string;
@@ -20,6 +21,8 @@ type SelectProps = {
   className?: string;
   ariaLabel?: string;
   ariaLabelledBy?: string;
+  'aria-describedby'?: string;
+  'aria-invalid'?: boolean;
   native?: boolean;
   children?: React.ReactNode;
   options?: SelectOption[];
@@ -42,6 +45,7 @@ export const Select: React.FC<SelectProps> = ({
   value,
   defaultValue,
   onChange,
+  onBlur,
   disabled = false,
   required = false,
   name,
@@ -49,6 +53,8 @@ export const Select: React.FC<SelectProps> = ({
   className,
   ariaLabel,
   ariaLabelledBy,
+  'aria-describedby': ariaDescribedby,
+  'aria-invalid': ariaInvalid,
   native = false,
   children,
   options: optionsProp,
@@ -195,10 +201,13 @@ export const Select: React.FC<SelectProps> = ({
           if (!isControlled) setInternalValue(e.target.value);
           onChange?.(e);
         }}
+        onBlur={onBlur}
         disabled={disabled}
         required={required}
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
+        aria-describedby={ariaDescribedby}
+        aria-invalid={ariaInvalid}
         className={className}
       >
         {children}

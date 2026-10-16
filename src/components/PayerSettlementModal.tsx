@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchProtocolParameters } from '@/utils/governance';
-import { Invoice, TokenMetadata, getTokenAllowance, getUsdcAllowance } from '@/utils/soroban';
-import { CONTRACT_ID } from '@/constants';
+import { Invoice, TokenMetadata, getTokenAllowance } from '@/utils/soroban';
 import { formatTokenAmount, formatAddress } from '@/utils/format';
 import { TokenIcon } from './TokenSelector';
 

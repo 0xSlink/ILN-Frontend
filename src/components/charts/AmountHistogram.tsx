@@ -8,7 +8,6 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  Cell,
   type TooltipProps,
 } from 'recharts';
 import { Invoice } from '@/utils/soroban';

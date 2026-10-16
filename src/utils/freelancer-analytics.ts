@@ -55,8 +55,6 @@ export function calculateFreelancerMetrics(
   let totalTimeToFunding = 0;
   let fundedWithTimeCount = 0;
 
-  const now = Math.floor(Date.now() / 1000);
-
   freelancerInvoices.forEach((i) => {
     totalInvoiced += i.amount;
 

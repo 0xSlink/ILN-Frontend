@@ -1,0 +1,67 @@
+# Automatic PR labeling based on changed file paths
+# Labels are applied when a PR touches files in the specified paths
+
+ci:
+  - .github/workflows/**/*
+  - .github/labeler.yml
+  - .github/dependabot.yml
+  - .github/CODEOWNERS
+  - .husky/**/*
+  - .gitcliff.toml
+  - eslint.config.mjs
+  - prettierrc
+  - vitest.config.ts
+  - playwright.config.ts
+  - stryker.conf.json
+  - .lighthouserc.json
+
+documentation:
+  - docs/**/*
+  - README.md
+  - CONTRIBUTING.md
+  - DESIGN.md
+  - SECURITY.md
+  - CHANGELOG.md
+  - PR_NEW.md
+
+testing:
+  - __tests__/**/*
+  - __tests__/**/e2e/**/*
+  - e2e/**/*
+  - vitest.setup.ts
+  - vitest.shims.d.ts
+
+ui:
+  - src/components/**/*
+  - src/app/**/page.tsx
+  - src/app/**/layout.tsx
+  - styles/**/*
+
+hooks:
+  - src/hooks/**/*
+  - src/context/**/*
+
+contracts:
+  - src/lib/soroban.ts
+  - src/lib/horizon.ts
+  - src/lib/indexer-websocket.ts
+  - src/lib/contract/**/*
+  - src/lib/invoice-nft.ts
+
+api:
+  - app/api/**/*
+
+utils:
+  - src/utils/**/*
+  - src/lib/**/*  # (excluding contract-specific files above)
+
+types:
+  - src/types/**/*
+  - src/constants.ts
+
+dependencies:
+  - package.json
+  - pnpm-lock.yaml
+  - tsconfig.json
+  - next.config.ts
+  - postcss.config.mjs

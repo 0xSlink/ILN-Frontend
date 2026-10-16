@@ -9,7 +9,6 @@ import { Invoice } from '@/utils/soroban';
 import { calculateYield, formatTokenAmount, formatAddress, formatDate } from '@/utils/format';
 import { RiskLevel } from '@/utils/risk';
 import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 import InvoiceMarketplaceCard from '@/components/InvoiceMarketplaceCard';
 import FundConfirmModal from '@/components/FundConfirmModal';
 import LPSettingsModal from '@/components/LPSettingsModal';
@@ -524,7 +523,6 @@ export default function MarketplacePage() {
           </div>
         )}
       </main>
-      <Footer />
 
       {/* Fund Modal */}
       <FundConfirmModal
@@ -578,7 +576,7 @@ export default function MarketplacePage() {
                     [
                       {
                         label: 'Token',
-                        get: () =>
+                        get: (inv: Invoice) =>
                           tokenMap.get(inv.token ?? defaultToken?.contractId ?? '')?.symbol ??
                           'USDC',
                       },

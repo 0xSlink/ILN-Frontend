@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, ReactNode, useState } from 'react';
 import { toast as sonnerToast } from 'sonner';
 import AppToaster from '@/components/AppToaster';
 import { TOAST_AUTO_DISMISS_MS } from '@/lib/toast-config';
@@ -83,13 +83,40 @@ function showSonnerToast(id: string, toast: Omit<ToastMessage, 'id'>) {
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
+  const [announcement, setAnnouncement] = useState('');
+
   const addToast = useCallback((toast: Omit<ToastMessage, 'id'>) => {
     const id = Math.random().toString(36).slice(2, 11);
+
+    // Announce to screen readers
+    let messageText = '';
+    if (typeof toast.message === 'string') {
+      messageText = toast.message;
+    } else if (toast.message && React.isValidElement(toast.message)) {
+      // For React elements, extract text content if possible
+      // This is a simplified approach - in production you might want more robust extraction
+      messageText = 'Additional details available';
+    }
+
+    const announcementText = `${toast.title}${messageText ? `. ${messageText}` : ''}`;
+    setAnnouncement(announcementText);
+
+    // Clear announcement after screen readers have time to read it
+    setTimeout(() => setAnnouncement(''), 1000);
+
     showSonnerToast(id, toast);
     return id;
   }, []);
 
   const updateToast = useCallback((id: string, updates: Partial<Omit<ToastMessage, 'id'>>) => {
+    // Announce updates to screen readers
+    const message = typeof updates.message === 'string' ? updates.message : '';
+    const announcementText = `Updated: ${updates.title || 'Toast'}${message ? `. ${message}` : ''}`;
+    setAnnouncement(announcementText);
+
+    // Clear announcement after screen readers have time to read it
+    setTimeout(() => setAnnouncement(''), 1000);
+
     showSonnerToast(id, {
       type: updates.type ?? 'info',
       title: updates.title ?? 'Updated',
@@ -111,7 +138,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         aria-atomic="true"
         className="sr-only"
         id="toast-live-region"
-      />
+      >
+        {announcement}
+      </div>
     </ToastContext.Provider>
   );
 }

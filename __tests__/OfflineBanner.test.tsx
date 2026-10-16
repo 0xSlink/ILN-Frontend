@@ -1,6 +1,26 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import OfflineBanner from '@/components/OfflineBanner';
+
+// Both of these must keep a stable identity: OfflineBanner's connection effect
+// depends on them and would otherwise re-run (and re-show the banner) on every
+// render, undoing the dismissal.
+vi.mock('@/context/ToastContext', () => {
+  const toast = { addToast: vi.fn(() => 'toast-id'), updateToast: vi.fn() };
+  return { useToast: () => toast };
+});
+
+vi.mock('@tanstack/react-query', () => {
+  const queryClient = {
+    resumePausedMutations: vi.fn(),
+    refetchQueries: vi.fn(),
+    invalidateQueries: vi.fn(),
+    setQueryData: vi.fn(),
+    getQueryData: vi.fn(),
+    cancelQueries: vi.fn(),
+  };
+  return { useQueryClient: () => queryClient };
+});
 
 // Mock navigator.onLine
 const mockNavigator = {
@@ -57,14 +77,15 @@ describe('OfflineBanner', () => {
     expect(removeEventListenerSpy).toHaveBeenCalledWith('offline', expect.any(Function));
   });
 
-  it('should hide banner when dismissed', () => {
+  it('should hide banner when dismissed', async () => {
     mockNavigator.onLine = false;
     render(<OfflineBanner />);
 
     const dismissButton = screen.getByLabelText(/dismiss offline banner/i);
     fireEvent.click(dismissButton);
 
-    expect(screen.queryByText(/you're offline/i)).not.toBeInTheDocument();
+    // Dismissal plays an exit animation before the banner unmounts.
+    await waitFor(() => expect(screen.queryByText(/you're offline/i)).not.toBeInTheDocument());
   });
 
   it('should show banner again when going offline after being online', () => {

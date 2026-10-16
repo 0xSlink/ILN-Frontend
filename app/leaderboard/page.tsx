@@ -84,7 +84,7 @@ export default function LeaderboardPage() {
         getTopLPs(DEFAULT_LEADERBOARD_LIMIT),
       ]);
 
-      setPreviousRanks((prev) => {
+      setPreviousRanks((_prev) => {
         const newRanks: Record<string, number> = {};
         topPayers.forEach((p, i) => (newRanks[`payer-${p.address}`] = i + 1));
         topFreelancers.forEach((f, i) => (newRanks[`freelancer-${f.address}`] = i + 1));

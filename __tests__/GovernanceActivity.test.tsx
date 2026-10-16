@@ -115,7 +115,7 @@ describe('GovernanceActivity Component', () => {
     expect(screen.getByText(/Voted/i)).toBeInTheDocument();
     expect(screen.queryByText(/Proposal created/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Show details/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
     expect(screen.getByText(/Vote on quorum/i)).toBeInTheDocument();
   });
 });

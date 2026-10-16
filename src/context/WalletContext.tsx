@@ -12,7 +12,6 @@ import {
 } from '@stellar/freighter-api';
 import { NETWORK_NAME, NETWORK_PASSPHRASE } from '@/constants';
 import {
-  networksMatch,
   normalizeWalletNetwork,
   getMismatchDetails,
   getConfiguredStellarNetwork,

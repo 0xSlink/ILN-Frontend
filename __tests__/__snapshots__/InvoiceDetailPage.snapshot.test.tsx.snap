@@ -40,7 +40,7 @@ exports[`Invoice detail snapshots > matches the detail view for Defaulted status
         <dd
           class="font-mono"
         >
-          GBBBBB...BBRY
+          GBBB...BBRY
         </dd>
       </div>
       <div
@@ -54,7 +54,7 @@ exports[`Invoice detail snapshots > matches the detail view for Defaulted status
         <dd
           class="font-mono"
         >
-          GDDDDD...DDD2
+          GDDD...DDD2
         </dd>
       </div>
       <div
@@ -68,7 +68,7 @@ exports[`Invoice detail snapshots > matches the detail view for Defaulted status
         <dd
           class="font-bold"
         >
-          450 USDC
+          4,500 USDC
         </dd>
       </div>
       <div
@@ -140,7 +140,7 @@ exports[`Invoice detail snapshots > matches the detail view for Funded status 1`
         <dd
           class="font-mono"
         >
-          GBBBBB...BBRY
+          GBBB...BBRY
         </dd>
       </div>
       <div
@@ -154,7 +154,7 @@ exports[`Invoice detail snapshots > matches the detail view for Funded status 1`
         <dd
           class="font-mono"
         >
-          GDDDDD...DDD2
+          GDDD...DDD2
         </dd>
       </div>
       <div
@@ -168,7 +168,7 @@ exports[`Invoice detail snapshots > matches the detail view for Funded status 1`
         <dd
           class="font-bold"
         >
-          225 USDC
+          2,250 USDC
         </dd>
       </div>
       <div
@@ -240,7 +240,7 @@ exports[`Invoice detail snapshots > matches the detail view for Paid status 1`] 
         <dd
           class="font-mono"
         >
-          GAAAAA...AWHF
+          GAAA...AWHF
         </dd>
       </div>
       <div
@@ -254,7 +254,7 @@ exports[`Invoice detail snapshots > matches the detail view for Paid status 1`] 
         <dd
           class="font-mono"
         >
-          GEEEEE...EEEF
+          GEEE...EEEF
         </dd>
       </div>
       <div
@@ -268,7 +268,7 @@ exports[`Invoice detail snapshots > matches the detail view for Paid status 1`] 
         <dd
           class="font-bold"
         >
-          97.5 USDC
+          975 USDC
         </dd>
       </div>
       <div
@@ -340,7 +340,7 @@ exports[`Invoice detail snapshots > matches the detail view for PartiallyFunded 
         <dd
           class="font-mono"
         >
-          GCCCCC...CCC6
+          GCCC...CCC6
         </dd>
       </div>
       <div
@@ -354,7 +354,7 @@ exports[`Invoice detail snapshots > matches the detail view for PartiallyFunded 
         <dd
           class="font-mono"
         >
-          GEEEEE...EEEF
+          GEEE...EEEF
         </dd>
       </div>
       <div
@@ -368,7 +368,7 @@ exports[`Invoice detail snapshots > matches the detail view for PartiallyFunded 
         <dd
           class="font-bold"
         >
-          310 USDC
+          3,100 USDC
         </dd>
       </div>
       <div
@@ -440,7 +440,7 @@ exports[`Invoice detail snapshots > matches the detail view for Pending status 1
         <dd
           class="font-mono"
         >
-          GAAAAA...AWHF
+          GAAA...AWHF
         </dd>
       </div>
       <div
@@ -454,7 +454,7 @@ exports[`Invoice detail snapshots > matches the detail view for Pending status 1
         <dd
           class="font-mono"
         >
-          GDDDDD...DDD2
+          GDDD...DDD2
         </dd>
       </div>
       <div
@@ -468,7 +468,7 @@ exports[`Invoice detail snapshots > matches the detail view for Pending status 1
         <dd
           class="font-bold"
         >
-          150 USDC
+          1,500 USDC
         </dd>
       </div>
       <div

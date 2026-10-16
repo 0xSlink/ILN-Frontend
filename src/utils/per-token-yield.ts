@@ -100,7 +100,6 @@ export function calculateWeeklyYieldPerToken(
   tokenMap: Map<string, ApprovedToken>,
   defaultToken: ApprovedToken | null
 ): TokenWeeklyYield[] {
-  const now = new Date();
   const weeklyData = new Map<string, Map<number, bigint>>(); // token -> (weekStart -> yield)
 
   // Initialize token entries

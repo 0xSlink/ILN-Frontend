@@ -5,8 +5,8 @@ import {
   countActiveInvoiceFilters,
   EMPTY_INVOICE_FILTERS,
   readFiltersFromParams,
-} from '../hooks/useInvoiceFilters';
-import type { Invoice } from '../utils/soroban';
+} from '@/hooks/useInvoiceFilters';
+import type { Invoice } from '@/utils/soroban';
 
 function makeInvoice(
   id: bigint,
@@ -31,10 +31,11 @@ function makeInvoice(
 }
 
 describe('invoice filter logic', () => {
+  // Amounts use the 6-decimal USDC scale that the amount filter assumes.
   const invoices: Invoice[] = [
-    makeInvoice(101n, 'Pending', 100n * 10_000_000n, 1_760_000_000n, 300, 'token-usdc'),
-    makeInvoice(202n, 'Funded', 500n * 10_000_000n, 1_770_000_000n, 900, 'token-eurc'),
-    makeInvoice(303n, 'Paid', 900n * 10_000_000n, 1_780_000_000n, 1200, 'token-xlm'),
+    makeInvoice(101n, 'Pending', 100n * 1_000_000n, 1_760_000_000n, 300, 'token-usdc'),
+    makeInvoice(202n, 'Funded', 500n * 1_000_000n, 1_770_000_000n, 900, 'token-eurc'),
+    makeInvoice(303n, 'Paid', 900n * 1_000_000n, 1_780_000_000n, 1200, 'token-xlm'),
   ];
 
   it('searches by id and address fragments', () => {

@@ -1,13 +1,12 @@
-'use client';
-
-const ORACLE_ENABLED = process.env.NEXT_PUBLIC_ORACLE_ENABLED === 'true';
+import { NEXT_PUBLIC_ORACLE_ENABLED } from '@/constants';
 
 interface OracleBadgeProps {
   verified: boolean;
 }
 
 export default function OracleBadge({ verified }: OracleBadgeProps) {
-  if (!ORACLE_ENABLED) return null;
+  const isEnabled = NEXT_PUBLIC_ORACLE_ENABLED || process.env.NEXT_PUBLIC_ORACLE_ENABLED === 'true';
+  if (!isEnabled) return null;
 
   if (verified) {
     return (

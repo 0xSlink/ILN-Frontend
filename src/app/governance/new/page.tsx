@@ -18,11 +18,11 @@ import { AlertCircle, CheckCircle2, ChevronRight, Info, Loader2 } from 'lucide-r
 export default function NewGovernanceProposalPage() {
   const router = useRouter();
   const { address, isConnected } = useWallet();
-  const { execute, loading: txLoading, error: txError } = useTransaction();
+  const { execute: _execute, loading: _txLoading, error: _txError } = useTransaction();
 
   const [loading, setLoading] = useState(true);
   const [params, setParams] = useState<ProtocolParameters | null>(null);
-  const [userBalance, setUserBalance] = useState(1250); // Mock balance for demo/test consistency
+  const [userBalance] = useState(1250); // Mock balance for demo/test consistency
 
   const [form, setForm] = useState<CreateProposalPayload>({
     formType: 'FeeRate',
@@ -67,8 +67,8 @@ export default function NewGovernanceProposalPage() {
     try {
       const token = await lookupToken(tokenAddr);
       setForm((prev) => ({ ...prev, tokenName: token.symbol }));
-    } catch (e: any) {
-      const msg: string = e?.message ?? String(e);
+    } catch (e: unknown) {
+      const msg: string = e instanceof Error ? (e?.message ?? String(e)) : String(e);
       const isFeeOnTransfer = msg.includes('FeeOnTransferToken') || msg.includes('fee_on_transfer');
       setErrors((prev) => ({
         ...prev,
@@ -124,14 +124,14 @@ export default function NewGovernanceProposalPage() {
       // We'll wrap it to match the 'useTransaction' pattern if needed,
       // but the test expects createProposal to be called directly with signTx.
 
-      const { proposalId } = await createProposal(form, address, async (xdr) => {
+      const { proposalId } = await createProposal(form, address, async (_xdr) => {
         // This is where useTransaction.execute would normally come in if it took XDR
         return 'mock_sig';
       });
 
       router.push(`/governance/${proposalId}`);
-    } catch (e: any) {
-      setErrors({ submit: e.message });
+    } catch (e: unknown) {
+      setErrors({ submit: e instanceof Error ? e.message : String(e) });
     } finally {
       setIsSubmitting(false);
     }
@@ -176,8 +176,8 @@ export default function NewGovernanceProposalPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Governance Proposal</h1>
       <p className="text-gray-600 mb-8">
-        Propose changes to the protocol's parameters or supported assets. Your proposal will be open
-        for voting for 7 days.
+        Propose changes to the protocol&apos;s parameters or supported assets. Your proposal will be
+        open for voting for 7 days.
       </p>
 
       {isBalanceInsufficient && (

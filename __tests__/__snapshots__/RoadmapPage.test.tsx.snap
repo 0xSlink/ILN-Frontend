@@ -1395,11 +1395,6 @@ exports[`RoadmapPage > snapshot test matches expected output 1`] = `
         </a>
       </div>
     </div>
-    <div
-      data-testid="footer"
-    >
-      Footer
-    </div>
   </main>
 </DocumentFragment>
 `;

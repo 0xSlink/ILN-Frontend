@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { fn } from 'storybook/test';
 import ChangeInvoiceTokenModal from './ChangeInvoiceTokenModal';
 
 const meta: Meta<typeof ChangeInvoiceTokenModal> = {
@@ -22,6 +23,6 @@ export const Default: Story = {
   args: {
     invoice: mockInvoice,
     onClose: () => {},
-    onSuccess: (tokenId: string) => console.log('Changed to:', tokenId),
+    onSuccess: fn((tokenId: string) => `Changed to: ${tokenId}`),
   },
 };

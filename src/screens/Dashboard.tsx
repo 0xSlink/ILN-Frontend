@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
 import InvoiceQRModal from '@/components/InvoiceQRModal';
@@ -31,7 +31,12 @@ const STELLAR_EXPERT_CONTRACT_URL = `https://stellar.expert/explorer/${NETWORK_N
 const DASHBOARD_INVOICE_COLUMNS = ['w-4', 'w-8', 'w-28', 'w-24', 'w-16', 'w-20', 'w-20', 'w-12'];
 
 export type FreelancerStatusFilter =
-  'All' | 'Pending' | 'Funded' | 'Paid' | 'Defaulted' | 'Cancelled';
+  | 'All'
+  | 'Pending'
+  | 'Funded'
+  | 'Paid'
+  | 'Defaulted'
+  | 'Cancelled';
 export type FreelancerSortKey = 'amount' | 'due_date';
 export type SortOrder = 'asc' | 'desc';
 export type ViewMode = 'table' | 'timeline';
@@ -175,7 +180,7 @@ export default function DashboardPage() {
     return pendingInvoices.every((inv) => selectedIds.has(inv.id.toString()));
   }, [displayedInvoices, selectedIds]);
 
-  const handleKeyDown = (
+  const _handleKeyDown = (
     e: React.KeyboardEvent<HTMLTableRowElement>,
     invoice: Invoice,
     index: number
@@ -375,7 +380,7 @@ export default function DashboardPage() {
                         </td>
                       </tr>
                     ) : (
-                      displayedInvoices.map((invoice, index) => (
+                      displayedInvoices.map((invoice, _index) => (
                         <tr
                           key={invoice.id.toString()}
                           className={`transition-colors ${selectedIds.has(invoice.id.toString()) ? 'bg-primary/5' : 'hover:bg-surface-container-low'}`}

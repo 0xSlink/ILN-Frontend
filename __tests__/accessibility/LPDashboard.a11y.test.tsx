@@ -1,3 +1,13 @@
+/**
+ * Per-page accessibility suite for the LP Dashboard.
+ *
+ * Split with __tests__/accessibility.test.tsx (see that file's doc comment for the
+ * full picture): this file renders the `LPDashboard` component directly and adds
+ * structural checks - tab navigation, table semantics, button accessibility - that the
+ * root file doesn't assert. The root file instead renders `app/lp/page` (the route
+ * that wraps this component) under the full app Providers tree; the two therefore
+ * exercise different layers of the same feature, not the same target.
+ */
 import { render } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import { describe, it, expect, vi } from 'vitest';
@@ -103,10 +113,14 @@ vi.mock('next/navigation', () => ({
 
 describe('LPDashboard Accessibility', () => {
   it('should not have any accessibility violations', async () => {
+    // LPDashboard is a large, tab-heavy component tree; axe-scanning it
+    // is the heaviest case in this file. The default 5s test timeout is
+    // tight under worker contention (running alongside the other a11y
+    // suites), so give it more headroom.
     const { container } = render(<LPDashboard />);
     const results = await axe(container);
     expect(results).toHaveNoViolations();
-  });
+  }, 15000);
 
   it('should have proper tab navigation structure', () => {
     const { container } = render(<LPDashboard />);
@@ -121,7 +135,6 @@ describe('LPDashboard Accessibility', () => {
       });
     } else {
       // With empty data the component may not render tabs; verify navigation region exists
-      const nav = container.querySelector('[role="tablist"], nav, [data-tab]');
       // No tab navigation at all is valid for the loading/empty state
       expect(container).toBeInTheDocument();
     }

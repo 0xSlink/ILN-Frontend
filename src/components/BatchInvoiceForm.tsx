@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import Papa from 'papaparse';
 import { useWallet } from '@/context/WalletContext';
 import { useToast } from '@/context/ToastContext';
@@ -14,7 +13,6 @@ import {
   parseAmountToUnits,
 } from '@/utils/invoiceSubmission';
 import { submitInvoicesBatch } from '@/utils/soroban';
-import TokenSelector from './TokenSelector';
 
 const MAX_BATCH_SIZE = 50;
 
@@ -29,13 +27,11 @@ interface BatchInvoiceFormProps {
 
 type InputMode = 'csv' | 'form';
 
-const CSV_HEADERS = ['payer', 'amount', 'token', 'discount_rate', 'due_date'];
 const CSV_TEMPLATE = `payer,amount,token,discount_rate,due_date
 GABC123EXAMPLE456DEF789GHI012JKL345MNO678PQR901STU234VWX567YZ,1000.00,USDC,3.50,2024-12-31
 GDEF456EXAMPLE789ABC012GHI345JKL678MNO901PQR234STU567VWX890YZ,2500.50,EURC,4.25,2025-01-15`;
 
 export default function BatchInvoiceForm({ onSuccess }: BatchInvoiceFormProps) {
-  const { t } = useTranslation();
   const { address, signTx } = useWallet();
   const { addToast, updateToast } = useToast();
   const { tokens, tokenMap, defaultToken } = useApprovedTokens();
@@ -59,6 +55,14 @@ export default function BatchInvoiceForm({ onSuccess }: BatchInvoiceFormProps) {
   >([]);
 
   const currentRows = inputMode === 'csv' ? csvData : formRows;
+
+  const getTokenIdFromSymbol = useCallback(
+    (symbol: string): string => {
+      const token = Array.from(tokenMap.values()).find((t) => t.symbol === symbol.toUpperCase());
+      return token?.contractId || defaultToken?.contractId || '';
+    },
+    [tokenMap, defaultToken]
+  );
 
   const handleCsvUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,13 +114,8 @@ export default function BatchInvoiceForm({ onSuccess }: BatchInvoiceFormProps) {
         },
       });
     },
-    [addToast, defaultToken]
+    [addToast, defaultToken, getTokenIdFromSymbol]
   );
-
-  const getTokenIdFromSymbol = (symbol: string): string => {
-    const token = Array.from(tokenMap.values()).find((t) => t.symbol === symbol.toUpperCase());
-    return token?.contractId || defaultToken?.contractId || '';
-  };
 
   const addFormRow = () => {
     if (formRows.length >= MAX_BATCH_SIZE) {

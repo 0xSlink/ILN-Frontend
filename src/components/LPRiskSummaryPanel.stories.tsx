@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { fn } from 'storybook/test';
 import LPRiskSummaryPanel from './LPRiskSummaryPanel';
 
 const meta: Meta<typeof LPRiskSummaryPanel> = {
@@ -40,7 +41,7 @@ const mockInvoices = [
 export const WithRisk: Story = {
   args: {
     invoices: mockInvoices,
-    onFilterByRisk: (filter) => console.log('Filter:', filter),
+    onFilterByRisk: fn((filter) => `Filter: ${filter}`),
   },
 };
 

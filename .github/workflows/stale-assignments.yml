@@ -1,0 +1,142 @@
+name: Stale Assignment Reclaimer
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      warning_days:
+        description: 'Days before the warning comment is posted'
+        required: false
+        default: '7'
+      reclaim_days:
+        description: 'Days before the assignee is removed'
+        required: false
+        default: '14'
+
+permissions:
+  issues: write
+  pull-requests: read
+
+env:
+  WARNING_DAYS: ${{ github.event.inputs.warning_days || vars.STALE_ASSIGNMENT_WARNING_DAYS || '7' }}
+  RECLAIM_DAYS: ${{ github.event.inputs.reclaim_days || vars.STALE_ASSIGNMENT_RECLAIM_DAYS || '14' }}
+  WARNING_LABEL: ${{ vars.STALE_ASSIGNMENT_WARNING_LABEL || 'stale-assignment-warning' }}
+  RECLAIM_LABEL: ${{ vars.STALE_ASSIGNMENT_RECLAIM_LABEL || 'assignment-reclaimed' }}
+  WARNING_MESSAGE: ${{ vars.STALE_ASSIGNMENT_WARNING_MESSAGE || '⚠️ **Stale Assignment Warning**\n\nThis issue has been assigned to @assignees for X days without linked PR activity. Please keep the assignment active by opening or updating a linked PR, or unassign yourself if you are no longer working on it.\n\nIf no activity is detected within Y days, the assignment will be automatically removed.' }}
+  RECLAIM_MESSAGE: ${{ vars.STALE_ASSIGNMENT_RECLAIM_MESSAGE || '🔄 **Assignment Reclaimed**\n\nThis issue had been assigned without linked PR activity for X days, so the assignment has been automatically removed. If you were still working on it, please re-assign yourself and keep the PR in motion.' }}
+
+jobs:
+  stale-assignments:
+    name: Reclaim abandoned issue assignments
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reclaim stale assignments
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const now = Date.now();
+            const warningDays = Number(process.env.WARNING_DAYS || '7');
+            const reclaimDays = Number(process.env.RECLAIM_DAYS || '14');
+            const warningLabel = process.env.WARNING_LABEL || 'stale-assignment-warning';
+            const reclaimLabel = process.env.RECLAIM_LABEL || 'assignment-reclaimed';
+            const warningTemplate = (process.env.WARNING_MESSAGE || '').trim();
+            const reclaimTemplate = (process.env.RECLAIM_MESSAGE || '').trim();
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              assignee: '*',
+              per_page: 100
+            });
+
+            const allPullRequests = await github.paginate(github.rest.pulls.list, {
+              owner,
+              repo,
+              state: 'all',
+              per_page: 100
+            });
+
+            for (const issue of issues) {
+              const assignees = issue.assignees.map((assignee) => assignee.login);
+              if (assignees.length === 0) continue;
+
+              const linkedPullRequests = allPullRequests.filter((pullRequest) => {
+                const bodyText = `${pullRequest.title ?? ''}\n${pullRequest.body ?? ''}`;
+                return bodyText.includes(`#${issue.number}`);
+              });
+
+              const lastLinkedActivity = linkedPullRequests.length
+                ? linkedPullRequests.reduce((latestTimestamp, pullRequest) => {
+                    const updatedAt = new Date(pullRequest.updated_at ?? pullRequest.created_at ?? 0).getTime();
+                    return updatedAt > latestTimestamp ? updatedAt : latestTimestamp;
+                  }, 0)
+                : 0;
+
+              const lastActivityAt = Math.max(
+                new Date(issue.updated_at ?? issue.created_at ?? 0).getTime(),
+                lastLinkedActivity
+              );
+              const daysSinceLastActivity = Math.floor((now - lastActivityAt) / (1000 * 60 * 60 * 24));
+
+              const hasWarningLabel = issue.labels.some((label) => label.name === warningLabel);
+              const hasReclaimLabel = issue.labels.some((label) => label.name === reclaimLabel);
+
+              if (daysSinceLastActivity >= warningDays && !hasWarningLabel && !hasReclaimLabel) {
+                const warningBody = warningTemplate
+                  .replace(/@assignees/g, assignees.map((login) => `@${login}`).join(', '))
+                  .replace(/X days/g, `${daysSinceLastActivity} days`)
+                  .replace(/Y days/g, `${Math.max(reclaimDays - warningDays, 0)} days`);
+
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  body: warningBody
+                });
+
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  labels: [warningLabel]
+                });
+              }
+
+              if (daysSinceLastActivity >= reclaimDays && !hasReclaimLabel) {
+                const reclaimBody = reclaimTemplate
+                  .replace(/@assignees/g, assignees.map((login) => `@${login}`).join(', '))
+                  .replace(/X days/g, `${daysSinceLastActivity} days`);
+
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  body: reclaimBody
+                });
+
+                await github.rest.issues.removeAssignees({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  assignees
+                });
+
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  name: warningLabel
+                }).catch(() => {});
+
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: issue.number,
+                  labels: [reclaimLabel]
+                });
+              }
+            }

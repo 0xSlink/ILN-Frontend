@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import VoteProgressBar from './VoteProgressBar';
 
 const meta: Meta<typeof VoteProgressBar> = {

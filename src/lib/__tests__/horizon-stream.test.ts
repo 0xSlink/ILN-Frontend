@@ -19,9 +19,12 @@ describe('horizon-stream', () => {
     vi.useFakeTimers();
     MockEventSource.instances = [];
     vi.stubGlobal('EventSource', MockEventSource);
+    // Make reconnect delay deterministic by removing jitter.
+    vi.spyOn(Math, 'random').mockReturnValue(0);
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });

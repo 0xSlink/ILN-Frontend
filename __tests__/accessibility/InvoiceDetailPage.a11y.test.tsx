@@ -1,6 +1,19 @@
+/**
+ * Per-page accessibility suite for an invoice detail view.
+ *
+ * Split with __tests__/accessibility.test.tsx (see that file's doc comment for the
+ * full picture): unlike the other files in this directory, this suite does NOT render
+ * a real page component - it renders a hand-authored markup fixture (`MockInvoiceDetailPage`
+ * below) that mirrors the intended DOM shape, so it verifies markup patterns
+ * (description lists, live status region, sr-only context) rather than the actual
+ * `app/i/[id]/page.tsx` or `app/pay/[id]/page.tsx` output. The root file separately
+ * axe-checks the real `app/pay/[id]/page.tsx` under the full app Providers tree.
+ * Known gap: `app/i/[id]/page.tsx` itself has no real-component a11y coverage
+ * anywhere - worth a follow-up issue rather than in scope here.
+ */
 import { render } from '@testing-library/react';
 import { axe } from 'jest-axe';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // Mock the invoice detail page component
 const MockInvoiceDetailPage = () => {

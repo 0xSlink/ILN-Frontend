@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import ProfileRecentInvoices from './ProfileRecentInvoices';
 
 const meta: Meta<typeof ProfileRecentInvoices> = {

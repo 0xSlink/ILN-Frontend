@@ -3,7 +3,6 @@
 import { use, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 import ActivityFeed from '@/components/ActivityFeed';
 import CancelInvoiceButton from '@/components/CancelInvoiceButton';
 import DynamicInvoicePdfButton from '@/components/DynamicInvoicePdfButton';
@@ -256,7 +255,6 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           }}
         />
       ) : null}
-      <Footer />
     </main>
   );
 }

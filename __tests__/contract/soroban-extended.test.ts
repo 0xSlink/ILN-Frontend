@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { mockServer, mockTx, mockAssembledTx } = vi.hoisted(() => {
@@ -122,8 +121,20 @@ import {
   getInvoice,
   getInvoiceCount,
   submitInvoicesBatch,
+  listInvoicesBySubmitter,
+  listInvoicesByPayer,
+  listInvoicesByLp,
+  getTopFreelancers,
+  getTopLPs,
+  submitInvoice,
+  adminApproveToken,
+  adminRemoveToken,
+  getApprovedTokenIds,
+  getTokenMetadata,
+  getPayerScore,
+  type SubmitInvoiceArgs,
 } from '@/utils/soroban';
-import { rpc, scValToNative } from '@stellar/stellar-sdk';
+import { rpc, scValToNative, xdr } from '@stellar/stellar-sdk';
 
 const ADDR = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const USDC = 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75';
@@ -180,11 +191,9 @@ describe('soroban – getWalletRoles', () => {
       due_date: 1n,
       discount_rate: 100,
     };
-    (scValToNative as any).mockReturnValueOnce(inv);
-    (rpc.Api.isSimulationSuccess as any).mockReturnValueOnce(true).mockReturnValueOnce(false);
-    mockServer.simulateTransaction
-      .mockResolvedValueOnce({ result: { retval: {} } })
-      .mockResolvedValueOnce({ error: 'fail' });
+    (scValToNative as any).mockReturnValue([inv]);
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: [inv] } });
     const roles = await getWalletRoles(ADDR);
     expect(roles).toContain('freelancer');
   });
@@ -730,11 +739,9 @@ describe('soroban – getWalletRoles extended', () => {
       due_date: 1n,
       discount_rate: 100,
     };
-    (scValToNative as any).mockReturnValueOnce(inv);
-    (rpc.Api.isSimulationSuccess as any).mockReturnValueOnce(true).mockReturnValueOnce(false);
-    mockServer.simulateTransaction
-      .mockResolvedValueOnce({ result: { retval: {} } })
-      .mockResolvedValueOnce({ error: 'fail' });
+    (scValToNative as any).mockReturnValue([inv]);
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: [inv] } });
     const roles = await getWalletRoles(ADDR);
     expect(roles).toContain('payer');
   });
@@ -751,11 +758,9 @@ describe('soroban – getWalletRoles extended', () => {
       due_date: 1n,
       discount_rate: 100,
     };
-    (scValToNative as any).mockReturnValueOnce(inv);
-    (rpc.Api.isSimulationSuccess as any).mockReturnValueOnce(true).mockReturnValueOnce(false);
-    mockServer.simulateTransaction
-      .mockResolvedValueOnce({ result: { retval: {} } })
-      .mockResolvedValueOnce({ error: 'fail' });
+    (scValToNative as any).mockReturnValue([inv]);
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: [inv] } });
     const roles = await getWalletRoles(ADDR);
     expect(roles).toContain('lp');
   });
@@ -828,5 +833,872 @@ describe('soroban – getPayerScore exception path', () => {
     mockServer.simulateTransaction.mockRejectedValue(new Error('network'));
     const score = await getPayerScore(ADDR);
     expect(score).toBeNull();
+  });
+});
+
+// ── listInvoicesBySubmitter / listInvoicesByPayer / listInvoicesByLp — exception paths ──
+
+describe('soroban – listInvoicesBySubmitter exception path', () => {
+  it('returns [] when simulateTransaction throws', async () => {
+    setupSuccess();
+    mockServer.simulateTransaction.mockRejectedValue(new Error('rpc down'));
+    const result = await listInvoicesBySubmitter(ADDR);
+    expect(result).toEqual([]);
+  });
+});
+
+describe('soroban – listInvoicesByPayer exception path', () => {
+  it('returns [] when simulateTransaction throws', async () => {
+    setupSuccess();
+    mockServer.simulateTransaction.mockRejectedValue(new Error('rpc down'));
+    const result = await listInvoicesByPayer(ADDR);
+    expect(result).toEqual([]);
+  });
+});
+
+describe('soroban – listInvoicesByLp exception path', () => {
+  it('returns [] when simulateTransaction throws', async () => {
+    setupSuccess();
+    mockServer.simulateTransaction.mockRejectedValue(new Error('rpc down'));
+    const result = await listInvoicesByLp(ADDR);
+    expect(result).toEqual([]);
+  });
+});
+
+// ── getTopFreelancers ────────────────────────────────────────────────────────
+
+describe('soroban – getTopFreelancers', () => {
+  it('returns array of top freelancers on success', async () => {
+    setupSuccess([
+      {
+        address: ADDR,
+        score: 95,
+        invoices_submitted: 20,
+        invoices_funded: 18,
+        total_earned: 5000n,
+      },
+    ]);
+    (scValToNative as any).mockReturnValue([
+      {
+        address: ADDR,
+        score: 95,
+        invoices_submitted: 20,
+        invoices_funded: 18,
+        total_earned: 5000n,
+      },
+    ]);
+    const freelancers = await getTopFreelancers(10);
+    expect(freelancers).toHaveLength(1);
+    expect(freelancers[0]).toMatchObject({
+      address: ADDR,
+      score: 95,
+      invoices_submitted: 20,
+      invoices_funded: 18,
+      total_earned: 5000n,
+    });
+  });
+
+  it('returns empty on failed simulation', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(false);
+    mockServer.simulateTransaction.mockResolvedValue({ error: 'fail' });
+    const freelancers = await getTopFreelancers();
+    expect(freelancers).toEqual([]);
+  });
+
+  it('returns empty on non-array result', async () => {
+    setupSuccess('not-array');
+    (scValToNative as any).mockReturnValue('not-array');
+    const freelancers = await getTopFreelancers();
+    expect(freelancers).toEqual([]);
+  });
+
+  it('returns empty and logs on exception', async () => {
+    setupSuccess();
+    mockServer.simulateTransaction.mockRejectedValue(new Error('network'));
+    const freelancers = await getTopFreelancers();
+    expect(freelancers).toEqual([]);
+  });
+});
+
+// ── getTopLPs ─────────────────────────────────────────────────────────────────
+
+describe('soroban – getTopLPs', () => {
+  it('returns array of top LPs on success', async () => {
+    setupSuccess([
+      {
+        address: ADDR,
+        liquidity_provided: 100000n,
+        fees_earned: 250n,
+        total_funded: 12,
+        score: 80,
+      },
+    ]);
+    (scValToNative as any).mockReturnValue([
+      {
+        address: ADDR,
+        liquidity_provided: 100000n,
+        fees_earned: 250n,
+        total_funded: 12,
+        score: 80,
+      },
+    ]);
+    const lps = await getTopLPs(10);
+    expect(lps).toHaveLength(1);
+    expect(lps[0]).toMatchObject({
+      address: ADDR,
+      liquidity_provided: 100000n,
+      fees_earned: 250n,
+      total_funded: 12,
+      score: 80,
+    });
+  });
+
+  it('returns empty on failed simulation', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(false);
+    mockServer.simulateTransaction.mockResolvedValue({ error: 'fail' });
+    const lps = await getTopLPs();
+    expect(lps).toEqual([]);
+  });
+
+  it('returns empty on non-array result', async () => {
+    setupSuccess('not-array');
+    (scValToNative as any).mockReturnValue('not-array');
+    const lps = await getTopLPs();
+    expect(lps).toEqual([]);
+  });
+
+  it('returns empty and logs on exception', async () => {
+    setupSuccess();
+    mockServer.simulateTransaction.mockRejectedValue(new Error('network'));
+    const lps = await getTopLPs();
+    expect(lps).toEqual([]);
+  });
+});
+
+// ── submitInvoice — plain (non-object) retval branch ───────────────────────────
+
+describe('soroban – submitInvoice plain numeric retval', () => {
+  const validArgs: SubmitInvoiceArgs = {
+    freelancer: ADDR,
+    payer: ADDR,
+    amount: 125_000_000n,
+    dueDate: 1893456000,
+    discountRate: 250,
+  };
+
+  it('extracts invoiceId directly when retval is a plain bigint (not ok/Ok wrapped)', async () => {
+    setupSuccess(77n);
+    (scValToNative as any).mockReturnValue(77n);
+    const result = await submitInvoice(validArgs);
+    expect(result.invoiceId).toBe(77n);
+  });
+});
+
+// ── extractInvoiceIdFromTransaction (via submitInvoiceTransaction) ─────────────
+// extractInvoiceIdFromTransaction is a private helper only reachable through
+// submitInvoiceTransaction's `finalResult` (the resolved value of
+// server.pollTransaction). These tests exercise its returnValue-as-ScVal,
+// returnValue-as-base64-string (success + parse-failure), and
+// resultMetaXdr-based (success + parse-failure) branches using the REAL
+// stellar-sdk `xdr` module (mocked pass-through: `xdr: actual.xdr`).
+
+function buildTransactionMetaV3Xdr(returnValue: InstanceType<typeof xdr.ScVal>): string {
+  const ext = new (xdr as any).ExtensionPoint(0, undefined);
+  const sorobanExt = new (xdr as any).SorobanTransactionMetaExt(0, undefined);
+  const sorobanMeta = new (xdr as any).SorobanTransactionMeta({
+    ext: sorobanExt,
+    events: [],
+    returnValue,
+    diagnosticEvents: [],
+  });
+  const v3 = new (xdr as any).TransactionMetaV3({
+    ext,
+    txChangesBefore: [],
+    operations: [],
+    txChangesAfter: [],
+    sorobanMeta,
+  });
+  const meta = new (xdr as any).TransactionMeta(3, v3);
+  return meta.toXDR('base64');
+}
+
+describe('soroban – extractInvoiceIdFromTransaction branches', () => {
+  const args = {
+    freelancer: ADDR,
+    payer: ADDR,
+    amount: 100n,
+    dueDate: 1893456000,
+    discountRate: 250,
+    signTx: async () => 'signedXDR',
+  };
+
+  beforeEach(() => {
+    setupSuccess(42n);
+    (rpc.Api as any).GetTransactionStatus = { SUCCESS: 'SUCCESS' };
+  });
+
+  it('extracts invoiceId when finalResult.returnValue is a real xdr.ScVal instance', async () => {
+    const scVal = xdr.ScVal.scvU32(7);
+    mockServer.pollTransaction.mockResolvedValue({ status: 'SUCCESS', returnValue: scVal });
+    // scValToNative is mocked; make it return a distinguishable value for this call.
+    (scValToNative as any).mockImplementation((val: any) =>
+      val === scVal || val instanceof xdr.ScVal ? 501n : 42n
+    );
+    const result = await submitInvoiceTransaction(args);
+    expect(result.invoiceId).toBe(501n);
+  });
+
+  it('extracts invoiceId when finalResult.returnValue is a base64 XDR string', async () => {
+    const base64 = xdr.ScVal.scvU32(9).toXDR('base64');
+    mockServer.pollTransaction.mockResolvedValue({ status: 'SUCCESS', returnValue: base64 });
+    (scValToNative as any).mockImplementation((val: any) =>
+      val instanceof xdr.ScVal ? 502n : 42n
+    );
+    const result = await submitInvoiceTransaction(args);
+    expect(result.invoiceId).toBe(502n);
+  });
+
+  it('falls back to simulatedInvoiceId when returnValue string fails to parse as XDR', async () => {
+    mockServer.pollTransaction.mockResolvedValue({
+      status: 'SUCCESS',
+      returnValue: 'not-valid-base64-xdr!!!',
+    });
+    const result = await submitInvoiceTransaction(args);
+    // extractInvoiceIdFromTransaction returns null on parse failure, so the
+    // simulated invoice ID (42n, from setupSuccess(42n)) is used instead.
+    expect(result.invoiceId).toBe(42n);
+  });
+
+  it('extracts invoiceId from resultMetaXdr when present', async () => {
+    const returnValue = xdr.ScVal.scvU32(11);
+    const resultMetaXdr = buildTransactionMetaV3Xdr(returnValue);
+    mockServer.pollTransaction.mockResolvedValue({ status: 'SUCCESS', resultMetaXdr });
+    (scValToNative as any).mockImplementation((val: any) =>
+      val instanceof xdr.ScVal ? 503n : 42n
+    );
+    const result = await submitInvoiceTransaction(args);
+    expect(result.invoiceId).toBe(503n);
+  });
+
+  it('falls back to simulatedInvoiceId when resultMetaXdr fails to parse', async () => {
+    mockServer.pollTransaction.mockResolvedValue({
+      status: 'SUCCESS',
+      resultMetaXdr: 'garbage-not-a-real-transaction-meta',
+    });
+    const result = await submitInvoiceTransaction(args);
+    expect(result.invoiceId).toBe(42n);
+  });
+});
+
+// ── submitInvoicesBatch — Promise.allSettled rejection fallback + batch delay ──
+
+describe('soroban – submitInvoicesBatch rejection fallback message', () => {
+  it('uses the default fallback error message when a batch promise itself rejects', async () => {
+    setupSuccess(42n);
+    (rpc.Api as any).GetTransactionStatus = { SUCCESS: 'SUCCESS' };
+
+    // Force Promise.allSettled to report one rejected settlement, simulating
+    // a scenario the per-invoice try/catch didn't anticipate (defensive
+    // code path at the allSettled aggregation layer).
+    const allSettledSpy = vi
+      .spyOn(Promise, 'allSettled')
+      .mockResolvedValueOnce([{ status: 'rejected', reason: {} }] as any);
+
+    const results = await submitInvoicesBatch(
+      ADDR,
+      [{ payer: ADDR, amount: '100', dueDate: '2026-01-01', discountRate: '5', tokenId: USDC }],
+      async () => 'signedXDR'
+    );
+
+    expect(results).toHaveLength(1);
+    expect(results[0].success).toBe(false);
+    expect(results[0].error).toBe('Batch processing failed');
+
+    allSettledSpy.mockRestore();
+  });
+});
+
+// ── getWalletRoles — fallback loop over getAllInvoices ─────────────────────────
+
+describe('soroban – getWalletRoles fallback loop', () => {
+  it('derives all three roles from getAllInvoices, including a non-matching invoice, when the batched list_invoices_by_* calls all return empty', async () => {
+    setupSuccess();
+
+    // Four invoices returned in sequence by getAllInvoices()'s repeated
+    // getInvoice(1..4) calls: one matches on freelancer, one matches on
+    // nothing (exercises the `if (...) roles.add(...)` false branches),
+    // one matches on payer, and one matches on funder (lp).
+    const canned = [
+      {
+        id: 1n,
+        status: { Funded: null },
+        freelancer: ADDR,
+        payer: 'GNOMATCH1',
+        funder: 'GNOMATCH2',
+        amount: 100n,
+        due_date: 1n,
+        discount_rate: 100,
+      },
+      {
+        id: 2n,
+        status: { Pending: null },
+        freelancer: 'GNOMATCH3',
+        payer: 'GNOMATCH4',
+        funder: 'GNOMATCH5',
+        amount: 100n,
+        due_date: 1n,
+        discount_rate: 100,
+      },
+      {
+        id: 3n,
+        status: { Funded: null },
+        freelancer: 'GNOMATCH6',
+        payer: ADDR,
+        funder: 'GNOMATCH7',
+        amount: 100n,
+        due_date: 1n,
+        discount_rate: 100,
+      },
+      {
+        id: 4n,
+        status: { Funded: null },
+        freelancer: 'GNOMATCH8',
+        payer: 'GNOMATCH9',
+        funder: ADDR,
+        amount: 100n,
+        due_date: 1n,
+        discount_rate: 100,
+      },
+    ];
+
+    // Calls 1-3: the Promise.all([listInvoicesBySubmitter, ByPayer, ByLp])
+    // trio, all resolving successfully with an empty array so roles.size
+    // stays 0 and getWalletRoles falls through to the getAllInvoices()
+    // fallback loop. Calls 4-7: getInvoice(1..4) inside getAllInvoices,
+    // each returning one of the canned invoices above. Call 8: getInvoice(5)
+    // fails, which stops getAllInvoices' 1-failure loop.
+    let callCount = 0;
+    mockServer.simulateTransaction.mockImplementation(() => {
+      callCount++;
+      if (callCount <= 3) return Promise.resolve({ result: { retval: [] } });
+      if (callCount <= 7) return Promise.resolve({ result: { retval: {} } });
+      return Promise.resolve({ error: 'not found' });
+    });
+    (scValToNative as any).mockImplementation(() => {
+      if (callCount <= 3) return [];
+      if (callCount <= 7) return canned[callCount - 4];
+      return undefined;
+    });
+    (rpc.Api.isSimulationSuccess as any).mockImplementation(() => callCount <= 7);
+
+    const roles = await getWalletRoles(ADDR);
+    expect(roles).toContain('freelancer');
+    expect(roles).toContain('payer');
+    expect(roles).toContain('lp');
+  });
+});
+
+describe('soroban – submitInvoicesBatch multi-batch delay', () => {
+  it('waits between batches when there are more invoices than the batch size', async () => {
+    setupSuccess(42n);
+    (rpc.Api as any).GetTransactionStatus = { SUCCESS: 'SUCCESS' };
+
+    vi.useFakeTimers();
+    const invoices = Array.from({ length: 6 }, () => ({
+      payer: ADDR,
+      amount: '100',
+      dueDate: '2026-01-01',
+      discountRate: '5',
+      tokenId: USDC,
+    }));
+    const promise = submitInvoicesBatch(ADDR, invoices, async () => 'signedXDR');
+    await vi.runAllTimersAsync();
+    const results = await promise;
+    vi.useRealTimers();
+
+    expect(results).toHaveLength(6);
+    expect(results.every((r) => r.success)).toBe(true);
+  });
+});
+
+// ── adminApproveToken / adminRemoveToken ────────────────────────────────────────
+
+describe('soroban – adminApproveToken', () => {
+  beforeEach(() => setupSuccess());
+
+  it('builds an add_token transaction', async () => {
+    const tx = await adminApproveToken(ADDR, USDC);
+    expect(tx).toBeDefined();
+    expect(mockServer.getAccount).toHaveBeenCalledWith(ADDR);
+  });
+
+  it('throws when simulation fails', async () => {
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(false);
+    mockServer.simulateTransaction.mockResolvedValue({ error: 'not authorized' });
+    await expect(adminApproveToken(ADDR, USDC)).rejects.toThrow('Simulation failed');
+  });
+});
+
+describe('soroban – adminRemoveToken', () => {
+  beforeEach(() => setupSuccess());
+
+  it('builds a remove_token transaction', async () => {
+    const tx = await adminRemoveToken(ADDR, USDC);
+    expect(tx).toBeDefined();
+    expect(mockServer.getAccount).toHaveBeenCalledWith(ADDR);
+  });
+
+  it('throws when simulation fails', async () => {
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(false);
+    mockServer.simulateTransaction.mockResolvedValue({ error: 'not authorized' });
+    await expect(adminRemoveToken(ADDR, USDC)).rejects.toThrow('Simulation failed');
+  });
+});
+
+// ── getAllInvoices — 1000-invoice safety cap ────────────────────────────────────
+
+describe('soroban – getAllInvoices safety cap', () => {
+  it('stops at exactly 1000 invoices even if every getInvoice call keeps succeeding', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    (scValToNative as any).mockReturnValue({
+      id: 1n,
+      freelancer: ADDR,
+      payer: ADDR,
+      amount: 1n,
+      due_date: 1n,
+      discount_rate: 1,
+      status: { Pending: null },
+    });
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+
+    const invoices = await getAllInvoices();
+    expect(invoices).toHaveLength(1000);
+  }, 20000);
+});
+
+// ── parseInvoiceFromNative — field-alias / default-value fallbacks ─────────────
+
+describe('soroban – parseInvoiceFromNative fallback fields (via listInvoicesBySubmitter)', () => {
+  it('falls back through submitter alias and default values for missing fields', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+
+    const invoiceWithSubmitterAlias = {
+      // id, payer, amount, due_date, discount_rate all omitted -> defaults
+      submitter: 'GSUBMITTERALIAS',
+      status: { Pending: null },
+      funded_at: 555,
+      token: 'CSOMETOKEN',
+    };
+    const invoiceWithNoAliasesAtAll = {
+      // freelancer AND submitter both omitted -> '' fallback
+      payer: 'GPAYERONLY',
+      amount: 10n,
+      id: 2n,
+      due_date: 5n,
+      discount_rate: 10,
+      status: { Pending: null },
+    };
+
+    mockServer.simulateTransaction.mockResolvedValue({
+      result: { retval: [invoiceWithSubmitterAlias, invoiceWithNoAliasesAtAll] },
+    });
+    (scValToNative as any).mockReturnValue([invoiceWithSubmitterAlias, invoiceWithNoAliasesAtAll]);
+
+    const invoices = await listInvoicesBySubmitter(ADDR);
+    expect(invoices).toHaveLength(2);
+
+    const [first, second] = invoices;
+    expect(first.id).toBe(0n);
+    expect(first.freelancer).toBe('GSUBMITTERALIAS');
+    expect(first.payer).toBe('');
+    expect(first.amount).toBe(0n);
+    expect(first.due_date).toBe(0n);
+    expect(first.discount_rate).toBe(0);
+    expect(first.funded_at).toBe(555n);
+    expect(first.token).toBe('CSOMETOKEN');
+
+    expect(second.freelancer).toBe('');
+  });
+});
+
+// ── list* functions — non-array retval branch ───────────────────────────────────
+
+describe('soroban – list* functions return [] when parsed retval is not an array', () => {
+  it('listInvoicesBySubmitter', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    (scValToNative as any).mockReturnValue({ not: 'an array' });
+    const result = await listInvoicesBySubmitter(ADDR);
+    expect(result).toEqual([]);
+  });
+
+  it('listInvoicesByPayer', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    (scValToNative as any).mockReturnValue({ not: 'an array' });
+    const result = await listInvoicesByPayer(ADDR);
+    expect(result).toEqual([]);
+  });
+
+  it('listInvoicesByLp', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    (scValToNative as any).mockReturnValue({ not: 'an array' });
+    const result = await listInvoicesByLp(ADDR);
+    expect(result).toEqual([]);
+  });
+});
+
+// ── getApprovedTokenIds — non-array branch ──────────────────────────────────────
+
+describe('soroban – getApprovedTokenIds non-array branch', () => {
+  it('returns [] when the parsed native value is not an array', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    (scValToNative as any).mockReturnValue('not-an-array');
+    const tokens = await getApprovedTokenIds();
+    expect(tokens).toEqual([]);
+  });
+});
+
+// ── getTokenMetadata — unknown-token literal fallbacks + non-finite decimals ───
+
+describe('soroban – getTokenMetadata fallback branches', () => {
+  const UNKNOWN_TOKEN = 'CUNKNOWNTOKENIDNOTINKNOWNMETADATAMAPXXXXXXXXXXXXXXXXXXXXXX';
+
+  it('falls back to literal Token/TOKEN/7 when the token is unknown and all reads fail', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(false);
+    mockServer.simulateTransaction.mockResolvedValue({ error: 'fail' });
+
+    const meta = await getTokenMetadata(UNKNOWN_TOKEN);
+    expect(meta.name).toBe('Token');
+    expect(meta.symbol).toBe('TOKEN');
+    expect(meta.decimals).toBe(7);
+  });
+
+  it('falls back to 7 decimals when the resolved decimals value is not finite', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    // name, symbol, decimals reads happen concurrently in that declared
+    // order; queue matching scValToNative return values.
+    (scValToNative as any)
+      .mockReturnValueOnce('Custom Token')
+      .mockReturnValueOnce('CUSTOM')
+      .mockReturnValueOnce('not-a-number');
+
+    const meta = await getTokenMetadata(USDC);
+    expect(meta.decimals).toBe(7);
+  });
+});
+
+// ── getPayerScore — native-null-after-truthy-retval + raw-value fallback ───────
+
+describe('soroban – getPayerScore additional branches', () => {
+  it('returns null when the parsed native value is null (retval itself was truthy)', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    (scValToNative as any).mockReturnValue(null);
+    const score = await getPayerScore(ADDR);
+    expect(score).toBeNull();
+  });
+
+  it('falls back to using the raw native value as score when native.score is absent', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    // A bare bigint has no .score/.settled_on_time/.defaults properties, so
+    // all three `?? ` fallbacks in getPayerScore are exercised at once.
+    (scValToNative as any).mockReturnValue(85n);
+    const score = await getPayerScore(ADDR);
+    expect(score).toMatchObject({ score: 85, settled_on_time: 0, defaults: 0 });
+  });
+});
+
+// ── getReputation — native-null-after-truthy-retval + alias/default chains ─────
+
+describe('soroban – getReputation additional branches', () => {
+  it('returns null when the parsed native value is null (retval itself was truthy)', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    (scValToNative as any).mockReturnValue(null);
+    const rep = await getReputation(ADDR);
+    expect(rep).toBeNull();
+  });
+
+  it('falls back through score/count aliases and reports last_activity_ledger when present', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+
+    (scValToNative as any).mockReturnValueOnce({
+      reputation_score: 77,
+      submitted: 5,
+      paid: 3,
+      defaulted: 1,
+      last_activity_ledger: 12345,
+    });
+    const repA = await getReputation(ADDR);
+    expect(repA).toMatchObject({
+      score: 77,
+      invoices_submitted: 5,
+      invoices_paid: 3,
+      invoices_defaulted: 1,
+      last_activity_ledger: 12345,
+    });
+  });
+
+  it('falls back to second-level aliases (settled_on_time / defaults)', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+
+    (scValToNative as any).mockReturnValueOnce({
+      settled_on_time: 9,
+      defaults: 2,
+    });
+    const repB = await getReputation(ADDR);
+    expect(repB).toMatchObject({
+      score: 0,
+      invoices_submitted: 0,
+      invoices_paid: 9,
+      invoices_defaulted: 2,
+      last_activity_ledger: undefined,
+    });
+  });
+
+  it('falls all the way through to 0 defaults when no aliases are present', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+
+    (scValToNative as any).mockReturnValueOnce({
+      score: 50,
+      invoices_submitted: 3,
+    });
+    const repC = await getReputation(ADDR);
+    expect(repC).toMatchObject({
+      score: 50,
+      invoices_submitted: 3,
+      invoices_paid: 0,
+      invoices_defaulted: 0,
+    });
+  });
+});
+
+// ── getReputationEvents — type/timestamp alias chains ───────────────────────────
+
+describe('soroban – getReputationEvents alias fallbacks', () => {
+  it('falls back through event/ledger_time aliases and the score_updated/0 defaults', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+
+    const events = [
+      { event: 'paid', ledger_time: 500 }, // type/timestamp alias path
+      {}, // both type and timestamp fall through to final defaults
+    ];
+    (scValToNative as any).mockReturnValue(events);
+
+    const result = await getReputationEvents(ADDR);
+    // Only the first event has a timestamp > 0 and survives the filter;
+    // the second (timestamp defaults to 0) is filtered out — but both
+    // branches were still evaluated during the .map() pass.
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe('paid');
+    expect(result[0].timestamp).toBe(500);
+  });
+});
+
+// ── getPayerScoresBatch — rejected settlement branch ────────────────────────────
+
+describe('soroban – getPayerScoresBatch rejected settlement', () => {
+  it('maps a rejected settlement to null', async () => {
+    setupSuccess();
+    // getPayerScore itself always catches its own errors and never rejects,
+    // so force Promise.allSettled to report a rejected entry to exercise
+    // the `result.status === 'fulfilled' ? ... : null` false branch.
+    const allSettledSpy = vi
+      .spyOn(Promise, 'allSettled')
+      .mockResolvedValueOnce([{ status: 'rejected', reason: new Error('boom') }] as any);
+
+    const map = await getPayerScoresBatch([ADDR]);
+    expect(map.get(ADDR)).toBeNull();
+
+    allSettledSpy.mockRestore();
+  });
+});
+
+// ── getTopPayers / getTopFreelancers / getTopLPs — alias/default chains ────────
+
+describe('soroban – getTopPayers alias/default fallbacks', () => {
+  it('falls back through address/payer/account and paid/defaulted/volume aliases', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+
+    const entries = [
+      // path1 for each field: second alias used
+      { payer: 'PPAYER1', paid: 7, defaults: 2, volume_paid: 1000n },
+      // path2 for each field: all aliases missing, literal defaults used
+      { account: 'AACCOUNT2' },
+      // path3 for address chain only: everything missing -> ''
+      {},
+    ];
+    (scValToNative as any).mockReturnValue(entries);
+
+    const payers = await getTopPayers(10);
+    expect(payers).toHaveLength(3);
+    expect(payers[0]).toMatchObject({
+      address: 'PPAYER1',
+      score: 0,
+      invoices_paid: 7,
+      invoices_defaulted: 2,
+      total_volume: 1000n,
+    });
+    expect(payers[1]).toMatchObject({
+      address: 'AACCOUNT2',
+      invoices_paid: 0,
+      invoices_defaulted: 0,
+      total_volume: 0n,
+    });
+    expect(payers[2].address).toBe('');
+  });
+});
+
+describe('soroban – getTopFreelancers alias/default fallbacks', () => {
+  it('falls back through address/freelancer/account and submitted/funded/earned aliases', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+
+    const entries = [
+      { freelancer: 'FFREELANCER1', submitted: 4, funded: 3, earned: 900n },
+      { account: 'AACCOUNT2' },
+      {},
+    ];
+    (scValToNative as any).mockReturnValue(entries);
+
+    const freelancers = await getTopFreelancers(10);
+    expect(freelancers).toHaveLength(3);
+    expect(freelancers[0]).toMatchObject({
+      address: 'FFREELANCER1',
+      score: 0,
+      invoices_submitted: 4,
+      invoices_funded: 3,
+      total_earned: 900n,
+    });
+    expect(freelancers[1]).toMatchObject({
+      address: 'AACCOUNT2',
+      invoices_submitted: 0,
+      invoices_funded: 0,
+      total_earned: 0n,
+    });
+    expect(freelancers[2].address).toBe('');
+  });
+});
+
+describe('soroban – getTopLPs alias/default fallbacks', () => {
+  it('falls back through address/lp/account and liquidity/fees/funded aliases', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+
+    const entries = [
+      { lp: 'LLP1', liquidity: 500n, fees: 10n, funded_count: 6 },
+      { account: 'AACCOUNT2' },
+      {},
+    ];
+    (scValToNative as any).mockReturnValue(entries);
+
+    const lps = await getTopLPs(10);
+    expect(lps).toHaveLength(3);
+    expect(lps[0]).toMatchObject({
+      address: 'LLP1',
+      liquidity_provided: 500n,
+      fees_earned: 10n,
+      total_funded: 6,
+      score: 0,
+    });
+    expect(lps[1]).toMatchObject({
+      address: 'AACCOUNT2',
+      liquidity_provided: 0n,
+      fees_earned: 0n,
+      total_funded: 0,
+    });
+    expect(lps[2].address).toBe('');
+  });
+});
+
+// ── getReferralStats — default-value chain ──────────────────────────────────────
+
+describe('soroban – getReferralStats default fallbacks', () => {
+  it('defaults total_invoices and total_volume to 0 when both are missing from native', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    (scValToNative as any).mockReturnValue({});
+    const stats = await getReferralStats('CODE');
+    expect(stats.total_invoices).toBe(0);
+    expect(stats.total_volume).toBe(0n);
+  });
+});
+
+// ── submitInvoicesBatch — non-Error throw branch ────────────────────────────────
+
+describe('soroban – submitInvoicesBatch non-Error throw', () => {
+  it("uses 'Unknown error' when the caught value is not an Error instance", async () => {
+    setupSuccess(42n);
+    (rpc.Api as any).GetTransactionStatus = { SUCCESS: 'SUCCESS' };
+
+    const { parseAmountToUnits } = await import('@/utils/invoiceSubmission');
+    (parseAmountToUnits as any).mockImplementationOnce(() => {
+      throw 'not an Error object';
+    });
+
+    const results = await submitInvoicesBatch(
+      ADDR,
+      [{ payer: ADDR, amount: '100', dueDate: '2026-01-01', discountRate: '5', tokenId: USDC }],
+      async () => 'signedXDR'
+    );
+    expect(results[0].success).toBe(false);
+    expect(results[0].error).toBe('Unknown error');
+  });
+});
+
+// ── buildApproveTokenTransaction — simulation error without 'error' key ────────
+
+describe('soroban – buildApproveTokenTransaction default error message', () => {
+  it("uses the default message when the failed simulation result has no 'error' key", async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(false);
+    mockServer.simulateTransaction.mockResolvedValue({});
+    await expect(buildApproveTokenTransaction({ owner: ADDR, amount: 1000n })).rejects.toThrow(
+      'Unable to simulate token approval.'
+    );
+  });
+});
+
+// ── getInsurancePoolInfo — default-value chain ──────────────────────────────────
+
+describe('soroban – getInsurancePoolInfo default fallbacks', () => {
+  it('defaults balance/enrolled_count/premium_rate to 0 when all are missing from native', async () => {
+    setupSuccess();
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    mockServer.simulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    (scValToNative as any).mockReturnValue({});
+    const info = await getInsurancePoolInfo();
+    expect(info).toMatchObject({ balance: 0n, enrolled_count: 0, premium_rate: 0 });
   });
 });

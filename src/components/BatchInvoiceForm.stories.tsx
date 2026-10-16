@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { fn } from 'storybook/test';
 import BatchInvoiceForm from './BatchInvoiceForm';
 
 const meta: Meta<typeof BatchInvoiceForm> = {
@@ -15,6 +16,6 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   args: {
-    onSuccess: (results) => console.log('Batch result:', results),
+    onSuccess: fn((results) => `Batch result: ${results}`),
   },
 };

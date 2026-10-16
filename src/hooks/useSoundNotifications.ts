@@ -104,10 +104,8 @@ export function useSoundNotifications(): UseSoundNotificationsReturn {
 
       // Lazily create AudioContext to comply with browser autoplay policy
       if (!ctxRef.current) {
-        ctxRef.current = new (
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-        )();
+        ctxRef.current = new (window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       }
       const ctx = ctxRef.current;
 

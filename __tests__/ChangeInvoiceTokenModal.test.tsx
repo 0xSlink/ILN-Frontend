@@ -14,8 +14,12 @@ vi.mock('@/context/WalletContext', () => ({
   useWallet: () => ({ address: 'GSELF000000000000000000000000000000000000000000000000000000' }),
 }));
 
-const USDC = 'CUSDC0000000000000000000000000000000000000000000000000000';
-const EURC = 'CEURC0000000000000000000000000000000000000000000000000000';
+// vi.mock factories are hoisted above module-level consts, so the token ids
+// they reference must be hoisted too.
+const { USDC, EURC } = vi.hoisted(() => ({
+  USDC: 'CUSDC0000000000000000000000000000000000000000000000000000',
+  EURC: 'CEURC0000000000000000000000000000000000000000000000000000',
+}));
 
 vi.mock('@/hooks/useApprovedTokens', () => ({
   useApprovedTokens: () => ({
@@ -56,10 +60,12 @@ vi.mock('@stellar/stellar-sdk', () => ({
   nativeToScVal: vi.fn(),
   BASE_FEE: '100',
   rpc: {
-    Server: vi.fn(() => ({
-      getAccount: vi.fn().mockResolvedValue({}),
-      simulateTransaction: vi.fn().mockResolvedValue({ result: {} }),
-    })),
+    // soroban.ts does `new rpc.Server(...)` at module scope, so this has to be
+    // constructible - an arrow-function implementation is not.
+    Server: vi.fn(function (this: Record<string, unknown>) {
+      this.getAccount = vi.fn().mockResolvedValue({});
+      this.simulateTransaction = vi.fn().mockResolvedValue({ result: {} });
+    }),
     Api: { isSimulationSuccess: vi.fn(() => true) },
     assembleTransaction: vi.fn(() => ({ build: vi.fn(() => 'assembled-tx') })),
   },
@@ -100,6 +106,15 @@ function renderModal(overrides: Partial<Invoice> = {}, onSuccess = vi.fn(), onCl
   );
 }
 
+// TokenSelector renders a custom listbox (trigger button + role="option" items),
+// not a native <select>, so selection is a click on the trigger then the option.
+// The option list is rendered twice (desktop dropdown + mobile bottom sheet),
+// so take the first match.
+function selectToken(symbol: string) {
+  fireEvent.click(screen.getByRole('button', { expanded: false, name: /USDC|EURC/ }));
+  fireEvent.click(screen.getAllByRole('option', { name: new RegExp(symbol) })[0]);
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('ChangeInvoiceTokenModal', () => {
@@ -127,8 +142,7 @@ describe('ChangeInvoiceTokenModal', () => {
   it('Confirm Change button enables after selecting a different token', async () => {
     renderModal();
     // Select EURC (different from the pre-selected USDC)
-    const selector = screen.getByRole('combobox');
-    fireEvent.change(selector, { target: { value: EURC } });
+    selectToken('EURC');
     expect(screen.getByTestId('confirm-change-token')).not.toBeDisabled();
   });
 
@@ -137,8 +151,7 @@ describe('ChangeInvoiceTokenModal', () => {
     const onSuccess = vi.fn();
     renderModal({}, onSuccess);
 
-    const selector = screen.getByRole('combobox');
-    fireEvent.change(selector, { target: { value: EURC } });
+    selectToken('EURC');
     fireEvent.click(screen.getByTestId('confirm-change-token'));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(EURC));
@@ -149,8 +162,7 @@ describe('ChangeInvoiceTokenModal', () => {
     const onSuccess = vi.fn();
     renderModal({}, onSuccess);
 
-    const selector = screen.getByRole('combobox');
-    fireEvent.change(selector, { target: { value: EURC } });
+    selectToken('EURC');
     fireEvent.click(screen.getByTestId('confirm-change-token'));
 
     await waitFor(() => expect(mockExecute).toHaveBeenCalled());
@@ -167,7 +179,7 @@ describe('ChangeInvoiceTokenModal', () => {
   it('calls onClose when X button is clicked', () => {
     const onClose = vi.fn();
     renderModal({}, vi.fn(), onClose);
-    fireEvent.click(screen.getByRole('button', { name: /Close/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -175,8 +187,7 @@ describe('ChangeInvoiceTokenModal', () => {
     mockExecute.mockRejectedValue(new Error('User rejected transaction'));
     renderModal();
 
-    const selector = screen.getByRole('combobox');
-    fireEvent.change(selector, { target: { value: EURC } });
+    selectToken('EURC');
     fireEvent.click(screen.getByTestId('confirm-change-token'));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/User rejected transaction/i);

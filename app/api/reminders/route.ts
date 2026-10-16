@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
+import { StrKey } from '@stellar/stellar-sdk';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import PaymentReminderEmail from '@/emails/PaymentReminder';
 import { getAllInvoices, getTokenMetadata } from '@/utils/soroban';
 import { formatTokenAmount } from '@/utils/format';
+import { checkRateLimit, getClientKey } from '@/lib/rate-limit';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_EMAIL_LENGTH = 320;
+const POST_RATE_LIMIT_MAX_REQUESTS = 5;
+const POST_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const GET_RATE_LIMIT_MAX_REQUESTS = 10;
+const GET_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -15,6 +24,19 @@ function getResend(): Resend {
 
 // POST: Save/Update opt-in preference
 export async function POST(req: NextRequest) {
+  const clientKey = getClientKey(req);
+  const rateLimit = checkRateLimit(
+    `reminders-post:${clientKey}`,
+    POST_RATE_LIMIT_MAX_REQUESTS,
+    POST_RATE_LIMIT_WINDOW_MS
+  );
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } }
+    );
+  }
+
   try {
     const { address, email, enabled } = await req.json();
 
@@ -22,10 +44,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Address and email are required' }, { status: 400 });
     }
 
+    if (typeof address !== 'string' || !StrKey.isValidEd25519PublicKey(address.trim())) {
+      return NextResponse.json({ error: 'Invalid Stellar address' }, { status: 400 });
+    }
+
+    if (typeof email !== 'string' || email.length > MAX_EMAIL_LENGTH || !EMAIL_RE.test(email)) {
+      return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
+    }
+
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      return NextResponse.json({ error: 'Invalid enabled flag' }, { status: 400 });
+    }
+
     const supabase = getSupabaseAdmin();
     const { error } = await supabase.from('reminder_preferences').upsert(
       {
-        address,
+        address: address.trim(),
         email,
         enabled: enabled ?? true,
         updated_at: new Date().toISOString(),
@@ -48,6 +82,19 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const clientKey = getClientKey(req);
+  const rateLimit = checkRateLimit(
+    `reminders-get:${clientKey}`,
+    GET_RATE_LIMIT_MAX_REQUESTS,
+    GET_RATE_LIMIT_WINDOW_MS
+  );
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } }
+    );
   }
 
   try {

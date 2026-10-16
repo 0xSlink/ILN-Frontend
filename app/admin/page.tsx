@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
 import { useWallet } from '@/context/WalletContext';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
@@ -226,7 +225,6 @@ export default function AdminHealthDashboard() {
             Connect the configured governance admin address to view protocol health.
           </p>
         </section>
-        <Footer />
       </main>
     );
   }
@@ -478,7 +476,6 @@ export default function AdminHealthDashboard() {
           </section>
         </div>
       </section>
-      <Footer />
     </main>
   );
 }

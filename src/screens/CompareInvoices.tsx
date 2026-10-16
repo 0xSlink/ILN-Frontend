@@ -7,14 +7,7 @@ import { useToast } from '@/context/ToastContext';
 import { useTransaction } from '@/hooks/useTransaction';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import {
-  getAllInvoices,
-  Invoice,
-  getPayerScoresBatch,
-  PayerScoreResult,
-  fundInvoice,
-  submitSignedTransaction,
-} from '@/utils/soroban';
+import { getAllInvoices, Invoice, fundInvoice, submitSignedTransaction } from '@/utils/soroban';
 import {
   formatAddress,
   formatDate,
@@ -30,9 +23,9 @@ export default function CompareInvoicesScreen() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { address, connect } = useWallet();
-  const { addToast, updateToast } = useToast();
+  const { addToast } = useToast();
   const { execute, loading: txLoading, signingModal } = useTransaction();
-  const { tokens, tokenMap, defaultToken } = useApprovedTokens();
+  const { tokenMap, defaultToken } = useApprovedTokens();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [fundingInvoiceId, setFundingInvoiceId] = useState<string | null>(null);
@@ -106,12 +99,12 @@ export default function CompareInvoicesScreen() {
 
     if (field === 'daysToDue') {
       // Lower is better
-      let min = Math.min(...values);
+      const min = Math.min(...values);
       return values.indexOf(min);
     }
 
     // Higher is better for yield, APY, discount, score, amount
-    let max = Math.max(...values);
+    const max = Math.max(...values);
     return values.indexOf(max);
   };
 
@@ -335,7 +328,9 @@ export default function CompareInvoicesScreen() {
               <span className="material-symbols-outlined">insights</span>
               Comparative Insight
             </h3>
-            <p className="text-lg text-on-surface leading-relaxed italic">"{comparisonSummary}"</p>
+            <p className="text-lg text-on-surface leading-relaxed italic">
+              &quot;{comparisonSummary}&quot;
+            </p>
           </div>
         )}
       </div>

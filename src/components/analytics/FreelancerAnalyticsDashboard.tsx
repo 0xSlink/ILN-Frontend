@@ -18,7 +18,6 @@ import {
   YAxis,
 } from 'recharts';
 import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 import MetricCard from '@/components/analytics/MetricCard';
 import { EmptyState } from '@/components/EmptyState';
 import { ExportButton } from '@/components/ExportButton';
@@ -108,12 +107,9 @@ export default function FreelancerAnalyticsDashboard() {
   }, [address, addToast]);
 
   useEffect(() => {
-    if (!isConnected) {
-      setInvoices([]);
-      setLoading(false);
-      return;
-    }
+    if (!isConnected) return;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchData();
     const interval = setInterval(() => void fetchData(), POLL_INTERVAL_MS);
     return () => clearInterval(interval);
@@ -265,10 +261,16 @@ export default function FreelancerAnalyticsDashboard() {
               </button>
             </div>
           ) : loading ? (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div
+              className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="sr-only">Loading analytics data…</span>
               {Array.from({ length: 4 }).map((_, index) => (
                 <div
                   key={index}
+                  aria-hidden="true"
                   className="h-32 animate-pulse rounded-2xl bg-surface-container-low"
                 />
               ))}
@@ -278,7 +280,7 @@ export default function FreelancerAnalyticsDashboard() {
               {error}
             </div>
           ) : isEmpty ? (
-            <EmptyState connected />
+            <EmptyState variant="no-invoices" />
           ) : (
             <div className="space-y-8">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -464,7 +466,6 @@ export default function FreelancerAnalyticsDashboard() {
           )}
         </div>
       </main>
-      <Footer />
     </>
   );
 }

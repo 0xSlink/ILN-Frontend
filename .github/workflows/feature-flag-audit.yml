@@ -1,0 +1,66 @@
+name: Feature Flag Audit
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'app/**'
+      - 'scripts/audit-feature-flags.ts'
+      - '.env.local.example'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Feature Flag Report
+    runs-on: ubuntu-latest
+    # Informational only — never blocks a PR
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run feature flag audit
+        id: audit
+        run: |
+          pnpm exec tsx scripts/audit-feature-flags.ts 2>&1 | tee /tmp/flag-audit-report.txt
+          echo "report_path=/tmp/flag-audit-report.txt" >> "$GITHUB_OUTPUT"
+
+      - name: Post audit summary to job summary
+        if: always()
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          {
+            echo "## 🚩 Feature Flag Audit Report"
+            echo ""
+            echo '```'
+            cat /tmp/flag-audit-report.txt
+            echo '```'
+            echo ""
+            echo "> ℹ️ This report is **informational only** and does not block merging."
+            echo "> See [CONTRIBUTING.md](../blob/$HEAD_REF/CONTRIBUTING.md#feature-flag-lifecycle) for the flag lifecycle policy."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audit report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feature-flag-audit
+          path: /tmp/flag-audit-report.txt
+          retention-days: 14

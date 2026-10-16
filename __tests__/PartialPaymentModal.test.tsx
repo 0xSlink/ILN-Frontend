@@ -12,6 +12,8 @@ vi.mock('../src/utils/format', () => ({
       maximumFractionDigits: token.decimals,
     });
   },
+  tokenAmountToNumber: (v: bigint, token?: { decimals: number }) =>
+    Number(v) / 10 ** (token?.decimals ?? 7),
   formatAddress: (a: string) => a.slice(0, 4),
 }));
 
@@ -95,12 +97,11 @@ describe('PartialPaymentModal', () => {
       const input = screen.getByPlaceholderText('0.00');
       fireEvent.change(input, { target: { value: '0' } });
 
+      // Confirm is blocked up-front for a zero amount.
       const confirmBtn = screen.getByText('Confirm Payment');
-      fireEvent.click(confirmBtn);
+      expect(confirmBtn).toBeDisabled();
 
-      await waitFor(() => {
-        expect(screen.getByText('Please enter an amount greater than 0')).toBeInTheDocument();
-      });
+      fireEvent.click(confirmBtn);
       expect(mockOnConfirm).not.toHaveBeenCalled();
     });
 
@@ -119,12 +120,11 @@ describe('PartialPaymentModal', () => {
       const input = screen.getByPlaceholderText('0.00');
       fireEvent.change(input, { target: { value: '800' } }); // Exceeds remaining 700
 
+      // Confirm is blocked up-front when the amount exceeds the remainder.
       const confirmBtn = screen.getByText('Confirm Payment');
-      fireEvent.click(confirmBtn);
+      expect(confirmBtn).toBeDisabled();
 
-      await waitFor(() => {
-        expect(screen.getByText(/Amount exceeds remaining balance/)).toBeInTheDocument();
-      });
+      fireEvent.click(confirmBtn);
       expect(mockOnConfirm).not.toHaveBeenCalled();
     });
 
@@ -168,8 +168,9 @@ describe('PartialPaymentModal', () => {
       const fullPayBtn = screen.getByText(/Pay Full Remaining Amount/);
       fireEvent.click(fullPayBtn);
 
+      // The shortcut fills a bare numeric value so <input type="number"> parses it.
       const input = screen.getByPlaceholderText('0.00') as HTMLInputElement;
-      expect(input.value).toBe('700.00');
+      expect(input.value).toBe('700');
     });
 
     it('disables full payment button when no remaining balance', () => {
@@ -318,7 +319,9 @@ describe('PartialPaymentModal', () => {
       });
     });
 
-    it('clears error message when user changes input', async () => {
+    it('clears the submission error when the user changes the input', async () => {
+      mockOnConfirm.mockRejectedValueOnce(new Error('Payment rejected by wallet'));
+
       render(
         <PartialPaymentModal
           invoice={mockInvoice}
@@ -331,19 +334,17 @@ describe('PartialPaymentModal', () => {
       );
 
       const input = screen.getByPlaceholderText('0.00');
-      fireEvent.change(input, { target: { value: '0' } });
-
-      const confirmBtn = screen.getByText('Confirm Payment');
-      fireEvent.click(confirmBtn);
+      fireEvent.change(input, { target: { value: '100' } });
+      fireEvent.click(screen.getByText('Confirm Payment'));
 
       await waitFor(() => {
-        expect(screen.getByText('Please enter an amount greater than 0')).toBeInTheDocument();
+        expect(screen.getByText('Payment rejected by wallet')).toBeInTheDocument();
       });
 
-      fireEvent.change(input, { target: { value: '100' } });
+      fireEvent.change(input, { target: { value: '200' } });
 
       await waitFor(() => {
-        expect(screen.queryByText('Please enter an amount greater than 0')).not.toBeInTheDocument();
+        expect(screen.queryByText('Payment rejected by wallet')).not.toBeInTheDocument();
       });
     });
   });

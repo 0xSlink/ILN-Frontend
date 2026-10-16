@@ -13,16 +13,10 @@ export default function PayerReminderOptIn() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (isConnected && address) {
-      loadPreference();
-    }
-  }, [isConnected, address]);
-
   const loadPreference = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('reminder_preferences')
         .select('email, enabled')
         .eq('address', address)
@@ -38,6 +32,12 @@ export default function PayerReminderOptIn() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isConnected && address) {
+      loadPreference();
+    }
+  }, [isConnected, address]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

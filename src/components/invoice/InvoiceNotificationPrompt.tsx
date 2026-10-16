@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bell, X } from 'lucide-react';
-import { useNotifications } from '@/hooks/useNotifications';
+import { useBrowserNotifications } from '@/hooks/useBrowserNotifications';
 
 interface InvoiceNotificationPromptProps {
   invoiceId: string;
@@ -17,18 +17,15 @@ export const InvoiceNotificationPrompt: React.FC<InvoiceNotificationPromptProps>
   dueDate,
   isPartyToInvoice,
 }) => {
-  const { permission, requestPermission, showNotification } = useNotifications();
+  const { permission, requestPermission, showNotification } = useBrowserNotifications();
   const [isDismissed, setIsDismissed] = useState(false);
-  const [isOptedIn, setIsOptedIn] = useState(false);
-
-  useEffect(() => {
+  const [isOptedIn, setIsOptedIn] = useState(() => {
     if (typeof window !== 'undefined') {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-      if (stored[invoiceId]) {
-        setIsOptedIn(true);
-      }
+      return !!stored[invoiceId];
     }
-  }, [invoiceId]);
+    return false;
+  });
 
   const scheduleReminder = useCallback(() => {
     const now = Math.floor(Date.now() / 1000);
@@ -78,7 +75,7 @@ export const InvoiceNotificationPrompt: React.FC<InvoiceNotificationPromptProps>
         <div>
           <p className="font-medium text-sm">Get notified 24 hours before this invoice expires?</p>
           <p className="text-xs text-indigo-100">
-            We'll send you a browser notification to help you stay on track.
+            {"We'll"} send you a browser notification to help you stay on track.
           </p>
         </div>
       </div>

@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { fn } from 'storybook/test';
 import TokenSelector from './TokenSelector';
 
 const meta: Meta<typeof TokenSelector> = {
@@ -23,7 +24,7 @@ export const Default: Story = {
   args: {
     tokens: mockTokens,
     selectedToken: mockTokens[0],
-    onTokenChange: (token) => console.log('Selected token:', token),
+    onTokenChange: fn((token) => `Selected token: ${token}`),
   },
 };
 
@@ -32,8 +33,8 @@ export const WithAmount: Story = {
     tokens: mockTokens,
     selectedToken: mockTokens[0],
     amount: '1000',
-    onTokenChange: (token) => console.log('Selected token:', token),
-    onAmountChange: (amount) => console.log('Amount:', amount),
+    onTokenChange: fn((token) => `Selected token: ${token}`),
+    onAmountChange: fn((amount) => `Amount: ${amount}`),
   },
 };
 
@@ -51,8 +52,8 @@ export const WithError: Story = {
     selectedToken: mockTokens[0],
     amount: 'invalid',
     error: 'Please enter a valid amount',
-    onTokenChange: (token) => console.log('Selected token:', token),
-    onAmountChange: (amount) => console.log('Amount:', amount),
+    onTokenChange: fn((token) => `Selected token: ${token}`),
+    onAmountChange: fn((amount) => `Amount: ${amount}`),
   },
 };
 

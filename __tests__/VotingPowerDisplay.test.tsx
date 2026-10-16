@@ -52,10 +52,10 @@ describe('VotingPowerDisplay', () => {
 
     render(<VotingPowerDisplay votingPower={1250} />);
 
-    expect(screen.getByText('Your Voting Power')).toBeInTheDocument();
-
+    // The panel renders a skeleton until the delegation lookup resolves.
     await waitFor(() => {
-      expect(screen.getByText('1,250.0000000 ILN')).toBeInTheDocument();
+      expect(screen.getByText('Your Voting Power')).toBeInTheDocument();
+      expect(screen.getAllByText('1,250 ILN').length).toBeGreaterThan(0);
     });
   });
 
@@ -80,7 +80,7 @@ describe('VotingPowerDisplay', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Your voting power is currently delegated to:')).toBeInTheDocument();
-      expect(screen.getByText('GDEF456E...X890YZ')).toBeInTheDocument();
+      expect(screen.getByText('GDEF456E...VWX890YZ')).toBeInTheDocument();
     });
   });
 
@@ -105,7 +105,8 @@ describe('VotingPowerDisplay', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Delegated to you:')).toBeInTheDocument();
-      expect(screen.getByText('+500.0000000 ILN')).toBeInTheDocument();
+      // The "+" sign and the amount are separate text nodes.
+      expect(screen.getByText(/\+\s*500 ILN/)).toBeInTheDocument();
     });
   });
 
@@ -150,9 +151,7 @@ describe('VotingPowerDisplay', () => {
 
     render(<VotingPowerDisplay votingPower={1250} />);
 
-    expect(
-      screen.getByTestId('loading-skeleton') || document.querySelector('.animate-pulse')
-    ).toBeInTheDocument();
+    expect(document.querySelector('.animate-pulse')).toBeInTheDocument();
   });
 
   it('includes links to delegation management', async () => {

@@ -14,13 +14,16 @@
     "close": "Close"
   },
   "nav": {
+    "mainNavigation": "Main navigation",
     "howItWorks": "How it works",
     "forFreelancers": "For Freelancers",
     "forLPs": "For LPs",
     "governance": "Governance",
     "payInvoices": "Pay Invoices",
     "dashboard": "Dashboard",
-    "analytics": "Analytics",
+    "analytics": "My Analytics",
+    "stats": "Protocol Stats",
+    "leaderboard": "Leaderboard",
     "docs": "Docs"
   },
   "landing": {

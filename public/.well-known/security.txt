@@ -1,0 +1,6 @@
+Contact: https://github.com/Invoice-Liquidity-Network/ILN-Frontend/security/advisories/new
+Contact: mailto:security@iln.finance
+Expires: 2027-08-25T00:00:00.000Z
+Policy: https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/main/SECURITY.md
+Preferred-Languages: en
+Canonical: https://app.iln.finance/.well-known/security.txt

@@ -80,7 +80,7 @@ export default function OnboardingFlow() {
                 <span className="material-symbols-outlined text-blue-600">publish</span>
               </div>
               <div>
-                <p className="font-bold text-on-surface">I'm a Freelancer</p>
+                <p className="font-bold text-on-surface">I&apos;m a Freelancer</p>
                 <p className="text-xs text-on-surface-variant mt-0.5">
                   Submit invoices and get paid instantly
                 </p>
@@ -95,7 +95,7 @@ export default function OnboardingFlow() {
                 <span className="material-symbols-outlined text-emerald-600">monitoring</span>
               </div>
               <div>
-                <p className="font-bold text-on-surface">I'm a Liquidity Provider</p>
+                <p className="font-bold text-on-surface">I&apos;m a Liquidity Provider</p>
                 <p className="text-xs text-on-surface-variant mt-0.5">
                   Fund invoices to earn yield
                 </p>
@@ -113,7 +113,7 @@ export default function OnboardingFlow() {
                 <span className="material-symbols-outlined text-purple-600">payments</span>
               </div>
               <div>
-                <p className="font-bold text-on-surface">I'm a Payer</p>
+                <p className="font-bold text-on-surface">I&apos;m a Payer</p>
                 <p className="text-xs text-on-surface-variant mt-0.5">Settle invoices on-chain</p>
               </div>
             </button>

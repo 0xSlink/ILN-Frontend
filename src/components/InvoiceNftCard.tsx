@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { NETWORK_NAME, NFT_CONTRACT_ID } from '@/constants';
+import { NETWORK_NAME, NFT_CONTRACT_ID, NEXT_PUBLIC_NFT_ENABLED } from '@/constants';
 import { formatAddress } from '@/utils/format';
 import { useInvoiceNft } from '@/hooks/useInvoiceNft';
 import type { InvoiceNftState, InvoiceNftTransfer } from '@/lib/invoice-nft';
@@ -238,7 +238,10 @@ export default function InvoiceNftCard({
   walletAddress: string | null;
   invoiceFunder?: string;
 }) {
-  const { state, loading, reload } = useInvoiceNft(invoiceId, true);
+  const isEnabled = NEXT_PUBLIC_NFT_ENABLED || process.env.NEXT_PUBLIC_NFT_ENABLED === 'true';
+  const { state, loading, reload } = useInvoiceNft(invoiceId, isEnabled);
+
+  if (!isEnabled) return null;
 
   if (loading && !state) {
     return (

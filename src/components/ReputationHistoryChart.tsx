@@ -127,17 +127,21 @@ export default function ReputationHistoryChart({ events }: { events: ReputationU
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
               <Tooltip
-                formatter={(value, _name, item) => {
-                  const eventType = item.payload?.eventType as ReputationEventType;
-                  const eventLabel = EVENT_LABELS[eventType] ?? eventType;
-                  return [`${value}/100`, eventLabel];
-                }}
-                labelFormatter={(label, items) => {
-                  const payload = items?.[0]?.payload as ReputationHistoryPoint | undefined;
-                  if (!payload) return label;
-                  const date = new Date(payload.timestamp * 1000).toLocaleString();
-                  return payload.ledger ? `${label} · ${date}` : date;
-                }}
+                formatter={
+                  ((value: any, _name: any, item: any) => {
+                    const eventType = item.payload?.eventType as ReputationEventType;
+                    const eventLabel = EVENT_LABELS[eventType] ?? eventType;
+                    return [`${value}/100`, eventLabel];
+                  }) as any
+                }
+                labelFormatter={
+                  ((label: any, items: any) => {
+                    const payload = items?.[0]?.payload as ReputationHistoryPoint | undefined;
+                    if (!payload) return label;
+                    const date = new Date(payload.timestamp * 1000).toLocaleString();
+                    return payload.ledger ? `${label} · ${date}` : date;
+                  }) as any
+                }
               />
               <Line
                 type="monotone"

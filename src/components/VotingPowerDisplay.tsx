@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useWallet } from '@/context/WalletContext';
-import { getVotingPower, getDelegationInfo } from '@/utils/governance';
+import { getDelegationInfo } from '@/utils/governance';
 import { formatTokenAmount } from '@/utils/format';
 
 interface DelegationInfo {

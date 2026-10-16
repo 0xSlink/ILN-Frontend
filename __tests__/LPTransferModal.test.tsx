@@ -16,7 +16,7 @@ vi.mock('@/hooks/useBalances', () => ({
 }));
 
 vi.mock('@/context/WalletContext', () => ({
-  useWallet: () => ({ address: 'GSELF000000000000000000000000000000000000000000000000000000' }),
+  useWallet: () => ({ address: 'GSELF' + 'B'.repeat(51), isConnected: true }),
 }));
 
 const mockBuild = vi.fn(() => 'built-tx');
@@ -24,16 +24,20 @@ const mockSetTimeout = vi.fn(() => ({ build: mockBuild }));
 const mockAddOperation = vi.fn(() => ({ setTimeout: mockSetTimeout }));
 
 vi.mock('@stellar/stellar-sdk', () => ({
-  TransactionBuilder: vi.fn(() => ({ addOperation: mockAddOperation })),
+  // Called with `new`, so the implementation must be constructible.
+  TransactionBuilder: vi.fn(function (this: Record<string, unknown>) {
+    this.addOperation = mockAddOperation;
+  }),
   Operation: { invokeContractFunction: vi.fn(() => 'invoke-op') },
   Address: { fromString: vi.fn(() => ({ toScVal: vi.fn() })) },
   nativeToScVal: vi.fn(() => 'invoice-id-scval'),
   BASE_FEE: '100',
   rpc: {
-    Server: vi.fn(() => ({
-      getAccount: vi.fn().mockResolvedValue({}),
-      simulateTransaction: vi.fn().mockResolvedValue({ result: {} }),
-    })),
+    // Called with `new`, so the implementation must be constructible.
+    Server: vi.fn(function (this: Record<string, unknown>) {
+      this.getAccount = vi.fn().mockResolvedValue({});
+      this.simulateTransaction = vi.fn().mockResolvedValue({ result: {} });
+    }),
     Api: { isSimulationSuccess: vi.fn(() => true) },
     assembleTransaction: vi.fn(() => ({ build: vi.fn(() => 'assembled-tx') })),
   },
@@ -53,14 +57,14 @@ vi.mock('@/constants', () => ({
 import LPTransferModal from '@/components/LPTransferModal';
 import type { Invoice } from '@/utils/soroban';
 
-const VALID_RECIPIENT = 'GRECIPIENT0000000000000000000000000000000000000000000000000';
-const SELF_ADDRESS = 'GSELF000000000000000000000000000000000000000000000000000000';
+const VALID_RECIPIENT = 'GRECIPIENT' + 'A'.repeat(46);
+const SELF_ADDRESS = 'GSELF' + 'B'.repeat(51);
 
 const invoice: Invoice = {
   id: 42n,
   freelancer: 'GFR1',
   payer: 'GPAYER1',
-  amount: 5_000_000n,
+  amount: 5_0000000n, // 5 USDC — above the 1 USDC transfer minimum
   due_date: 1_900_000_000n,
   discount_rate: 300,
   status: 'Funded',
@@ -96,19 +100,19 @@ describe('LPTransferModal', () => {
   it('lets the user select USDC, EURC, and XLM and shows token balances', () => {
     renderModal();
 
-    expect(screen.getByRole('button', { name: /USDC/i })).toBeInTheDocument();
-    expect(screen.getByText('Balance: 1,000 USDC')).toBeInTheDocument();
-    expect(screen.getByText('1,000 USDC')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /USDC/i })[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Balance: 1,000 USDC').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1,000 USDC').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: /USDC/i }));
-    fireEvent.click(screen.getByRole('option', { name: /EURC/i }));
-    expect(screen.getByRole('button', { name: /EURC/i })).toBeInTheDocument();
-    expect(screen.getByText('800 EURC')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /USDC/i })[0]);
+    fireEvent.click(screen.getAllByRole('option', { name: /EURC/i })[0]);
+    expect(screen.getAllByRole('button', { name: /EURC/i })[0]).toBeInTheDocument();
+    expect(screen.getAllByText('800 EURC').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: /EURC/i }));
-    fireEvent.click(screen.getByRole('option', { name: /XLM/i }));
-    expect(screen.getByRole('button', { name: /XLM/i })).toBeInTheDocument();
-    expect(screen.getByText('2,500 XLM')).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: /EURC/i })[0]);
+    fireEvent.click(screen.getAllByRole('option', { name: /XLM/i })[0]);
+    expect(screen.getAllByRole('button', { name: /XLM/i })[0]).toBeInTheDocument();
+    expect(screen.getAllByText('2,500 XLM').length).toBeGreaterThan(0);
   });
 
   it('shows a validation error when the address field is empty', async () => {
@@ -135,11 +139,10 @@ describe('LPTransferModal', () => {
   });
 
   it('validates the selected token minimum', async () => {
+    // 0.5 XLM is below the 10 XLM minimum; the modal starts on the invoice token.
     const smallXlmInvoice = { ...invoice, amount: 5_000_000n, token: 'token-xlm' };
     render(<LPTransferModal invoice={smallXlmInvoice} onClose={vi.fn()} onSuccess={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /USDC/i }));
-    fireEvent.click(screen.getByRole('option', { name: /XLM/i }));
     fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: VALID_RECIPIENT } });
     fireEvent.click(screen.getByRole('button', { name: /Transfer Position/i }));
 
@@ -152,8 +155,8 @@ describe('LPTransferModal', () => {
   it('prevents submitting when the selected token does not match the invoice token', async () => {
     renderModal();
 
-    fireEvent.click(screen.getByRole('button', { name: /USDC/i }));
-    fireEvent.click(screen.getByRole('option', { name: /EURC/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /USDC/i })[0]);
+    fireEvent.click(screen.getAllByRole('option', { name: /EURC/i })[0]);
     fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: VALID_RECIPIENT } });
     fireEvent.click(screen.getByRole('button', { name: /Transfer Position/i }));
 
@@ -186,7 +189,7 @@ describe('LPTransferModal', () => {
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
     expect(onSuccess).toHaveBeenCalledWith(invoice, VALID_RECIPIENT);
-    expect(mockExecute).toHaveBeenCalledWith('assembled-tx', 'Transfer 0.5 USDC LP position #42');
+    expect(mockExecute).toHaveBeenCalledWith('assembled-tx', 'Transfer 5 USDC LP position #42');
   });
 
   it('does not call onSuccess when execute returns null (user rejected)', async () => {

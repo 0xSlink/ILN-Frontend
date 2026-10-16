@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import SubmitInvoiceForm from '../components/SubmitInvoiceForm';
+import SubmitInvoiceForm from '@/components/SubmitInvoiceForm';
 
 const approvedTokens = [
   { contractId: 'token-usdc', name: 'USD Coin', symbol: 'USDC', decimals: 7, iconLabel: 'US' },
@@ -23,18 +23,18 @@ const walletState = {
   signTx: vi.fn(),
 };
 
-vi.mock('../context/ToastContext', () => ({
+vi.mock('@/context/ToastContext', () => ({
   useToast: () => ({
     addToast,
     updateToast,
   }),
 }));
 
-vi.mock('../context/WalletContext', () => ({
+vi.mock('@/context/WalletContext', () => ({
   useWallet: () => walletState,
 }));
 
-vi.mock('../hooks/useApprovedTokens', () => ({
+vi.mock('@/hooks/useApprovedTokens', () => ({
   useApprovedTokens: () => ({
     tokens: approvedTokens,
     tokenMap: new Map(approvedTokens.map((token) => [token.contractId, token])),
@@ -44,9 +44,32 @@ vi.mock('../hooks/useApprovedTokens', () => ({
   }),
 }));
 
-vi.mock('../utils/soroban', () => ({
+vi.mock('@/utils/soroban', () => ({
   submitInvoiceTransaction: (...args: unknown[]) => submitInvoiceTransaction(...args),
+  submitSignedTransaction: vi.fn(),
+  getNativeXlmBalance: vi.fn(async () => 0n),
+  getTokenBalance: vi.fn(async () => 0n),
 }));
+
+const VALID_ADDRESS = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+
+/** Due dates must be in the future and no more than 365 days out. */
+function futureDueDate(daysAhead = 30) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAhead);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Fill step 1 of the wizard (payer / amount / due date). */
+function fillStep1(amount: string) {
+  fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: VALID_ADDRESS } });
+  fireEvent.change(screen.getByPlaceholderText('5000.00'), { target: { value: amount } });
+  fireEvent.change(screen.getByLabelText('Due date'), { target: { value: futureDueDate() } });
+}
+
+function clickContinue() {
+  fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+}
 
 describe('SubmitInvoiceForm', () => {
   beforeEach(() => {
@@ -63,34 +86,35 @@ describe('SubmitInvoiceForm', () => {
   });
 
   it('updates the live yield preview as the user types', () => {
+    walletState.address = VALID_ADDRESS;
+    walletState.isConnected = true;
+
     render(<SubmitInvoiceForm />);
 
-    fireEvent.change(screen.getByPlaceholderText('5000.00'), {
-      target: { value: '5000' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('3.00'), {
-      target: { value: '4.5' },
-    });
+    fillStep1('5000');
+    clickContinue();
+    fireEvent.change(screen.getByPlaceholderText('3.00'), { target: { value: '4.5' } });
 
     expect(screen.getByText('Live yield preview')).toBeInTheDocument();
-    expect(screen.getByText('5,000 USDC')).toBeInTheDocument();
-    expect(screen.getByText('4,775 USDC')).toBeInTheDocument();
-    expect(screen.getByText('225 USDC')).toBeInTheDocument();
+    expect(screen.getAllByText('5,000 USDC').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('4,775 USDC').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('225 USDC').length).toBeGreaterThan(0);
   });
 
-  it('shows a wallet error before submitting when Freighter is not connected', async () => {
+  it('blocks the wizard before submitting when Freighter is not connected', () => {
     render(<SubmitInvoiceForm />);
 
-    fireEvent.click(screen.getByText('Submit invoice'));
+    fillStep1('1500');
 
-    expect(
-      await screen.findByText('Connect your Freighter wallet to submit an invoice.')
-    ).toBeInTheDocument();
+    // "Continue" stays disabled, so the submit step is unreachable.
+    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled();
+    clickContinue();
+    expect(screen.queryByText('Submit invoice')).not.toBeInTheDocument();
     expect(submitInvoiceTransaction).not.toHaveBeenCalled();
   });
 
   it('submits an invoice and displays the returned invoice id', async () => {
-    walletState.address = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+    walletState.address = VALID_ADDRESS;
     walletState.isConnected = true;
 
     submitInvoiceTransaction.mockResolvedValue({
@@ -100,29 +124,24 @@ describe('SubmitInvoiceForm', () => {
 
     render(<SubmitInvoiceForm />);
 
-    fireEvent.change(screen.getByPlaceholderText('G...'), {
-      target: { value: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('5000.00'), {
-      target: { value: '1500' },
-    });
-    fireEvent.change(screen.getByDisplayValue('3.00'), {
-      target: { value: '2.5' },
-    });
-    fireEvent.change(screen.getByRole('combobox'), {
-      target: { value: 'token-eurc' },
-    });
-    fireEvent.change(screen.getByLabelText('Due date'), {
-      target: { value: '2099-01-02' },
-    });
+    fillStep1('1500');
+    clickContinue();
+
+    // TokenSelector is a custom listbox; the list renders twice (desktop
+    // dropdown + mobile sheet), so take the first matching option.
+    fireEvent.click(screen.getByRole('button', { expanded: false, name: /USDC/ }));
+    fireEvent.click(screen.getAllByRole('option', { name: /EURC/ })[0]);
+
+    fireEvent.change(screen.getByPlaceholderText('3.00'), { target: { value: '2.5' } });
+    clickContinue();
     fireEvent.click(screen.getByText('Submit invoice'));
 
     await waitFor(() => {
       expect(submitInvoiceTransaction).toHaveBeenCalledWith(
         expect.objectContaining({
           freelancer: walletState.address,
-          payer: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
-          amount: 15000000000n,
+          payer: VALID_ADDRESS,
+          amount: 1_500_000_000n, // 1500 at 6 input decimals
           discountRate: 250,
           token: 'token-eurc',
         })

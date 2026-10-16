@@ -89,13 +89,13 @@ export function useCommandPalette(onOpenShortcuts?: () => void) {
       {
         id: 'notifications',
         label: 'Open notification settings',
-        action: () => router.push('/settings/notifications'),
+        action: () => alert('Notification settings coming soon'),
         category: 'settings',
       },
       {
         id: 'addressbook',
         label: 'Open address book',
-        action: () => router.push('/settings/address-book'),
+        action: () => alert('Address book coming soon'),
         category: 'settings',
       },
       {
@@ -118,6 +118,7 @@ export function useCommandPalette(onOpenShortcuts?: () => void) {
     const stored = localStorage.getItem(RECENT_COMMANDS_KEY);
     if (stored) {
       try {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setRecentCommandIds(JSON.parse(stored));
       } catch {}
     }
@@ -130,11 +131,6 @@ export function useCommandPalette(onOpenShortcuts?: () => void) {
 
   const close = useCallback(() => {
     setIsOpen(false);
-    setQuery('');
-  }, []);
-
-  const toggle = useCallback(() => {
-    setIsOpen((prev) => !prev);
     setQuery('');
   }, []);
 
@@ -151,11 +147,6 @@ export function useCommandPalette(onOpenShortcuts?: () => void) {
     },
     [recentCommandIds, close]
   );
-
-  const clearHistory = useCallback(() => {
-    setRecentCommandIds([]);
-    localStorage.removeItem(RECENT_COMMANDS_KEY);
-  }, []);
 
   const filteredCommands = useMemo(() => {
     if (!query) {
@@ -177,6 +168,19 @@ export function useCommandPalette(onOpenShortcuts?: () => void) {
 
     return commands.filter((cmd) => fuzzyMatch(cmd.label, query));
   }, [query, commands, recentCommandIds, router]);
+
+  // Cmd/Ctrl+K is owned by KeyboardShortcutsContext, which invokes the `toggle`
+  // registered by CommandPalette. A second listener here toggled the palette a
+  // second time for the same keypress, so it never actually opened.
+
+  const toggle = useCallback(() => {
+    setIsOpen((prev) => !prev);
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    setRecentCommandIds([]);
+    localStorage.removeItem(RECENT_COMMANDS_KEY);
+  }, []);
 
   return {
     isOpen,

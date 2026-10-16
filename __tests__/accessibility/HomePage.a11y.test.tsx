@@ -1,3 +1,12 @@
+/**
+ * Per-page accessibility suite for the Home page.
+ *
+ * Split with __tests__/accessibility.test.tsx (see that file's doc comment for the
+ * full picture): this file mocks out every child section as a lightweight stub and
+ * asserts page-level structure (heading count, navbar/hero/footer landmarks) in
+ * isolation. The root file additionally axe-checks the real Home page rendered under
+ * the full app Providers tree - that overlap is intentional, not redundant.
+ */
 import { render } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import { describe, it, expect, vi } from 'vitest';
@@ -88,7 +97,6 @@ describe('HomePage Accessibility', () => {
 
   it('should have proper heading structure', () => {
     const { container } = render(<HomePage />);
-    const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
 
     // Should have at least one h1
     const h1Elements = container.querySelectorAll('h1');

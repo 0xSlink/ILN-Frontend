@@ -7,6 +7,7 @@ exports[`LPDashboard snapshots > matches the fund confirmation modal with sample
   >
     <div
       class="p-6 border-b border-surface-dim flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+      data-testid="lp-dashboard-header"
     >
       <div>
         <h3
@@ -24,6 +25,11 @@ exports[`LPDashboard snapshots > matches the fund confirmation modal with sample
         >
           Browse and fund invoices to earn yield.
         </p>
+        <p
+          class="text-sm text-on-surface-variant mt-1"
+        >
+          Browse and fund invoices to earn yield.
+        </p>
       </div>
       <div
         class="flex bg-surface-container-low p-1 rounded-xl"
@@ -36,7 +42,442 @@ exports[`LPDashboard snapshots > matches the fund confirmation modal with sample
         <button
           class="px-4 py-2 rounded-lg text-sm font-bold transition-all text-on-surface-variant hover:bg-surface-variant/30"
         >
+          Watchlist
+        </button>
+        <button
+          class="px-4 py-2 rounded-lg text-sm font-bold transition-all text-on-surface-variant hover:bg-surface-variant/30"
+        >
           My Funded
+        </button>
+        <button
+          class="px-4 py-2 rounded-lg text-sm font-bold transition-all text-on-surface-variant hover:bg-surface-variant/30"
+        >
+          Earnings History
+        </button>
+      </div>
+    </div>
+    <div
+      class="px-6 pt-4 flex flex-col gap-3"
+    >
+      <div
+        class="overflow-hidden rounded-xl border border-surface-dim"
+      >
+        <div
+          class="flex cursor-pointer items-center justify-between bg-surface-container-low p-4"
+        >
+          <div
+            class="flex items-center gap-3"
+          >
+            <h3
+              class="flex items-center gap-2 text-lg font-medium"
+            >
+              <span
+                class="material-symbols-outlined"
+              >
+                calculate
+              </span>
+              What's my yield?
+            </h3>
+            <button
+              class="rounded-full border border-outline-variant/30 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant transition-colors hover:border-primary/40 hover:text-primary"
+              type="button"
+            >
+              Simple
+            </button>
+          </div>
+          <span
+            class="material-symbols-outlined transition-transform duration-200"
+          >
+            expand_less
+          </span>
+        </div>
+        <div
+          class="space-y-6 p-6"
+        >
+          <div
+            class="grid gap-4 md:grid-cols-3"
+          >
+            <div
+              class="space-y-2"
+            >
+              <label
+                class="flex items-center justify-between text-sm font-medium text-on-surface-variant"
+                for="yc-amount-range"
+              >
+                Invoice Amount (USDC)
+                <span>
+                  1,000
+                </span>
+              </label>
+              <div
+                class="flex w-full gap-2"
+              >
+                <input
+                  class="h-2 flex-1 rounded bg-primary/20"
+                  id="yc-amount-range"
+                  max="1000000"
+                  min="0"
+                  step="100"
+                  type="range"
+                  value="1000"
+                />
+                <input
+                  aria-label="Invoice Amount value"
+                  class="w-20 rounded border px-2 py-1 text-center text-sm outline-none transition-colors border-surface-dim bg-surface-container-lowest focus:border-primary"
+                  max="1000000"
+                  min="0"
+                  step="100"
+                  type="number"
+                  value="1000"
+                />
+              </div>
+            </div>
+            <div
+              class="space-y-2"
+            >
+              <label
+                class="flex items-center justify-between text-sm font-medium text-on-surface-variant"
+                for="yc-discount-range"
+              >
+                Discount Rate (bps)
+                <span>
+                  100
+                </span>
+              </label>
+              <div
+                class="flex w-full gap-2"
+              >
+                <input
+                  class="h-2 flex-1 rounded bg-primary/20"
+                  id="yc-discount-range"
+                  max="10000"
+                  min="0"
+                  step="1"
+                  type="range"
+                  value="100"
+                />
+                <input
+                  aria-label="Discount Rate value"
+                  class="w-20 rounded border px-2 py-1 text-center text-sm outline-none transition-colors border-surface-dim bg-surface-container-lowest focus:border-primary"
+                  max="10000"
+                  min="0"
+                  step="1"
+                  type="number"
+                  value="100"
+                />
+              </div>
+            </div>
+            <div
+              class="space-y-2"
+            >
+              <label
+                class="flex items-center justify-between text-sm font-medium text-on-surface-variant"
+                for="yc-settlement-range"
+              >
+                Expected Settlement (days)
+                <span>
+                  30
+                </span>
+              </label>
+              <div
+                class="flex w-full gap-2"
+              >
+                <input
+                  class="h-2 flex-1 rounded bg-primary/20"
+                  id="yc-settlement-range"
+                  max="365"
+                  min="1"
+                  step="1"
+                  type="range"
+                  value="30"
+                />
+                <input
+                  aria-label="Settlement days value"
+                  class="w-20 rounded border px-2 py-1 text-center text-sm outline-none transition-colors border-surface-dim bg-surface-container-lowest focus:border-primary"
+                  max="365"
+                  min="1"
+                  step="1"
+                  type="number"
+                  value="30"
+                />
+              </div>
+            </div>
+          </div>
+          <div
+            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                You send
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-on-surface"
+              >
+                1,000 USDC
+              </p>
+            </div>
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                Freelancer receives
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-emerald-500"
+              >
+                990 USDC
+              </p>
+            </div>
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                Your yield
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-emerald-500"
+              >
+                10 USDC
+              </p>
+            </div>
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                Annualised yield (APY)
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-emerald-500"
+              >
+                12.17%
+              </p>
+            </div>
+          </div>
+          <div
+            class="flex flex-col gap-3 border-t border-surface-dim pt-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div
+              class="text-xs text-on-surface-variant"
+            >
+              Current category: Standard invoices.
+            </div>
+            <button
+              class="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-surface-container-lowest transition-colors hover:bg-primary/90"
+            >
+              Find invoices matching these terms
+            </button>
+          </div>
+        </div>
+      </div>
+      <div
+        class="space-y-3"
+      >
+        <div
+          aria-live="polite"
+          class="sr-only"
+          role="status"
+        >
+          No filters applied
+        </div>
+        <div
+          class="flex flex-col gap-3 mb-5 md:flex-row md:items-center"
+        >
+          <input
+            class="w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            placeholder="Search by invoice ID, payer, or freelancer address"
+            type="search"
+            value=""
+          />
+          <div
+            class="flex flex-wrap items-center gap-2"
+          >
+            <div
+              class="relative"
+            >
+              <button
+                class="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 px-3 py-2 text-sm font-medium text-on-surface-variant hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                type="button"
+              >
+                Saved Filters
+              </button>
+            </div>
+            <button
+              aria-controls="invoice-filter-advanced"
+              aria-expanded="false"
+              class="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 px-3 py-2 text-sm font-medium text-on-surface-variant hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              type="button"
+            >
+              Filters
+            </button>
+          </div>
+        </div>
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low p-2"
+      >
+        <div
+          class="relative"
+        >
+          <button
+            aria-expanded="false"
+            aria-haspopup="listbox"
+            aria-label="Select export columns, 8 of 8 selected"
+            class="flex items-center gap-1.5 rounded-md border border-outline-variant/30 bg-surface-container-high px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-columns3 lucide-columns-3 h-3.5 w-3.5"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect
+                height="18"
+                rx="2"
+                width="18"
+                x="3"
+                y="3"
+              />
+              <path
+                d="M9 3v18"
+              />
+              <path
+                d="M15 3v18"
+              />
+            </svg>
+            Columns (8/8)
+          </button>
+        </div>
+        <select
+          aria-label="Date range"
+          class="rounded-md border border-outline-variant/30 bg-surface-container-high px-3 py-1.5 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary"
+        >
+          <option
+            value="all"
+          >
+            All time
+          </option>
+          <option
+            value="90"
+          >
+            Last 90 days
+          </option>
+          <option
+            value="365"
+          >
+            Last year
+          </option>
+          <option
+            value="custom"
+          >
+            Custom range
+          </option>
+        </select>
+        <div
+          class="mx-1 h-6 w-px bg-outline-variant/30"
+        />
+        <div
+          class="flex items-center gap-2"
+        >
+          <button
+            class="flex items-center gap-1.5 rounded-md bg-surface-container-high px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-download h-3.5 w-3.5"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 15V3"
+              />
+              <path
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+              />
+              <path
+                d="m7 10 5 5 5-5"
+              />
+            </svg>
+             CSV
+          </button>
+          <button
+            class="flex items-center gap-1.5 rounded-md bg-surface-container-high px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-download h-3.5 w-3.5"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 15V3"
+              />
+              <path
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+              />
+              <path
+                d="m7 10 5 5 5-5"
+              />
+            </svg>
+             JSON
+          </button>
+        </div>
+      </div>
+      <div
+        class="flex gap-3"
+      >
+        <button
+          class="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-variant/20 transition-colors text-sm font-bold"
+        >
+          <span
+            class="material-symbols-outlined text-sm"
+          >
+            dashboard_customize
+          </span>
+          Customize Widgets
+        </button>
+        <button
+          class="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-variant/20 transition-colors text-sm font-bold"
+        >
+          <span
+            class="material-symbols-outlined text-sm"
+          >
+            settings
+          </span>
+          Risk Settings
         </button>
       </div>
     </div>
@@ -47,50 +488,91 @@ exports[`LPDashboard snapshots > matches the fund confirmation modal with sample
         class="w-full text-left"
       >
         <thead
-          class="bg-surface-container-low"
+          class="bg-surface-container-low border-b border-surface-dim"
         >
           <tr>
             <th
+              aria-label="Select"
+              class="px-6 py-4 w-10"
+              scope="col"
+            >
+              <span
+                class="sr-only"
+              >
+                Select
+              </span>
+            </th>
+            <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider"
+              scope="col"
             >
               ID
             </th>
             <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider"
+              scope="col"
             >
               Freelancer
             </th>
             <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group"
+              scope="col"
             >
               Amount ↓
             </th>
             <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group"
+              scope="col"
             >
               Discount 
             </th>
             <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group"
+              scope="col"
             >
               Due Date 
             </th>
             <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider"
+              scope="col"
             >
               Est. Yield
             </th>
             <th
+              class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer"
+              scope="col"
+            >
+              Risk 
+            </th>
+            <th
+              aria-label="Actions"
               class="px-6 py-4"
-            />
+              scope="col"
+            >
+              <span
+                class="sr-only"
+              >
+                Actions
+              </span>
+            </th>
           </tr>
         </thead>
         <tbody
           class="divide-y divide-surface-dim"
         >
           <tr
-            class="hover:bg-surface-variant/10 transition-colors"
+            class="hover:bg-surface-variant/10 transition-colors  "
+            role="row"
+            tabindex="0"
           >
+            <td
+              class="px-6 py-5"
+            >
+              <input
+                class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
+                type="checkbox"
+              />
+            </td>
             <td
               class="px-6 py-5 font-bold text-primary"
             >
@@ -102,15 +584,22 @@ exports[`LPDashboard snapshots > matches the fund confirmation modal with sample
               <div
                 class="flex flex-col"
               >
-                <span
-                  class="text-sm font-medium"
+                <a
+                  class="text-sm font-medium text-primary hover:underline"
+                  href="/profile/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                 >
-                  GAAAAA...AWHF
-                </span>
+                  GAAA...AWHF
+                </a>
                 <span
                   class="text-[10px] text-on-surface-variant"
                 >
-                  Payer: GDDDDD...DDD2
+                  lpDashboard.tableHeaders.payer: 
+                  <a
+                    class="font-mono text-on-surface hover:underline"
+                    href="/profile/GDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD2"
+                  >
+                    GDDD...DDD2
+                  </a>
                 </span>
               </div>
             </td>
@@ -122,9 +611,18 @@ exports[`LPDashboard snapshots > matches the fund confirmation modal with sample
               >
                 <span
                   aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
+                  class="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
                 >
-                  US
+                  <img
+                    alt=""
+                    class="h-full w-full object-cover"
+                    src="/tokens/usdc.svg"
+                  />
+                  <span
+                    class="sr-only"
+                  >
+                    US
+                  </span>
                 </span>
                 <span>
                   150 USDC
@@ -146,16 +644,25 @@ exports[`LPDashboard snapshots > matches the fund confirmation modal with sample
               5/15/2027
             </td>
             <td
-              class="px-6 py-5 font-bold text-green-600"
+              class="px-6 py-5 font-bold text-green-600 dark:text-green-400"
             >
               <span
                 class="inline-flex items-center gap-2 "
               >
                 <span
                   aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
+                  class="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
                 >
-                  US
+                  <img
+                    alt=""
+                    class="h-full w-full object-cover"
+                    src="/tokens/usdc.svg"
+                  />
+                  <span
+                    class="sr-only"
+                  >
+                    US
+                  </span>
                 </span>
                 <span>
                   3.75 USDC
@@ -163,277 +670,415 @@ exports[`LPDashboard snapshots > matches the fund confirmation modal with sample
               </span>
             </td>
             <td
+              class="px-6 py-5"
+            >
+              <div
+                class="relative inline-block"
+              >
+                <button
+                  aria-label="Risk level: Unknown. Click for details."
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition-all hover:scale-105 active:scale-95 bg-gray-400/10 text-gray-500 border-gray-400/30 dark:text-gray-400"
+                  type="button"
+                >
+                  <span
+                    class="w-1.5 h-1.5 rounded-full bg-gray-400"
+                  />
+                  Unknown
+                </button>
+              </div>
+            </td>
+            <td
               class="px-6 py-5 text-right"
             >
-              <button
-                class="bg-primary text-surface-container-lowest text-xs px-4 py-2 rounded-lg font-bold hover:bg-primary/90 shadow-sm active:scale-95 transition-all"
+              <div
+                class="inline-flex items-center gap-2"
               >
-                Fund
-              </button>
+                <button
+                  class="p-2 rounded-full transition-colors text-on-surface-variant hover:bg-surface-variant/50"
+                  title="Add to watchlist"
+                >
+                  <span
+                    class="material-symbols-outlined text-[20px]"
+                    style="font-variation-settings: 'FILL' 0;"
+                  >
+                    bookmark
+                  </span>
+                </button>
+                <button
+                  class="bg-primary text-surface-container-lowest text-xs px-4 py-2 rounded-lg font-bold hover:bg-primary/90 shadow-sm active:scale-95 transition-all"
+                  id="fund-button"
+                >
+                  Fund
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
     <div
-      class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
+      class="flex justify-end border-t border-surface-dim bg-surface-container-low/30"
     >
       <div
-        class="bg-surface-container-lowest rounded-2xl shadow-2xl border border-outline-variant/20 w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200"
+        class="flex items-center gap-1.5 text-[11px] text-on-surface-variant/70 font-medium px-6 py-2"
+        title="Nov 14, 2023, 10:13 PM"
+      >
+        <span
+          class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"
+        />
+        Last updated 
+        <time
+          datetime="2023-11-14T22:13:20.000Z"
+        >
+          991d ago
+        </time>
+      </div>
+    </div>
+    <div
+      aria-labelledby="modal-title"
+      aria-modal="true"
+      class="fixed inset-0 z-[100] flex flex-col bg-surface-container-lowest overflow-y-auto animate-in fade-in duration-200"
+      role="dialog"
+    >
+      <div
+        class="sticky top-0 bg-surface-container-low border-b border-surface-dim z-10 px-6 py-4 flex items-center justify-between"
+      >
+        <h4
+          class="text-xl font-bold"
+          id="modal-title"
+        >
+          Fund Invoice #1
+        </h4>
+        <div
+          class="flex items-center gap-4"
+        >
+          <div
+            class="flex items-center gap-2 text-primary"
+          >
+            <div
+              class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-primary text-surface-container-lowest"
+            >
+              1
+            </div>
+            <span
+              class="text-sm font-bold"
+            >
+              Approve
+            </span>
+          </div>
+          <div
+            class="w-12 h-px bg-surface-variant"
+          />
+          <div
+            class="flex items-center gap-2 text-on-surface-variant opacity-50"
+          >
+            <div
+              class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-surface-variant text-on-surface-variant"
+            >
+              2
+            </div>
+            <span
+              class="text-sm font-bold"
+            >
+              Fund
+            </span>
+          </div>
+        </div>
+        <button
+          aria-label="Close modal"
+          class="p-2 hover:bg-surface-variant/20 rounded-full text-on-surface-variant"
+        >
+          <span
+            class="material-symbols-outlined shrink-0"
+          >
+            close
+          </span>
+        </button>
+      </div>
+      <div
+        class="flex-1 flex items-center justify-center p-6"
       >
         <div
-          class="p-6 border-b border-surface-dim"
+          class="w-full max-w-2xl bg-surface-container-lowest"
         >
-          <h4
-            class="text-xl font-bold"
-          >
-            Fund Invoice #1
-          </h4>
-          <p
-            class="text-sm text-on-surface-variant mt-1"
-          >
-            The funding token is fixed by the invoice. Approve it only when the current allowance is too low, then complete funding.
-          </p>
-        </div>
-        <div
-          class="p-6 space-y-4"
-        >
-          <label
-            class="block"
+          <div
+            class="mb-6 space-y-4"
           >
             <div
-              class="mb-2 flex items-center justify-between gap-3"
-            >
-              <span
-                class="text-xs font-bold uppercase tracking-[0.22em] text-on-surface-variant"
-              >
-                Invoice token
-              </span>
-            </div>
-            <div
-              class="flex items-center justify-between rounded-2xl border border-outline-variant/15 bg-surface-container-low px-4 py-3.5"
+              class="block"
             >
               <div
-                class="flex items-center gap-3"
+                class="mb-2 flex items-center justify-between gap-3"
               >
                 <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 "
+                  class="flex items-center text-xs font-bold uppercase tracking-[0.22em] text-on-surface-variant"
                 >
-                  US
+                  Funding token
                 </span>
-                <div>
-                  <p
+              </div>
+              <div
+                class="relative"
+              >
+                <button
+                  aria-controls="_r_0_-listbox"
+                  aria-expanded="false"
+                  aria-haspopup="listbox"
+                  class="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl border border-outline-variant/15 bg-surface-container-low px-4 py-3 text-left text-sm text-on-surface outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-70"
+                  id="_r_0_"
+                  type="button"
+                >
+                  <span
+                    class="flex min-w-0 flex-1 items-center gap-3"
+                  >
+                    <span
+                      aria-hidden="true"
+                      class="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 "
+                    >
+                      <img
+                        alt=""
+                        class="h-full w-full object-cover"
+                        src="/tokens/usdc.svg"
+                      />
+                      <span
+                        class="sr-only"
+                      >
+                        US
+                      </span>
+                    </span>
+                    <span
+                      class="min-w-0"
+                    >
+                      <span
+                        class="flex flex-wrap items-center gap-x-2 gap-y-1"
+                      >
+                        <span
+                          class="font-bold text-on-surface"
+                        >
+                          USDC
+                        </span>
+                        <span
+                          class="text-xs text-on-surface-variant"
+                        >
+                          USD Coin
+                        </span>
+                      </span>
+                      <span
+                        class="block text-xs text-on-surface-variant"
+                      >
+                        Balance unavailable
+                      </span>
+                    </span>
+                  </span>
+                  <span
+                    class="material-symbols-outlined text-base text-on-surface-variant"
+                  >
+                    expand_more
+                  </span>
+                </button>
+              </div>
+              <div
+                aria-hidden="true"
+                class="fixed inset-0 z-40 bg-black/40 transition-opacity duration-300"
+                style="opacity: 0; pointer-events: none;"
+              />
+              <div
+                class="fixed bottom-0 left-0 right-0 z-50 max-h-[80vh] overflow-auto rounded-t-3xl bg-surface-container-lowest p-4 shadow-2xl transition-transform duration-300"
+                style="transform: translateY(100%);"
+              >
+                <div
+                  class="mb-4 flex items-center justify-between"
+                >
+                  <span
                     class="text-sm font-bold text-on-surface"
                   >
-                    USDC
-                  </p>
-                  <p
-                    class="text-xs text-on-surface-variant"
+                    Funding token
+                  </span>
+                  <button
+                    aria-label="Close token selector"
+                    class="rounded-full p-1 hover:bg-surface-container"
+                    type="button"
                   >
-                    USD Coin
-                  </p>
+                    <span
+                      class="material-symbols-outlined text-base text-on-surface-variant"
+                    >
+                      close
+                    </span>
+                  </button>
+                </div>
+                <div
+                  aria-labelledby="_r_0_"
+                  id="_r_0_-listbox"
+                  role="listbox"
+                >
+                  <button
+                    aria-disabled="false"
+                    aria-selected="true"
+                    class="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-surface-container-low active:bg-surface-container-high bg-primary-container/40"
+                    role="option"
+                    type="button"
+                  >
+                    <span
+                      class="flex min-w-0 flex-1 items-center gap-3"
+                    >
+                      <span
+                        aria-hidden="true"
+                        class="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 "
+                      >
+                        <img
+                          alt=""
+                          class="h-full w-full object-cover"
+                          src="/tokens/usdc.svg"
+                        />
+                        <span
+                          class="sr-only"
+                        >
+                          US
+                        </span>
+                      </span>
+                      <span
+                        class="min-w-0"
+                      >
+                        <span
+                          class="flex flex-wrap items-center gap-x-2 gap-y-1"
+                        >
+                          <span
+                            class="font-bold text-on-surface"
+                          >
+                            USDC
+                          </span>
+                          <span
+                            class="text-xs text-on-surface-variant"
+                          >
+                            USD Coin
+                          </span>
+                        </span>
+                        <span
+                          class="block text-xs text-on-surface-variant"
+                        >
+                          Balance unavailable
+                        </span>
+                      </span>
+                    </span>
+                    <span
+                      class="material-symbols-outlined text-base text-primary"
+                    >
+                      check
+                    </span>
+                  </button>
+                  <button
+                    aria-disabled="false"
+                    aria-selected="false"
+                    class="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-surface-container-low active:bg-surface-container-high "
+                    role="option"
+                    type="button"
+                  >
+                    <span
+                      class="flex min-w-0 flex-1 items-center gap-3"
+                    >
+                      <span
+                        aria-hidden="true"
+                        class="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-black tracking-[0.14em] bg-sky-100 text-sky-700 border-sky-200 "
+                      >
+                        <img
+                          alt=""
+                          class="h-full w-full object-cover"
+                          src="/tokens/eurc.svg"
+                        />
+                        <span
+                          class="sr-only"
+                        >
+                          EU
+                        </span>
+                      </span>
+                      <span
+                        class="min-w-0"
+                      >
+                        <span
+                          class="flex flex-wrap items-center gap-x-2 gap-y-1"
+                        >
+                          <span
+                            class="font-bold text-on-surface"
+                          >
+                            EURC
+                          </span>
+                          <span
+                            class="text-xs text-on-surface-variant"
+                          >
+                            Euro Coin
+                          </span>
+                        </span>
+                        <span
+                          class="block text-xs text-on-surface-variant"
+                        >
+                          Balance unavailable
+                        </span>
+                      </span>
+                    </span>
+                  </button>
                 </div>
               </div>
-              <span
-                class="text-xs font-mono text-on-surface-variant"
+              <p
+                class="mt-2 text-xs text-on-surface-variant"
               >
-                token-us...
-              </span>
+                Funding must match the invoice's denomination.
+              </p>
             </div>
-          </label>
+          </div>
           <div
-            class="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4"
+            class="animate-in slide-in-from-right-8 duration-300"
           >
             <div
-              class="flex items-start gap-3"
+              class="mb-8"
             >
-              <div
-                class="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold bg-primary-container text-on-primary-container"
+              <span
+                class="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-bold tracking-wide"
               >
-                1
-              </div>
-              <div
-                class="min-w-0"
+                1 of 2
+              </span>
+              <h2
+                class="text-3xl font-bold mt-4 mb-2"
               >
-                <p
-                  class="text-sm font-bold"
-                >
-                  Step 1: Approve USDC
-                </p>
-                <p
-                  class="text-xs text-on-surface-variant mt-1"
-                >
-                  Approve exactly 150 USDC for the ILN contract.
-                </p>
-              </div>
+                Approve USDC
+              </h2>
+              <p
+                class="text-lg text-on-surface-variant"
+              >
+                You're authorising ILN to spend 150 USDC from your wallet. This is a one-time approval.
+              </p>
             </div>
             <div
-              class="mt-3 flex items-center justify-between text-xs text-on-surface-variant"
+              class="mb-8 border border-outline-variant/30 rounded-xl overflow-hidden"
             >
-              <span>
-                Current allowance
-              </span>
-              <span
-                class="font-bold text-on-surface"
+              <button
+                class="w-full px-6 py-4 flex items-center justify-between bg-surface-container-low hover:bg-surface-variant/20 transition-colors text-left"
               >
-                0 USDC
-              </span>
+                <span
+                  class="font-bold"
+                >
+                  Why do I need to do this?
+                </span>
+                <span
+                  class="material-symbols-outlined"
+                >
+                  expand_more
+                </span>
+              </button>
             </div>
-          </div>
-          <div
-            class="rounded-xl border border-outline-variant/20 bg-surface-container-low p-4"
-          >
             <div
-              class="flex items-start gap-3"
+              class="flex items-center gap-4"
             >
-              <div
-                class="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold bg-surface-container-high text-on-surface-variant"
+              <button
+                class="px-8 py-4 rounded-xl font-bold text-lg bg-primary text-surface-container-lowest hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 w-full"
               >
-                2
-              </div>
-              <div>
-                <p
-                  class="text-sm font-bold"
-                >
-                  Step 2: Fund Invoice
-                </p>
-                <p
-                  class="text-xs text-on-surface-variant mt-1"
-                >
-                  Send the invoice principal once the ILN contract can spend your USDC.
-                </p>
-              </div>
+                Approve USDC
+              </button>
+              <button
+                class="px-8 py-4 rounded-xl font-bold text-lg border border-outline-variant hover:bg-surface-dim transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
             </div>
           </div>
-          <div
-            class="flex justify-between text-sm"
-          >
-            <span
-              class="text-on-surface-variant"
-            >
-              You will send:
-            </span>
-            <span
-              class="font-bold"
-            >
-              <span
-                class="inline-flex items-center gap-2 "
-              >
-                <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
-                >
-                  US
-                </span>
-                <span>
-                  150 USDC
-                </span>
-              </span>
-            </span>
-          </div>
-          <div
-            class="flex justify-between text-sm text-green-600 font-medium"
-          >
-            <span>
-              Freelancer receives immediately:
-            </span>
-            <span>
-              <span
-                class="inline-flex items-center gap-2 "
-              >
-                <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
-                >
-                  US
-                </span>
-                <span>
-                  146.25 USDC
-                </span>
-              </span>
-            </span>
-          </div>
-          <div
-            class="flex justify-between text-sm"
-          >
-            <span
-              class="text-on-surface-variant"
-            >
-              You receive on settlement:
-            </span>
-            <span
-              class="font-bold"
-            >
-              <span
-                class="inline-flex items-center gap-2 "
-              >
-                <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
-                >
-                  US
-                </span>
-                <span>
-                  150 USDC
-                </span>
-              </span>
-            </span>
-          </div>
-          <div
-            class="flex justify-between text-sm border-t border-surface-dim pt-4"
-          >
-            <span
-              class="text-on-surface-variant"
-            >
-              Your yield (discount):
-            </span>
-            <span
-              class="font-bold text-green-600"
-            >
-              <span
-                class="inline-flex items-center gap-2 "
-              >
-                <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
-                >
-                  US
-                </span>
-                <span>
-                  3.75 USDC (2.50%)
-                </span>
-              </span>
-            </span>
-          </div>
-          <div
-            class="flex justify-between text-sm"
-          >
-            <span
-              class="text-on-surface-variant"
-            >
-              Estimated due date:
-            </span>
-            <span
-              class="font-bold"
-            >
-              5/15/2027
-            </span>
-          </div>
-        </div>
-        <div
-          class="p-6 bg-surface-container-low flex gap-3"
-        >
-          <button
-            class="flex-1 py-3 rounded-xl font-bold text-sm border border-outline-variant hover:bg-surface-dim transition-colors disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            class="flex-[2] py-3 rounded-xl font-bold text-sm bg-primary text-surface-container-lowest hover:bg-primary/90 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            Approve USDC
-          </button>
         </div>
       </div>
     </div>
@@ -448,6 +1093,7 @@ exports[`LPDashboard snapshots > matches the invoice table discovery state with 
   >
     <div
       class="p-6 border-b border-surface-dim flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+      data-testid="lp-dashboard-header"
     >
       <div>
         <h3
@@ -465,6 +1111,11 @@ exports[`LPDashboard snapshots > matches the invoice table discovery state with 
         >
           Browse and fund invoices to earn yield.
         </p>
+        <p
+          class="text-sm text-on-surface-variant mt-1"
+        >
+          Browse and fund invoices to earn yield.
+        </p>
       </div>
       <div
         class="flex bg-surface-container-low p-1 rounded-xl"
@@ -477,7 +1128,442 @@ exports[`LPDashboard snapshots > matches the invoice table discovery state with 
         <button
           class="px-4 py-2 rounded-lg text-sm font-bold transition-all text-on-surface-variant hover:bg-surface-variant/30"
         >
+          Watchlist
+        </button>
+        <button
+          class="px-4 py-2 rounded-lg text-sm font-bold transition-all text-on-surface-variant hover:bg-surface-variant/30"
+        >
           My Funded
+        </button>
+        <button
+          class="px-4 py-2 rounded-lg text-sm font-bold transition-all text-on-surface-variant hover:bg-surface-variant/30"
+        >
+          Earnings History
+        </button>
+      </div>
+    </div>
+    <div
+      class="px-6 pt-4 flex flex-col gap-3"
+    >
+      <div
+        class="overflow-hidden rounded-xl border border-surface-dim"
+      >
+        <div
+          class="flex cursor-pointer items-center justify-between bg-surface-container-low p-4"
+        >
+          <div
+            class="flex items-center gap-3"
+          >
+            <h3
+              class="flex items-center gap-2 text-lg font-medium"
+            >
+              <span
+                class="material-symbols-outlined"
+              >
+                calculate
+              </span>
+              What's my yield?
+            </h3>
+            <button
+              class="rounded-full border border-outline-variant/30 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant transition-colors hover:border-primary/40 hover:text-primary"
+              type="button"
+            >
+              Simple
+            </button>
+          </div>
+          <span
+            class="material-symbols-outlined transition-transform duration-200"
+          >
+            expand_less
+          </span>
+        </div>
+        <div
+          class="space-y-6 p-6"
+        >
+          <div
+            class="grid gap-4 md:grid-cols-3"
+          >
+            <div
+              class="space-y-2"
+            >
+              <label
+                class="flex items-center justify-between text-sm font-medium text-on-surface-variant"
+                for="yc-amount-range"
+              >
+                Invoice Amount (USDC)
+                <span>
+                  1,000
+                </span>
+              </label>
+              <div
+                class="flex w-full gap-2"
+              >
+                <input
+                  class="h-2 flex-1 rounded bg-primary/20"
+                  id="yc-amount-range"
+                  max="1000000"
+                  min="0"
+                  step="100"
+                  type="range"
+                  value="1000"
+                />
+                <input
+                  aria-label="Invoice Amount value"
+                  class="w-20 rounded border px-2 py-1 text-center text-sm outline-none transition-colors border-surface-dim bg-surface-container-lowest focus:border-primary"
+                  max="1000000"
+                  min="0"
+                  step="100"
+                  type="number"
+                  value="1000"
+                />
+              </div>
+            </div>
+            <div
+              class="space-y-2"
+            >
+              <label
+                class="flex items-center justify-between text-sm font-medium text-on-surface-variant"
+                for="yc-discount-range"
+              >
+                Discount Rate (bps)
+                <span>
+                  100
+                </span>
+              </label>
+              <div
+                class="flex w-full gap-2"
+              >
+                <input
+                  class="h-2 flex-1 rounded bg-primary/20"
+                  id="yc-discount-range"
+                  max="10000"
+                  min="0"
+                  step="1"
+                  type="range"
+                  value="100"
+                />
+                <input
+                  aria-label="Discount Rate value"
+                  class="w-20 rounded border px-2 py-1 text-center text-sm outline-none transition-colors border-surface-dim bg-surface-container-lowest focus:border-primary"
+                  max="10000"
+                  min="0"
+                  step="1"
+                  type="number"
+                  value="100"
+                />
+              </div>
+            </div>
+            <div
+              class="space-y-2"
+            >
+              <label
+                class="flex items-center justify-between text-sm font-medium text-on-surface-variant"
+                for="yc-settlement-range"
+              >
+                Expected Settlement (days)
+                <span>
+                  30
+                </span>
+              </label>
+              <div
+                class="flex w-full gap-2"
+              >
+                <input
+                  class="h-2 flex-1 rounded bg-primary/20"
+                  id="yc-settlement-range"
+                  max="365"
+                  min="1"
+                  step="1"
+                  type="range"
+                  value="30"
+                />
+                <input
+                  aria-label="Settlement days value"
+                  class="w-20 rounded border px-2 py-1 text-center text-sm outline-none transition-colors border-surface-dim bg-surface-container-lowest focus:border-primary"
+                  max="365"
+                  min="1"
+                  step="1"
+                  type="number"
+                  value="30"
+                />
+              </div>
+            </div>
+          </div>
+          <div
+            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                You send
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-on-surface"
+              >
+                1,000 USDC
+              </p>
+            </div>
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                Freelancer receives
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-emerald-500"
+              >
+                990 USDC
+              </p>
+            </div>
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                Your yield
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-emerald-500"
+              >
+                10 USDC
+              </p>
+            </div>
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                Annualised yield (APY)
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-emerald-500"
+              >
+                12.17%
+              </p>
+            </div>
+          </div>
+          <div
+            class="flex flex-col gap-3 border-t border-surface-dim pt-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div
+              class="text-xs text-on-surface-variant"
+            >
+              Current category: Standard invoices.
+            </div>
+            <button
+              class="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-surface-container-lowest transition-colors hover:bg-primary/90"
+            >
+              Find invoices matching these terms
+            </button>
+          </div>
+        </div>
+      </div>
+      <div
+        class="space-y-3"
+      >
+        <div
+          aria-live="polite"
+          class="sr-only"
+          role="status"
+        >
+          No filters applied
+        </div>
+        <div
+          class="flex flex-col gap-3 mb-5 md:flex-row md:items-center"
+        >
+          <input
+            class="w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            placeholder="Search by invoice ID, payer, or freelancer address"
+            type="search"
+            value=""
+          />
+          <div
+            class="flex flex-wrap items-center gap-2"
+          >
+            <div
+              class="relative"
+            >
+              <button
+                class="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 px-3 py-2 text-sm font-medium text-on-surface-variant hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                type="button"
+              >
+                Saved Filters
+              </button>
+            </div>
+            <button
+              aria-controls="invoice-filter-advanced"
+              aria-expanded="false"
+              class="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 px-3 py-2 text-sm font-medium text-on-surface-variant hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              type="button"
+            >
+              Filters
+            </button>
+          </div>
+        </div>
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low p-2"
+      >
+        <div
+          class="relative"
+        >
+          <button
+            aria-expanded="false"
+            aria-haspopup="listbox"
+            aria-label="Select export columns, 8 of 8 selected"
+            class="flex items-center gap-1.5 rounded-md border border-outline-variant/30 bg-surface-container-high px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-columns3 lucide-columns-3 h-3.5 w-3.5"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect
+                height="18"
+                rx="2"
+                width="18"
+                x="3"
+                y="3"
+              />
+              <path
+                d="M9 3v18"
+              />
+              <path
+                d="M15 3v18"
+              />
+            </svg>
+            Columns (8/8)
+          </button>
+        </div>
+        <select
+          aria-label="Date range"
+          class="rounded-md border border-outline-variant/30 bg-surface-container-high px-3 py-1.5 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary"
+        >
+          <option
+            value="all"
+          >
+            All time
+          </option>
+          <option
+            value="90"
+          >
+            Last 90 days
+          </option>
+          <option
+            value="365"
+          >
+            Last year
+          </option>
+          <option
+            value="custom"
+          >
+            Custom range
+          </option>
+        </select>
+        <div
+          class="mx-1 h-6 w-px bg-outline-variant/30"
+        />
+        <div
+          class="flex items-center gap-2"
+        >
+          <button
+            class="flex items-center gap-1.5 rounded-md bg-surface-container-high px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-download h-3.5 w-3.5"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 15V3"
+              />
+              <path
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+              />
+              <path
+                d="m7 10 5 5 5-5"
+              />
+            </svg>
+             CSV
+          </button>
+          <button
+            class="flex items-center gap-1.5 rounded-md bg-surface-container-high px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-download h-3.5 w-3.5"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 15V3"
+              />
+              <path
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+              />
+              <path
+                d="m7 10 5 5 5-5"
+              />
+            </svg>
+             JSON
+          </button>
+        </div>
+      </div>
+      <div
+        class="flex gap-3"
+      >
+        <button
+          class="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-variant/20 transition-colors text-sm font-bold"
+        >
+          <span
+            class="material-symbols-outlined text-sm"
+          >
+            dashboard_customize
+          </span>
+          Customize Widgets
+        </button>
+        <button
+          class="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-variant/20 transition-colors text-sm font-bold"
+        >
+          <span
+            class="material-symbols-outlined text-sm"
+          >
+            settings
+          </span>
+          Risk Settings
         </button>
       </div>
     </div>
@@ -488,50 +1574,91 @@ exports[`LPDashboard snapshots > matches the invoice table discovery state with 
         class="w-full text-left"
       >
         <thead
-          class="bg-surface-container-low"
+          class="bg-surface-container-low border-b border-surface-dim"
         >
           <tr>
             <th
+              aria-label="Select"
+              class="px-6 py-4 w-10"
+              scope="col"
+            >
+              <span
+                class="sr-only"
+              >
+                Select
+              </span>
+            </th>
+            <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider"
+              scope="col"
             >
               ID
             </th>
             <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider"
+              scope="col"
             >
               Freelancer
             </th>
             <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group"
+              scope="col"
             >
               Amount ↓
             </th>
             <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group"
+              scope="col"
             >
               Discount 
             </th>
             <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group"
+              scope="col"
             >
               Due Date 
             </th>
             <th
               class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider"
+              scope="col"
             >
               Est. Yield
             </th>
             <th
+              class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer"
+              scope="col"
+            >
+              Risk 
+            </th>
+            <th
+              aria-label="Actions"
               class="px-6 py-4"
-            />
+              scope="col"
+            >
+              <span
+                class="sr-only"
+              >
+                Actions
+              </span>
+            </th>
           </tr>
         </thead>
         <tbody
           class="divide-y divide-surface-dim"
         >
           <tr
-            class="hover:bg-surface-variant/10 transition-colors"
+            class="hover:bg-surface-variant/10 transition-colors  "
+            role="row"
+            tabindex="0"
           >
+            <td
+              class="px-6 py-5"
+            >
+              <input
+                class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer"
+                type="checkbox"
+              />
+            </td>
             <td
               class="px-6 py-5 font-bold text-primary"
             >
@@ -543,15 +1670,22 @@ exports[`LPDashboard snapshots > matches the invoice table discovery state with 
               <div
                 class="flex flex-col"
               >
-                <span
-                  class="text-sm font-medium"
+                <a
+                  class="text-sm font-medium text-primary hover:underline"
+                  href="/profile/GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
                 >
-                  GAAAAA...AWHF
-                </span>
+                  GAAA...AWHF
+                </a>
                 <span
                   class="text-[10px] text-on-surface-variant"
                 >
-                  Payer: GDDDDD...DDD2
+                  lpDashboard.tableHeaders.payer: 
+                  <a
+                    class="font-mono text-on-surface hover:underline"
+                    href="/profile/GDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD2"
+                  >
+                    GDDD...DDD2
+                  </a>
                 </span>
               </div>
             </td>
@@ -563,9 +1697,18 @@ exports[`LPDashboard snapshots > matches the invoice table discovery state with 
               >
                 <span
                   aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
+                  class="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
                 >
-                  US
+                  <img
+                    alt=""
+                    class="h-full w-full object-cover"
+                    src="/tokens/usdc.svg"
+                  />
+                  <span
+                    class="sr-only"
+                  >
+                    US
+                  </span>
                 </span>
                 <span>
                   150 USDC
@@ -587,16 +1730,25 @@ exports[`LPDashboard snapshots > matches the invoice table discovery state with 
               5/15/2027
             </td>
             <td
-              class="px-6 py-5 font-bold text-green-600"
+              class="px-6 py-5 font-bold text-green-600 dark:text-green-400"
             >
               <span
                 class="inline-flex items-center gap-2 "
               >
                 <span
                   aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
+                  class="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
                 >
-                  US
+                  <img
+                    alt=""
+                    class="h-full w-full object-cover"
+                    src="/tokens/usdc.svg"
+                  />
+                  <span
+                    class="sr-only"
+                  >
+                    US
+                  </span>
                 </span>
                 <span>
                   3.75 USDC
@@ -604,17 +1756,69 @@ exports[`LPDashboard snapshots > matches the invoice table discovery state with 
               </span>
             </td>
             <td
+              class="px-6 py-5"
+            >
+              <div
+                class="relative inline-block"
+              >
+                <button
+                  aria-label="Risk level: Unknown. Click for details."
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition-all hover:scale-105 active:scale-95 bg-gray-400/10 text-gray-500 border-gray-400/30 dark:text-gray-400"
+                  type="button"
+                >
+                  <span
+                    class="w-1.5 h-1.5 rounded-full bg-gray-400"
+                  />
+                  Unknown
+                </button>
+              </div>
+            </td>
+            <td
               class="px-6 py-5 text-right"
             >
-              <button
-                class="bg-primary text-surface-container-lowest text-xs px-4 py-2 rounded-lg font-bold hover:bg-primary/90 shadow-sm active:scale-95 transition-all"
+              <div
+                class="inline-flex items-center gap-2"
               >
-                Fund
-              </button>
+                <button
+                  class="p-2 rounded-full transition-colors text-on-surface-variant hover:bg-surface-variant/50"
+                  title="Add to watchlist"
+                >
+                  <span
+                    class="material-symbols-outlined text-[20px]"
+                    style="font-variation-settings: 'FILL' 0;"
+                  >
+                    bookmark
+                  </span>
+                </button>
+                <button
+                  class="bg-primary text-surface-container-lowest text-xs px-4 py-2 rounded-lg font-bold hover:bg-primary/90 shadow-sm active:scale-95 transition-all"
+                  id="fund-button"
+                >
+                  Fund
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
       </table>
+    </div>
+    <div
+      class="flex justify-end border-t border-surface-dim bg-surface-container-low/30"
+    >
+      <div
+        class="flex items-center gap-1.5 text-[11px] text-on-surface-variant/70 font-medium px-6 py-2"
+        title="Nov 14, 2023, 10:13 PM"
+      >
+        <span
+          class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"
+        />
+        Last updated 
+        <time
+          datetime="2023-11-14T22:13:20.000Z"
+        >
+          991d ago
+        </time>
+      </div>
     </div>
   </div>
 </DocumentFragment>
@@ -627,6 +1831,7 @@ exports[`LPDashboard snapshots > matches the lp portfolio style my-funded view w
   >
     <div
       class="p-6 border-b border-surface-dim flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+      data-testid="lp-dashboard-header"
     >
       <div>
         <h3
@@ -644,6 +1849,11 @@ exports[`LPDashboard snapshots > matches the lp portfolio style my-funded view w
         >
           Browse and fund invoices to earn yield.
         </p>
+        <p
+          class="text-sm text-on-surface-variant mt-1"
+        >
+          Browse and fund invoices to earn yield.
+        </p>
       </div>
       <div
         class="flex bg-surface-container-low p-1 rounded-xl"
@@ -654,398 +1864,1696 @@ exports[`LPDashboard snapshots > matches the lp portfolio style my-funded view w
           Discovery
         </button>
         <button
+          class="px-4 py-2 rounded-lg text-sm font-bold transition-all text-on-surface-variant hover:bg-surface-variant/30"
+        >
+          Watchlist
+        </button>
+        <button
           class="px-4 py-2 rounded-lg text-sm font-bold transition-all bg-primary text-surface-container-lowest shadow-md"
         >
           My Funded
         </button>
+        <button
+          class="px-4 py-2 rounded-lg text-sm font-bold transition-all text-on-surface-variant hover:bg-surface-variant/30"
+        >
+          Earnings History
+        </button>
       </div>
     </div>
     <div
-      class="overflow-x-auto"
+      class="px-6 pt-4 flex flex-col gap-3"
     >
-      <table
-        class="w-full text-left"
+      <div
+        class="overflow-hidden rounded-xl border border-surface-dim"
       >
-        <thead
-          class="bg-surface-container-low"
+        <div
+          class="flex cursor-pointer items-center justify-between bg-surface-container-low p-4"
         >
-          <tr>
-            <th
-              class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider"
+          <div
+            class="flex items-center gap-3"
+          >
+            <h3
+              class="flex items-center gap-2 text-lg font-medium"
             >
-              ID
-            </th>
-            <th
-              class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider"
+              <span
+                class="material-symbols-outlined"
+              >
+                calculate
+              </span>
+              What's my yield?
+            </h3>
+            <button
+              class="rounded-full border border-outline-variant/30 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant transition-colors hover:border-primary/40 hover:text-primary"
+              type="button"
             >
-              Freelancer
-            </th>
-            <th
-              class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group"
+              Simple
+            </button>
+          </div>
+          <span
+            class="material-symbols-outlined transition-transform duration-200"
+          >
+            expand_less
+          </span>
+        </div>
+        <div
+          class="space-y-6 p-6"
+        >
+          <div
+            class="grid gap-4 md:grid-cols-3"
+          >
+            <div
+              class="space-y-2"
             >
-              Amount ↓
-            </th>
-            <th
-              class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group"
+              <label
+                class="flex items-center justify-between text-sm font-medium text-on-surface-variant"
+                for="yc-amount-range"
+              >
+                Invoice Amount (USDC)
+                <span>
+                  1,000
+                </span>
+              </label>
+              <div
+                class="flex w-full gap-2"
+              >
+                <input
+                  class="h-2 flex-1 rounded bg-primary/20"
+                  id="yc-amount-range"
+                  max="1000000"
+                  min="0"
+                  step="100"
+                  type="range"
+                  value="1000"
+                />
+                <input
+                  aria-label="Invoice Amount value"
+                  class="w-20 rounded border px-2 py-1 text-center text-sm outline-none transition-colors border-surface-dim bg-surface-container-lowest focus:border-primary"
+                  max="1000000"
+                  min="0"
+                  step="100"
+                  type="number"
+                  value="1000"
+                />
+              </div>
+            </div>
+            <div
+              class="space-y-2"
             >
-              Discount 
-            </th>
-            <th
-              class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer group"
+              <label
+                class="flex items-center justify-between text-sm font-medium text-on-surface-variant"
+                for="yc-discount-range"
+              >
+                Discount Rate (bps)
+                <span>
+                  100
+                </span>
+              </label>
+              <div
+                class="flex w-full gap-2"
+              >
+                <input
+                  class="h-2 flex-1 rounded bg-primary/20"
+                  id="yc-discount-range"
+                  max="10000"
+                  min="0"
+                  step="1"
+                  type="range"
+                  value="100"
+                />
+                <input
+                  aria-label="Discount Rate value"
+                  class="w-20 rounded border px-2 py-1 text-center text-sm outline-none transition-colors border-surface-dim bg-surface-container-lowest focus:border-primary"
+                  max="10000"
+                  min="0"
+                  step="1"
+                  type="number"
+                  value="100"
+                />
+              </div>
+            </div>
+            <div
+              class="space-y-2"
             >
-              Due Date 
-            </th>
-            <th
-              class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider"
+              <label
+                class="flex items-center justify-between text-sm font-medium text-on-surface-variant"
+                for="yc-settlement-range"
+              >
+                Expected Settlement (days)
+                <span>
+                  30
+                </span>
+              </label>
+              <div
+                class="flex w-full gap-2"
+              >
+                <input
+                  class="h-2 flex-1 rounded bg-primary/20"
+                  id="yc-settlement-range"
+                  max="365"
+                  min="1"
+                  step="1"
+                  type="range"
+                  value="30"
+                />
+                <input
+                  aria-label="Settlement days value"
+                  class="w-20 rounded border px-2 py-1 text-center text-sm outline-none transition-colors border-surface-dim bg-surface-container-lowest focus:border-primary"
+                  max="365"
+                  min="1"
+                  step="1"
+                  type="number"
+                  value="30"
+                />
+              </div>
+            </div>
+          </div>
+          <div
+            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          >
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
             >
-              Est. Yield
-            </th>
-            <th
-              class="px-6 py-4"
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                You send
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-on-surface"
+              >
+                1,000 USDC
+              </p>
+            </div>
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                Freelancer receives
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-emerald-500"
+              >
+                990 USDC
+              </p>
+            </div>
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                Your yield
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-emerald-500"
+              >
+                10 USDC
+              </p>
+            </div>
+            <div
+              class="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
+            >
+              <p
+                class="text-[11px] font-bold uppercase tracking-[0.18em] text-on-surface-variant"
+              >
+                Annualised yield (APY)
+              </p>
+              <p
+                class="mt-2 text-2xl font-bold text-emerald-500"
+              >
+                12.17%
+              </p>
+            </div>
+          </div>
+          <div
+            class="flex flex-col gap-3 border-t border-surface-dim pt-4 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div
+              class="text-xs text-on-surface-variant"
+            >
+              Current category: Standard invoices.
+            </div>
+            <button
+              class="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-surface-container-lowest transition-colors hover:bg-primary/90"
+            >
+              Find invoices matching these terms
+            </button>
+          </div>
+        </div>
+      </div>
+      <div
+        class="space-y-3"
+      >
+        <div
+          aria-live="polite"
+          class="sr-only"
+          role="status"
+        >
+          No filters applied
+        </div>
+        <div
+          class="flex flex-col gap-3 mb-5 md:flex-row md:items-center"
+        >
+          <input
+            class="w-full rounded-xl border border-outline-variant/30 bg-surface-container-low px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            placeholder="Search by invoice ID, payer, or freelancer address"
+            type="search"
+            value=""
+          />
+          <div
+            class="flex flex-wrap items-center gap-2"
+          >
+            <div
+              class="relative"
+            >
+              <button
+                class="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 px-3 py-2 text-sm font-medium text-on-surface-variant hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                type="button"
+              >
+                Saved Filters
+              </button>
+            </div>
+            <button
+              aria-controls="invoice-filter-advanced"
+              aria-expanded="false"
+              class="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 px-3 py-2 text-sm font-medium text-on-surface-variant hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              type="button"
+            >
+              Filters
+            </button>
+          </div>
+        </div>
+      </div>
+      <div
+        class="flex flex-wrap items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-low p-2"
+      >
+        <div
+          class="relative"
+        >
+          <button
+            aria-expanded="false"
+            aria-haspopup="listbox"
+            aria-label="Select export columns, 8 of 8 selected"
+            class="flex items-center gap-1.5 rounded-md border border-outline-variant/30 bg-surface-container-high px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-columns3 lucide-columns-3 h-3.5 w-3.5"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect
+                height="18"
+                rx="2"
+                width="18"
+                x="3"
+                y="3"
+              />
+              <path
+                d="M9 3v18"
+              />
+              <path
+                d="M15 3v18"
+              />
+            </svg>
+            Columns (8/8)
+          </button>
+        </div>
+        <select
+          aria-label="Date range"
+          class="rounded-md border border-outline-variant/30 bg-surface-container-high px-3 py-1.5 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary"
+        >
+          <option
+            value="all"
+          >
+            All time
+          </option>
+          <option
+            value="90"
+          >
+            Last 90 days
+          </option>
+          <option
+            value="365"
+          >
+            Last year
+          </option>
+          <option
+            value="custom"
+          >
+            Custom range
+          </option>
+        </select>
+        <div
+          class="mx-1 h-6 w-px bg-outline-variant/30"
+        />
+        <div
+          class="flex items-center gap-2"
+        >
+          <button
+            class="flex items-center gap-1.5 rounded-md bg-surface-container-high px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-download h-3.5 w-3.5"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 15V3"
+              />
+              <path
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+              />
+              <path
+                d="m7 10 5 5 5-5"
+              />
+            </svg>
+             CSV
+          </button>
+          <button
+            class="flex items-center gap-1.5 rounded-md bg-surface-container-high px-3 py-1.5 text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              class="lucide lucide-download h-3.5 w-3.5"
+              fill="none"
+              height="24"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+              width="24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 15V3"
+              />
+              <path
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+              />
+              <path
+                d="m7 10 5 5 5-5"
+              />
+            </svg>
+             JSON
+          </button>
+        </div>
+      </div>
+      <div
+        class="flex gap-3"
+      >
+        <button
+          class="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-variant/20 transition-colors text-sm font-bold"
+        >
+          <span
+            class="material-symbols-outlined text-sm"
+          >
+            dashboard_customize
+          </span>
+          Customize Widgets
+        </button>
+        <button
+          class="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/30 hover:bg-surface-variant/20 transition-colors text-sm font-bold"
+        >
+          <span
+            class="material-symbols-outlined text-sm"
+          >
+            settings
+          </span>
+          Risk Settings
+        </button>
+      </div>
+    </div>
+    <div
+      class="px-6 pt-4 flex flex-col gap-4"
+    >
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6"
+      >
+        <div
+          class="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 flex flex-col gap-2 shadow-sm"
+        >
+          <h4
+            class="text-sm font-medium text-on-surface-variant"
+          >
+            Total Invested
+          </h4>
+          <div
+            class="text-2xl font-bold"
+          >
+            1,082.5 USDC
+          </div>
+          <div
+            class="flex items-center justify-between mt-2"
+          >
+            <div
+              class="flex items-center gap-1 text-xs font-bold text-emerald-500"
+            >
+              <span
+                class="material-symbols-outlined text-[16px]"
+              >
+                trending_up
+              </span>
+              +12%
+            </div>
+            <svg
+              class="h-8 w-16 overflow-visible opacity-60"
+              preserveAspectRatio="none"
+              viewBox="0 0 100 100"
+            >
+              <polyline
+                class="text-emerald-500"
+                fill="none"
+                points="0,57.142857142857146 16.666666666666664,42.85714285714286 33.33333333333333,50 50,28.57142857142857 66.66666666666666,30 83.33333333333334,14.285714285714292 100,0"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="4"
+              />
+            </svg>
+          </div>
+        </div>
+        <div
+          class="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 flex flex-col gap-2 shadow-sm"
+        >
+          <h4
+            class="text-sm font-medium text-on-surface-variant"
+          >
+            Current Yield
+          </h4>
+          <div
+            class="text-2xl font-bold"
+          >
+            57.45 USDC
+          </div>
+          <div
+            class="flex items-center justify-between mt-2"
+          >
+            <div
+              class="flex items-center gap-1 text-xs font-bold text-emerald-500"
+            >
+              <span
+                class="material-symbols-outlined text-[16px]"
+              >
+                trending_up
+              </span>
+              +8%
+            </div>
+            <svg
+              class="h-8 w-16 overflow-visible opacity-60"
+              preserveAspectRatio="none"
+              viewBox="0 0 100 100"
+            >
+              <polyline
+                class="text-emerald-500"
+                fill="none"
+                points="0,66.66666666666667 16.666666666666664,50 33.33333333333333,56.666666666666664 50,33.33333333333334 66.66666666666666,16.666666666666657 83.33333333333334,26.66666666666667 100,0"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="4"
+              />
+            </svg>
+          </div>
+        </div>
+        <div
+          class="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 flex flex-col gap-2 shadow-sm"
+        >
+          <h4
+            class="text-sm font-medium text-on-surface-variant"
+          >
+            Active Positions
+          </h4>
+          <div
+            class="text-2xl font-bold"
+          >
+            4
+          </div>
+          <div
+            class="flex items-center justify-between mt-2"
+          >
+            <div
+              class="flex items-center gap-1 text-xs font-bold text-emerald-500"
+            >
+              <span
+                class="material-symbols-outlined text-[16px]"
+              >
+                trending_up
+              </span>
+              +1
+            </div>
+            <svg
+              class="h-8 w-16 overflow-visible opacity-60"
+              preserveAspectRatio="none"
+              viewBox="0 0 100 100"
+            >
+              <polyline
+                class="text-emerald-500"
+                fill="none"
+                points="0,60 16.666666666666664,40 33.33333333333333,40 50,20 66.66666666666666,20 83.33333333333334,0 100,20"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="4"
+              />
+            </svg>
+          </div>
+        </div>
+        <div
+          class="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 flex flex-col gap-2 shadow-sm"
+        >
+          <h4
+            class="text-sm font-medium text-on-surface-variant"
+          >
+            Risk Score
+          </h4>
+          <div
+            class="text-2xl font-bold"
+          >
+            High
+          </div>
+          <div
+            class="flex items-center justify-between mt-2"
+          >
+            <div
+              class="flex items-center gap-1 text-xs font-bold text-on-surface-variant"
+            >
+              <span
+                class="material-symbols-outlined text-[16px]"
+              >
+                trending_flat
+              </span>
+              Stable
+            </div>
+            <svg
+              class="h-8 w-16 overflow-visible opacity-60"
+              preserveAspectRatio="none"
+              viewBox="0 0 100 100"
+            >
+              <polyline
+                class="text-on-surface-variant"
+                fill="none"
+                points="0,0 16.666666666666664,0 33.33333333333333,10 50,10 66.66666666666666,20 83.33333333333334,20 100,20"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="4"
+              />
+            </svg>
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6"
+      >
+        <div
+          class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <h2
+              class="text-lg font-semibold text-on-surface"
+            >
+              Yield Analytics
+            </h2>
+            <p
+              class="text-sm text-on-surface-variant"
+            >
+              Avg weekly yield: 
+              <span
+                class="font-bold text-green-600"
+              >
+                0.000%
+              </span>
+            </p>
+          </div>
+          <div
+            class="flex gap-1 rounded-xl bg-surface-container-low p-1"
+          >
+            <button
+              class="rounded-lg px-3 py-1.5 text-xs font-bold transition-all bg-primary text-surface-container-lowest shadow"
+            >
+              30d
+            </button>
+            <button
+              class="rounded-lg px-3 py-1.5 text-xs font-bold transition-all text-on-surface-variant hover:bg-surface-variant/30"
+            >
+              60d
+            </button>
+            <button
+              class="rounded-lg px-3 py-1.5 text-xs font-bold transition-all text-on-surface-variant hover:bg-surface-variant/30"
+            >
+              90d
+            </button>
+          </div>
+        </div>
+        <p
+          class="py-12 text-center text-sm text-on-surface-variant"
+        >
+          No paid invoices in the last 30 days.
+        </p>
+      </div>
+      <div
+        class="animate-pulse rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6"
+      >
+        <div
+          class="h-5 w-40 rounded bg-surface-variant mb-4"
+        />
+        <div
+          class="h-64 rounded-xl bg-surface-variant"
+        />
+      </div>
+    </div>
+    <div
+      class="px-6"
+    >
+      <div
+        class="bg-surface-container-lowest rounded-2xl shadow-lg border border-outline-variant/10 p-6 mb-6"
+      >
+        <div
+          class="flex items-center justify-between mb-6"
+        >
+          <div>
+            <h3
+              class="text-xl font-bold text-on-surface flex items-center gap-2"
+            >
+              <span
+                class="material-symbols-outlined text-primary"
+              >
+                shield
+              </span>
+              Risk Summary
+            </h3>
+            <p
+              class="text-sm text-on-surface-variant mt-1"
+            >
+              Overview of your portfolio risk exposure
+            </p>
+          </div>
+          <div
+            class="text-right"
+          >
+            <div
+              class="text-sm text-on-surface-variant"
+            >
+              Last updated
+            </div>
+            <div
+              class="text-sm font-medium"
+            >
+              12:00:00 AM
+            </div>
+          </div>
+        </div>
+        <div
+          class="grid grid-cols-1 md:grid-cols-3 gap-4"
+        >
+          <button
+            class="p-4 rounded-xl border-2 transition-all hover:shadow-md text-left text-green-600 bg-green-50 border-green-200"
+          >
+            <div
+              class="flex items-center justify-between mb-2"
+            >
+              <span
+                class="material-symbols-outlined text-2xl"
+              >
+                check_circle
+              </span>
+              <span
+                class="text-xs font-bold uppercase tracking-wide opacity-80"
+              >
+                low risk
+              </span>
+            </div>
+            <div
+              class="text-2xl font-bold mb-1"
+            >
+              0
+            </div>
+            <div
+              class="text-sm font-medium mb-1"
+            >
+              Positions at Risk
+            </div>
+            <div
+              class="text-xs opacity-80"
+            >
+              Disputed or expiring within 24h
+            </div>
+          </button>
+          <button
+            class="p-4 rounded-xl border-2 transition-all hover:shadow-md text-left text-green-600 bg-green-50 border-green-200"
+          >
+            <div
+              class="flex items-center justify-between mb-2"
+            >
+              <span
+                class="material-symbols-outlined text-2xl"
+              >
+                check_circle
+              </span>
+              <span
+                class="text-xs font-bold uppercase tracking-wide opacity-80"
+              >
+                low risk
+              </span>
+            </div>
+            <div
+              class="text-2xl font-bold mb-1"
+            >
+              0 USDC
+            </div>
+            <div
+              class="text-sm font-medium mb-1"
+            >
+              Capital at Risk
+            </div>
+            <div
+              class="text-xs opacity-80"
+            >
+              0% of portfolio
+            </div>
+          </button>
+          <button
+            class="p-4 rounded-xl border-2 transition-all hover:shadow-md text-left text-green-600 bg-green-50 border-green-200"
+          >
+            <div
+              class="flex items-center justify-between mb-2"
+            >
+              <span
+                class="material-symbols-outlined text-2xl"
+              >
+                check_circle
+              </span>
+              <span
+                class="text-xs font-bold uppercase tracking-wide opacity-80"
+              >
+                low risk
+              </span>
+            </div>
+            <div
+              class="text-2xl font-bold mb-1"
+            >
+              0
+            </div>
+            <div
+              class="text-sm font-medium mb-1"
+            >
+              Disputed Positions
+            </div>
+            <div
+              class="text-xs opacity-80"
+            >
+              Positions under dispute
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div
+      class="space-y-6 p-6"
+    >
+      <div
+        class="rounded-xl border border-green-200 bg-green-50 p-4"
+      >
+        <p
+          class="text-xs font-semibold uppercase tracking-wide text-green-700"
+        >
+          Total Yield Earned
+        </p>
+        <p
+          class="mt-1 text-2xl font-bold text-green-700"
+        >
+          29.25 USDC
+        </p>
+      </div>
+      <div
+        class="space-y-4"
+      >
+        <div
+          class="flex items-center justify-between rounded-lg bg-surface-container-low p-4"
+        >
+          <div
+            class="flex items-center gap-3"
+          >
+            <label
+              class="text-sm font-semibold text-on-surface cursor-pointer"
+              for="usd-toggle"
+            >
+              Show in USD equivalent (Testnet Rates)
+            </label>
+            <span
+              class="text-xs text-on-surface-variant italic"
+            >
+              Approximate rates: 1 USDC = 1 USD, 1 EURC = 1.08 USD, 1 XLM = 0.15 USD
+            </span>
+          </div>
+          <button
+            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors bg-surface-container"
+            id="usd-toggle"
+          >
+            <span
+              class="inline-block h-4 w-4 transform rounded-full bg-on-primary transition-transform translate-x-1"
             />
-          </tr>
-        </thead>
-        <tbody
-          class="divide-y divide-surface-dim"
+          </button>
+        </div>
+        <div
+          class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
         >
-          <tr
-            class="hover:bg-surface-variant/10 transition-colors"
+          <div
+            class="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6"
           >
-            <td
-              class="px-6 py-5 font-bold text-primary"
-            >
-              #5
-            </td>
-            <td
-              class="px-6 py-5"
+            <div
+              class="mb-4 flex items-center justify-between"
             >
               <div
-                class="flex flex-col"
+                class="flex items-center gap-2"
               >
-                <span
-                  class="text-sm font-medium"
-                >
-                  GBBBBB...BBRY
-                </span>
-                <span
-                  class="text-[10px] text-on-surface-variant"
-                >
-                  Payer: GDDDDD...DDD2
-                </span>
-              </div>
-            </td>
-            <td
-              class="px-6 py-5 font-bold"
-            >
-              <span
-                class="inline-flex items-center gap-2 "
-              >
-                <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
-                >
-                  US
-                </span>
-                <span>
-                  450 USDC
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-6 py-5"
-            >
-              <span
-                class="bg-primary-container text-on-primary-container px-2 py-0.5 rounded text-xs font-bold"
-              >
-                6.50%
-              </span>
-            </td>
-            <td
-              class="px-6 py-5 text-sm"
-            >
-              3/1/2026
-            </td>
-            <td
-              class="px-6 py-5 font-bold text-green-600"
-            >
-              <span
-                class="inline-flex items-center gap-2 "
-              >
-                <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
-                >
-                  US
-                </span>
-                <span>
-                  29.25 USDC
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-6 py-5 text-right"
-            >
-              <span
-                class="text-[10px] font-bold uppercase px-2 py-1 rounded bg-red-100 text-red-700"
-              >
-                Defaulted
-              </span>
-            </td>
-          </tr>
-          <tr
-            class="hover:bg-surface-variant/10 transition-colors"
-          >
-            <td
-              class="px-6 py-5 font-bold text-primary"
-            >
-              #3
-            </td>
-            <td
-              class="px-6 py-5"
-            >
-              <div
-                class="flex flex-col"
-              >
-                <span
-                  class="text-sm font-medium"
-                >
-                  GCCCCC...CCC6
-                </span>
-                <span
-                  class="text-[10px] text-on-surface-variant"
-                >
-                  Payer: GEEEEE...EEEF
-                </span>
-              </div>
-            </td>
-            <td
-              class="px-6 py-5 font-bold"
-            >
-              <span
-                class="inline-flex items-center gap-2 "
-              >
-                <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
-                >
-                  US
-                </span>
-                <span>
-                  310 USDC
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-6 py-5"
-            >
-              <span
-                class="bg-primary-container text-on-primary-container px-2 py-0.5 rounded text-xs font-bold"
-              >
-                5.25%
-              </span>
-            </td>
-            <td
-              class="px-6 py-5 text-sm"
-            >
-              5/3/2027
-            </td>
-            <td
-              class="px-6 py-5 font-bold text-green-600"
-            >
-              <span
-                class="inline-flex items-center gap-2 "
-              >
-                <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-indigo-100 text-indigo-700 border-indigo-200 h-6 w-6 text-[9px]"
-                >
-                  US
-                </span>
-                <span>
-                  16.275 USDC
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-6 py-5 text-right"
-            >
-              <span
-                class="text-[10px] font-bold uppercase px-2 py-1 rounded bg-red-100 text-red-700"
-              >
-                PartiallyFunded
-              </span>
-            </td>
-          </tr>
-          <tr
-            class="hover:bg-surface-variant/10 transition-colors"
-          >
-            <td
-              class="px-6 py-5 font-bold text-primary"
-            >
-              #2
-            </td>
-            <td
-              class="px-6 py-5"
-            >
-              <div
-                class="flex flex-col"
-              >
-                <span
-                  class="text-sm font-medium"
-                >
-                  GBBBBB...BBRY
-                </span>
-                <span
-                  class="text-[10px] text-on-surface-variant"
-                >
-                  Payer: GDDDDD...DDD2
-                </span>
-              </div>
-            </td>
-            <td
-              class="px-6 py-5 font-bold"
-            >
-              <span
-                class="inline-flex items-center gap-2 "
-              >
-                <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-sky-100 text-sky-700 border-sky-200 h-6 w-6 text-[9px]"
+                <div
+                  class="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 font-bold text-primary"
                 >
                   EU
-                </span>
-                <span>
-                  225 EURC
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-6 py-5"
-            >
-              <span
-                class="bg-primary-container text-on-primary-container px-2 py-0.5 rounded text-xs font-bold"
-              >
-                4.00%
-              </span>
-            </td>
-            <td
-              class="px-6 py-5 text-sm"
-            >
-              4/27/2027
-            </td>
-            <td
-              class="px-6 py-5 font-bold text-green-600"
-            >
-              <span
-                class="inline-flex items-center gap-2 "
-              >
+                </div>
                 <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-sky-100 text-sky-700 border-sky-200 h-6 w-6 text-[9px]"
+                  class="font-semibold text-on-surface"
                 >
-                  EU
+                  EURC
                 </span>
-                <span>
+              </div>
+              <span
+                class="text-xs font-bold uppercase text-on-surface-variant"
+              >
+                1/2 Invoices
+              </span>
+            </div>
+            <div
+              class="space-y-3"
+            >
+              <div
+                class="rounded-lg bg-surface-container-low p-3"
+              >
+                <p
+                  class="text-xs uppercase tracking-wider text-on-surface-variant"
+                >
+                  Total Funded
+                </p>
+                <p
+                  class="mt-1 font-headline text-lg font-bold text-on-surface"
+                >
+                  322.5 EURC
+                </p>
+              </div>
+              <div
+                class="rounded-lg bg-green-50 p-3 dark:bg-green-950/20"
+              >
+                <p
+                  class="text-xs uppercase tracking-wider text-green-700 dark:text-green-400"
+                >
+                  Yield Earned
+                </p>
+                <p
+                  class="mt-1 flex items-baseline gap-2 font-headline"
+                >
+                  <span
+                    class="text-lg font-bold text-green-700 dark:text-green-400"
+                  >
+                    2.925 EURC
+                  </span>
+                  <span
+                    class="text-sm font-semibold text-green-600 dark:text-green-500"
+                  >
+                    (0.91%)
+                  </span>
+                </p>
+              </div>
+              <div
+                class="rounded-lg bg-yellow-50 p-3 dark:bg-yellow-950/20"
+              >
+                <p
+                  class="text-xs uppercase tracking-wider text-yellow-700 dark:text-yellow-400"
+                >
+                  Pending Yield
+                </p>
+                <p
+                  class="mt-1 font-headline text-sm font-bold text-yellow-700 dark:text-yellow-400"
+                >
                   9 EURC
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-6 py-5 text-right"
-            >
-              <span
-                class="text-[10px] font-bold uppercase px-2 py-1 rounded bg-blue-100 text-blue-700"
-              >
-                Funded
-              </span>
-            </td>
-          </tr>
-          <tr
-            class="hover:bg-surface-variant/10 transition-colors"
-          >
-            <td
-              class="px-6 py-5 font-bold text-primary"
-            >
-              #4
-            </td>
-            <td
-              class="px-6 py-5"
+                </p>
+              </div>
+            </div>
+            <div
+              class="mt-3 h-12"
             >
               <div
-                class="flex flex-col"
+                class="recharts-responsive-container"
+                style="width: 100%; height: 100%; min-width: 0px;"
+              />
+            </div>
+          </div>
+          <div
+            class="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6"
+          >
+            <div
+              class="mb-4 flex items-center justify-between"
+            >
+              <div
+                class="flex items-center gap-2"
               >
-                <span
-                  class="text-sm font-medium"
+                <div
+                  class="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 font-bold text-primary"
                 >
-                  GAAAAA...AWHF
-                </span>
+                  US
+                </div>
                 <span
-                  class="text-[10px] text-on-surface-variant"
+                  class="font-semibold text-on-surface"
                 >
-                  Payer: GEEEEE...EEEF
+                  USDC
                 </span>
               </div>
-            </td>
-            <td
-              class="px-6 py-5 font-bold"
-            >
               <span
-                class="inline-flex items-center gap-2 "
+                class="text-xs font-bold uppercase text-on-surface-variant"
+              >
+                0/2 Invoices
+              </span>
+            </div>
+            <div
+              class="space-y-3"
+            >
+              <div
+                class="rounded-lg bg-surface-container-low p-3"
+              >
+                <p
+                  class="text-xs uppercase tracking-wider text-on-surface-variant"
+                >
+                  Total Funded
+                </p>
+                <p
+                  class="mt-1 font-headline text-lg font-bold text-on-surface"
+                >
+                  0 USDC
+                </p>
+              </div>
+              <div
+                class="rounded-lg bg-green-50 p-3 dark:bg-green-950/20"
+              >
+                <p
+                  class="text-xs uppercase tracking-wider text-green-700 dark:text-green-400"
+                >
+                  Yield Earned
+                </p>
+                <p
+                  class="mt-1 flex items-baseline gap-2 font-headline"
+                >
+                  <span
+                    class="text-lg font-bold text-green-700 dark:text-green-400"
+                  >
+                    0 USDC
+                  </span>
+                  <span
+                    class="text-sm font-semibold text-green-600 dark:text-green-500"
+                  >
+                    (0.00%)
+                  </span>
+                </p>
+              </div>
+            </div>
+            <div
+              class="mt-3 h-12"
+            >
+              <div
+                class="recharts-responsive-container"
+                style="width: 100%; height: 100%; min-width: 0px;"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6"
+      >
+        <div
+          class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
+        >
+          <div>
+            <h2
+              class="text-xl font-bold text-on-surface"
+            >
+              Portfolio allocation
+            </h2>
+            <p
+              class="mt-1 text-sm text-on-surface-variant"
+            >
+              Capital deployed by token with USD equivalent totals.
+            </p>
+          </div>
+          <div
+            class="rounded-2xl bg-surface-container p-4 text-right"
+          >
+            <p
+              class="text-xs uppercase tracking-[0.2em] text-on-surface-variant"
+            >
+              Total deployed
+            </p>
+            <p
+              class="mt-1 text-2xl font-bold text-on-surface"
+            >
+              $348.30
+            </p>
+          </div>
+        </div>
+        <div
+          class="mt-6 grid gap-6 lg:grid-cols-[320px_1fr]"
+        >
+          <div
+            class="h-80 w-full"
+          >
+            <div
+              class="recharts-responsive-container"
+              style="width: 100%; height: 100%; min-width: 0px;"
+            />
+          </div>
+          <div
+            class="space-y-3"
+          >
+            <div
+              class="flex items-center justify-between gap-3 rounded-2xl border border-outline-variant/50 bg-surface-container p-4"
+            >
+              <div
+                class="flex items-center gap-3"
               >
                 <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-sky-100 text-sky-700 border-sky-200 h-6 w-6 text-[9px]"
-                >
-                  EU
-                </span>
-                <span>
-                  97.5 EURC
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-6 py-5"
-            >
-              <span
-                class="bg-primary-container text-on-primary-container px-2 py-0.5 rounded text-xs font-bold"
+                  class="h-3 w-3 rounded-full"
+                  style="background-color: rgb(14, 165, 233);"
+                />
+                <div>
+                  <p
+                    class="font-semibold text-on-surface"
+                  >
+                    EURC
+                  </p>
+                  <p
+                    class="text-sm text-on-surface-variant"
+                  >
+                    322.5 EURC
+                  </p>
+                </div>
+              </div>
+              <p
+                class="text-sm font-semibold text-on-surface"
               >
-                3.00%
-              </span>
-            </td>
-            <td
-              class="px-6 py-5 text-sm"
+                100.0%
+              </p>
+            </div>
+            <div
+              class="flex items-center justify-between gap-3 rounded-2xl border border-outline-variant/50 bg-surface-container p-4"
             >
-              5/10/2026
-            </td>
-            <td
-              class="px-6 py-5 font-bold text-green-600"
-            >
-              <span
-                class="inline-flex items-center gap-2 "
+              <div
+                class="flex items-center gap-3"
               >
                 <span
-                  aria-hidden="true"
-                  class="inline-flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-black tracking-[0.14em] bg-sky-100 text-sky-700 border-sky-200 h-6 w-6 text-[9px]"
-                >
-                  EU
-                </span>
-                <span>
-                  2.925 EURC
-                </span>
-              </span>
-            </td>
-            <td
-              class="px-6 py-5 text-right"
+                  class="h-3 w-3 rounded-full"
+                  style="background-color: rgb(249, 115, 22);"
+                />
+                <div>
+                  <p
+                    class="font-semibold text-on-surface"
+                  >
+                    USDC
+                  </p>
+                  <p
+                    class="text-sm text-on-surface-variant"
+                  >
+                    0 USDC
+                  </p>
+                </div>
+              </div>
+              <p
+                class="text-sm font-semibold text-on-surface"
+              >
+                0.0%
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div
+        class="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6"
+      >
+        <h2
+          class="mb-6 font-headline text-xl font-bold text-on-surface"
+        >
+          Weekly Yield Breakdown by Token
+        </h2>
+        <div
+          class="h-80 w-full"
+        >
+          <div
+            class="recharts-responsive-container"
+            style="width: 100%; height: 100%; min-width: 0px;"
+          />
+        </div>
+        <p
+          class="mt-4 text-xs text-on-surface-variant italic"
+        >
+          Chart shows yield earned per week, grouped by token. Values are in native token amounts.
+        </p>
+      </div>
+      <div
+        class="flex flex-col gap-4"
+      >
+        <div
+          class="flex justify-end px-6"
+        >
+          <div
+            class="relative inline-block text-left"
+          >
+            <button
+              class="flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-on-surface-variant transition-all duration-200 border border-outline-variant/10 shadow-sm"
             >
               <span
-                class="text-[10px] font-bold uppercase px-2 py-1 rounded bg-green-100 text-green-700"
+                class="material-symbols-outlined text-[18px]"
               >
-                Paid
+                view_column
               </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              <span
+                class="text-sm font-bold uppercase tracking-wider"
+              >
+                Columns
+              </span>
+              <span
+                class="material-symbols-outlined text-[18px] transition-transform duration-300 "
+              >
+                expand_more
+              </span>
+            </button>
+          </div>
+        </div>
+        <div
+          class="overflow-x-auto rounded-xl"
+        >
+          <table
+            class="w-full text-left"
+          >
+            <thead
+              class="bg-surface-container-low"
+            >
+              <tr>
+                <th
+                  aria-sort="none"
+                  class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer select-none group "
+                >
+                  <div
+                    class="flex items-center gap-1"
+                  >
+                    ID
+                    <div
+                      class="group/tooltip relative inline-block ml-1"
+                    >
+                      <span
+                        class="material-symbols-outlined text-[14px] text-on-surface-variant/40 cursor-help"
+                      >
+                        keyboard
+                      </span>
+                      <div
+                        class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:block bg-surface-container-highest text-on-surface text-[10px] p-2 rounded shadow-xl w-max z-20 normal-case font-normal border border-outline-variant/20"
+                      >
+                        <div
+                          class="font-bold mb-1 border-b border-outline-variant/20 pb-1"
+                        >
+                          Shortcuts
+                        </div>
+                        <div
+                          class="flex items-center gap-2 mb-1"
+                        >
+                          <kbd
+                            class="bg-surface-dim px-1.5 py-0.5 rounded border border-outline-variant/30 min-w-[20px] text-center"
+                          >
+                            ↑↓
+                          </kbd>
+                          <span>
+                            Navigate rows
+                          </span>
+                        </div>
+                        <div
+                          class="flex items-center gap-2"
+                        >
+                          <kbd
+                            class="bg-surface-dim px-1.5 py-0.5 rounded border border-outline-variant/30 min-w-[20px] text-center"
+                          >
+                            ↵
+                          </kbd>
+                          <span>
+                            Open detail
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      aria-hidden="true"
+                      class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      unfold_more
+                    </span>
+                  </div>
+                </th>
+                <th
+                  class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider  "
+                >
+                  <div
+                    class="flex items-center gap-1"
+                  >
+                    Freelancer
+                  </div>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer select-none group "
+                >
+                  <div
+                    class="flex items-center gap-1"
+                  >
+                    Amount Funded
+                    <span
+                      aria-hidden="true"
+                      class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      unfold_more
+                    </span>
+                  </div>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer select-none group "
+                >
+                  <div
+                    class="flex items-center gap-1"
+                  >
+                    Discount %
+                    <span
+                      aria-hidden="true"
+                      class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      unfold_more
+                    </span>
+                  </div>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer select-none group "
+                >
+                  <div
+                    class="flex items-center gap-1"
+                  >
+                    Due Date
+                    <span
+                      aria-hidden="true"
+                      class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      unfold_more
+                    </span>
+                  </div>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider cursor-pointer select-none group "
+                >
+                  <div
+                    class="flex items-center gap-1"
+                  >
+                    Status
+                    <span
+                      aria-hidden="true"
+                      class="material-symbols-outlined text-[14px] opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      unfold_more
+                    </span>
+                  </div>
+                </th>
+                <th
+                  class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider  "
+                >
+                  <div
+                    class="flex items-center gap-1"
+                  >
+                    Yield Earned
+                  </div>
+                </th>
+                <th
+                  class="px-6 py-4 text-[11px] font-bold uppercase text-on-surface-variant tracking-wider  "
+                >
+                  <div
+                    class="flex items-center gap-1"
+                  />
+                </th>
+              </tr>
+            </thead>
+            <tbody
+              class="divide-y divide-surface-dim bg-surface-container-lowest/50"
+            >
+              <tr
+                class="hover:bg-surface-variant/10 transition-colors group focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset focus:bg-primary/5 "
+                role="row"
+                tabindex="0"
+              >
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold text-primary"
+                  >
+                    #5
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    GBBB...BBRY
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold"
+                  >
+                    4,500 USDC
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    6.50%
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    3/1/2026
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="rounded px-2 py-1 text-xs font-bold bg-surface-container-low text-on-surface"
+                  >
+                    Defaulted
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold"
+                  >
+                    <span
+                      class="text-on-surface-variant"
+                    >
+                      Pending
+                    </span>
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <div
+                    class="flex items-center justify-end gap-2"
+                  />
+                </td>
+              </tr>
+              <tr
+                class="hover:bg-surface-variant/10 transition-colors group focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset focus:bg-primary/5 "
+                role="row"
+                tabindex="0"
+              >
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold text-primary"
+                  >
+                    #3
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    GCCC...CCC6
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold"
+                  >
+                    3,100 USDC
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    5.25%
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    5/3/2027
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="rounded px-2 py-1 text-xs font-bold bg-surface-container-low text-on-surface"
+                  >
+                    PartiallyFunded
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold"
+                  >
+                    <span
+                      class="text-on-surface-variant"
+                    >
+                      Pending
+                    </span>
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <div
+                    class="flex items-center justify-end gap-2"
+                  />
+                </td>
+              </tr>
+              <tr
+                class="hover:bg-surface-variant/10 transition-colors group focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset focus:bg-primary/5 "
+                role="row"
+                tabindex="0"
+              >
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold text-primary"
+                  >
+                    #2
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    GBBB...BBRY
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold"
+                  >
+                    2,250 USDC
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    4.00%
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    4/27/2027
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="rounded px-2 py-1 text-xs font-bold bg-surface-container-low text-on-surface"
+                  >
+                    Funded
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold"
+                  >
+                    <span
+                      class="text-on-surface-variant"
+                    >
+                      Pending
+                    </span>
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <div
+                    class="flex items-center justify-end gap-2"
+                  >
+                    <button
+                      class="rounded-lg border border-outline-variant px-3 py-2 text-xs font-bold text-on-surface transition-colors hover:bg-surface-dim"
+                    >
+                      Transfer
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr
+                class="hover:bg-surface-variant/10 transition-colors group focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset focus:bg-primary/5 "
+                role="row"
+                tabindex="0"
+              >
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold text-primary"
+                  >
+                    #4
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    GAAA...AWHF
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold"
+                  >
+                    975 USDC
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    3.00%
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span>
+                    5/10/2026
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="rounded px-2 py-1 text-xs font-bold bg-surface-container-low text-on-surface"
+                  >
+                    Paid
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <span
+                    class="font-bold"
+                  >
+                    <span
+                      class="text-green-600"
+                    >
+                      29.25 USDC
+                    </span>
+                  </span>
+                </td>
+                <td
+                  class="px-6 py-5 "
+                >
+                  <div
+                    class="flex items-center justify-end gap-2"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div
+      class="flex justify-end border-t border-surface-dim bg-surface-container-low/30"
+    >
+      <div
+        class="flex items-center gap-1.5 text-[11px] text-on-surface-variant/70 font-medium px-6 py-2"
+        title="Nov 14, 2023, 10:13 PM"
+      >
+        <span
+          class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"
+        />
+        Last updated 
+        <time
+          datetime="2023-11-14T22:13:20.000Z"
+        >
+          991d ago
+        </time>
+      </div>
     </div>
   </div>
 </DocumentFragment>

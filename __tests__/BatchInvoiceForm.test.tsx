@@ -59,7 +59,8 @@ describe('BatchInvoiceForm', () => {
   it('renders CSV upload mode by default', () => {
     render(<BatchInvoiceForm onSuccess={mockOnSuccess} />);
 
-    expect(screen.getByText('CSV Upload')).toBeInTheDocument();
+    // "CSV Upload" is both the mode tab and the section heading.
+    expect(screen.getByRole('heading', { name: 'CSV Upload' })).toBeInTheDocument();
     expect(screen.getByText('Click to upload CSV file')).toBeInTheDocument();
     expect(screen.getByText('Download Template')).toBeInTheDocument();
   });
@@ -79,17 +80,17 @@ describe('BatchInvoiceForm', () => {
     // Switch to form mode
     fireEvent.click(screen.getByText('Dynamic Form'));
 
-    // Initially has 1 row
-    expect(screen.getAllByText('Stellar address')).toHaveLength(1);
+    // "Stellar address" is the payer input's placeholder, one per row.
+    expect(screen.getAllByPlaceholderText('Stellar address')).toHaveLength(1);
 
     // Add a row
     fireEvent.click(screen.getByText('Add Row'));
-    expect(screen.getAllByText('Stellar address')).toHaveLength(2);
+    expect(screen.getAllByPlaceholderText('Stellar address')).toHaveLength(2);
 
     // Remove a row (click the first delete button)
     const deleteButtons = screen.getAllByTitle('Remove row');
     fireEvent.click(deleteButtons[0]);
-    expect(screen.getAllByText('Stellar address')).toHaveLength(1);
+    expect(screen.getAllByPlaceholderText('Stellar address')).toHaveLength(1);
   });
 
   it('validates form data', async () => {
@@ -117,7 +118,13 @@ describe('BatchInvoiceForm', () => {
       download: '',
       click: mockClick,
     };
-    vi.spyOn(document, 'createElement').mockReturnValue(mockAnchor as any);
+    // Only intercept the download anchor: React needs the real createElement.
+    const realCreateElement = document.createElement.bind(document);
+    const createElementSpy = vi
+      .spyOn(document, 'createElement')
+      .mockImplementation((tagName: string, options?: ElementCreationOptions) =>
+        tagName === 'a' ? (mockAnchor as any) : realCreateElement(tagName, options)
+      );
 
     render(<BatchInvoiceForm onSuccess={mockOnSuccess} />);
 
@@ -127,6 +134,8 @@ describe('BatchInvoiceForm', () => {
     expect(mockAnchor.download).toBe('invoice-batch-template.csv');
     expect(mockClick).toHaveBeenCalled();
     expect(mockRevokeObjectURL).toHaveBeenCalled();
+
+    createElementSpy.mockRestore();
   });
 
   it('handles CSV file upload', async () => {
@@ -136,11 +145,8 @@ describe('BatchInvoiceForm', () => {
 GTEST123,1000.00,USDC,3.50,2024-12-31`;
 
     const file = new File([csvContent], 'test.csv', { type: 'text/csv' });
-    const input = screen.getByLabelText('Click to upload CSV file').querySelector('input');
-
-    if (input) {
-      fireEvent.change(input, { target: { files: [file] } });
-    }
+    const input = document.getElementById('csv-upload') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [file] } });
 
     await waitFor(() => {
       expect(screen.getByText('test.csv')).toBeInTheDocument();

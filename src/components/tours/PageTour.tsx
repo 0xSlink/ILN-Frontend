@@ -8,7 +8,7 @@
  * via the HelpMenu component.
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Joyride, type EventData, STATUS, type Step } from 'react-joyride';
 import { TOURS, type TourId } from './tourDefinitions';
 

@@ -84,10 +84,12 @@ describe('network utils', () => {
       expect(details.appNetwork).toBe('testnet');
     });
 
-    it('reports wallet mismatch only', () => {
+    it('reports a mismatch when the wallet is on a different network', () => {
+      // rpcMismatch compares the configured RPC's network with the wallet's, so
+      // a testnet RPC + a PUBLIC wallet is flagged on both counts.
       const details = getMismatchDetails('PUBLIC');
       expect(details.walletMismatch).toBe(true);
-      expect(details.rpcMismatch).toBe(false);
+      expect(details.rpcMismatch).toBe(true);
     });
 
     it('reports both wallet and RPC mismatch', () => {

@@ -32,6 +32,24 @@ vi.mock('@/utils/soroban', () => ({
       total_volume: 90000000n,
     },
   ]),
+  getTopFreelancers: vi.fn(async () => [
+    {
+      address: 'GFREE1234567890FREE1234567890FREE1234567',
+      score: 640,
+      invoices_submitted: 18,
+      invoices_funded: 15,
+      total_earned: 45000000n,
+    },
+  ]),
+  getTopLPs: vi.fn(async () => [
+    {
+      address: 'GLP1234567890LP1234567890LP1234567890LP1',
+      score: 590,
+      liquidity_provided: 250000000n,
+      fees_earned: 3000000n,
+      total_funded: 9,
+    },
+  ]),
 }));
 
 vi.mock('@/utils/federation', () => ({
@@ -59,18 +77,18 @@ describe('Leaderboard page', () => {
     render(<LeaderboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Top Payers Reputation Board')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Top Payers' })).toBeInTheDocument();
     });
 
     expect(screen.getByText('820')).toBeInTheDocument();
     expect(screen.getByText('34')).toBeInTheDocument();
-    expect(screen.getByText('12 USDC')).toBeInTheDocument();
+    expect(screen.getByText('120 USDC')).toBeInTheDocument();
 
     const highlightedRow = screen.getByTestId('leaderboard-user-row');
     expect(highlightedRow).toBeInTheDocument();
     expect(highlightedRow).toHaveTextContent('Your wallet');
     expect(within(highlightedRow).getByText('820')).toBeInTheDocument();
-    expect(within(highlightedRow).getByText('12 USDC')).toBeInTheDocument();
+    expect(within(highlightedRow).getByText('120 USDC')).toBeInTheDocument();
   });
 
   it('copies the leaderboard URL when the share button is clicked', async () => {
@@ -83,6 +101,12 @@ describe('Leaderboard page', () => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://example.com/leaderboard');
     });
 
-    expect(screen.getByText(/link copied/i)).toBeInTheDocument();
+    // setCopied(true) fires in the microtask after the clipboard write
+    // resolves, not synchronously with the call - wait for the label
+    // itself rather than assuming it's already rendered once writeText
+    // has been called (otherwise this races the state update).
+    await waitFor(() => {
+      expect(screen.getByText(/link copied/i)).toBeInTheDocument();
+    });
   });
 });

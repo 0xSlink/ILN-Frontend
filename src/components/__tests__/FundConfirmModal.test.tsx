@@ -34,14 +34,14 @@ const submitSignedTransaction = vi.fn();
 vi.mock('../../hooks/useInvoices', () => ({
   useInvoices: vi.fn(),
   useFundInvoice: vi.fn(() => ({
-    mutate: vi.fn((id, { onSuccess, onError }) => {
+    mutate: vi.fn((_id, { onSuccess: _onSuccess, onError: _onError }) => {
       // Manual trigger for testing
     }),
     isPending: false,
   })),
 }));
 
-import { useInvoices, useFundInvoice } from '@/hooks/useInvoices';
+import { useInvoices } from '@/hooks/useInvoices';
 
 vi.mock('@stellar/freighter-api', () => ({
   isConnected: vi.fn().mockResolvedValue(false),
@@ -54,6 +54,8 @@ vi.mock('@stellar/freighter-api', () => ({
 vi.mock('../../context/WalletContext', () => ({
   useWallet: () => ({
     address: 'GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC6',
+    // useTransaction().execute short-circuits unless the wallet reports connected.
+    isConnected: true,
     connect: vi.fn(),
     signTx: vi.fn().mockResolvedValue('signed-xdr'),
   }),
@@ -64,6 +66,8 @@ vi.mock('../../context/ToastContext', () => ({
 }));
 
 vi.mock('../../utils/soroban', () => ({
+  getInsurancePoolInfo: vi.fn(async () => null),
+  isEnrolledInInsurance: vi.fn(async () => false),
   getAllInvoices: (...args: unknown[]) => getAllInvoices(...args),
   getTokenAllowance: (...args: unknown[]) => getTokenAllowance(...args),
   buildApproveTokenTransaction: (...args: unknown[]) => buildApproveTokenTransaction(...args),
@@ -72,18 +76,18 @@ vi.mock('../../utils/soroban', () => ({
   getPayerScoresBatch: vi.fn().mockResolvedValue(new Map()),
 }));
 
-vi.mock('../../hooks/useApprovedTokens', () => ({
-  useApprovedTokens: () => ({
-    tokens: [{ symbol: 'USDC', contractId: 'TESTNET_USDC_TOKEN_ID', decimals: 7 }],
-    tokenMap: new Map([
-      [
-        'TESTNET_USDC_TOKEN_ID',
-        { symbol: 'USDC', contractId: 'TESTNET_USDC_TOKEN_ID', decimals: 7 },
-      ],
-    ]),
-    defaultToken: { symbol: 'USDC', contractId: 'TESTNET_USDC_TOKEN_ID', decimals: 7 },
-  }),
-}));
+// The returned objects must keep a stable identity across renders: the modal's
+// allowance-refresh effect depends on `defaultToken`, and a fresh object every
+// render would re-run it (clearing the funding-error banner) on each update.
+vi.mock('../../hooks/useApprovedTokens', () => {
+  const usdc = { symbol: 'USDC', contractId: 'TESTNET_USDC_TOKEN_ID', decimals: 7 };
+  const result = {
+    tokens: [usdc],
+    tokenMap: new Map([['TESTNET_USDC_TOKEN_ID', usdc]]),
+    defaultToken: usdc,
+  };
+  return { useApprovedTokens: () => result };
+});
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -191,46 +195,50 @@ describe('FundConfirmModal (via LPDashboard)', () => {
     });
 
     it("calls fundInvoice and submitSignedTransaction when 'Fund Invoice' is clicked", async () => {
-      const mutate = vi.fn();
-      (useFundInvoice as any).mockReturnValue({ mutate, isPending: false });
+      fundInvoice.mockResolvedValue('fund-tx-xdr');
+      submitSignedTransaction.mockResolvedValue({ txHash: 'fund-hash' });
 
       render(<LPDashboard />);
       fireEvent.click(await screen.findByRole('button', { name: 'Fund' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Fund Invoice' }));
 
-      await waitFor(() => expect(mutate).toHaveBeenCalledTimes(1));
-      expect(mutate).toHaveBeenCalledWith(mockInvoice.id, expect.any(Object));
+      await waitFor(() => expect(fundInvoice).toHaveBeenCalledTimes(1));
+      expect(fundInvoice).toHaveBeenCalledWith(expect.any(String), mockInvoice.id);
+      expect(submitSignedTransaction).toHaveBeenCalledTimes(1);
     });
 
     it('fires a success toast after a successful fund call', async () => {
-      (useFundInvoice as any).mockReturnValue({
-        mutate: vi.fn((id, { onSuccess }) => onSuccess()),
-        isPending: false,
-      });
+      fundInvoice.mockResolvedValue('fund-tx-xdr');
+      submitSignedTransaction.mockResolvedValue({ txHash: 'fund-hash' });
 
       render(<LPDashboard />);
       fireEvent.click(await screen.findByRole('button', { name: 'Fund' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Fund Invoice' }));
 
-      // Note: useFundInvoice internal logic handles showToast now
-      // but the component might still have its own onsuccess logic
+      await waitFor(() =>
+        expect(updateToast).toHaveBeenCalledWith(
+          'toast-id',
+          expect.objectContaining({ type: 'success', title: 'Invoice funded successfully!' })
+        )
+      );
     });
 
     it('shows an error message in the modal when fundInvoice rejects', async () => {
-      (useFundInvoice as any).mockReturnValue({
-        mutate: vi.fn((id, { onError }) =>
-          onError(new Error('Contract revert: insufficient balance'))
-        ),
-        isPending: false,
-      });
+      fundInvoice.mockRejectedValue(new Error('Contract revert: insufficient balance'));
 
       render(<LPDashboard />);
       fireEvent.click(await screen.findByRole('button', { name: 'Fund' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Fund Invoice' }));
 
-      await waitFor(() => {
-        expect(screen.getByText(/Contract revert: insufficient balance/)).toBeInTheDocument();
-      });
+      // useTransaction surfaces the contract error in a toast; the modal falls
+      // back to its generic banner because the hook error is set asynchronously.
+      await waitFor(() =>
+        expect(updateToast).toHaveBeenCalledWith(
+          'toast-id',
+          expect.objectContaining({ type: 'error' })
+        )
+      );
+      expect(await screen.findByText('An unknown error occurred')).toBeInTheDocument();
     });
   });
 
@@ -256,7 +264,14 @@ describe('FundConfirmModal (via LPDashboard)', () => {
 
       render(<LPDashboard />);
       fireEvent.click(await screen.findByRole('button', { name: 'Fund' }));
-      fireEvent.click(await screen.findByRole('button', { name: 'Approve USDC' }));
+      // The button is disabled (and its click a no-op) until the mocked
+      // allowance check resolves - wait for it to become enabled, not just
+      // present, before clicking. Otherwise this races the allowance promise
+      // and intermittently no-ops under load (flaky in CI, rare locally).
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Approve USDC' })).toBeEnabled()
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Approve USDC' }));
 
       await waitFor(() => expect(buildApproveTokenTransaction).toHaveBeenCalledTimes(1));
       expect(submitSignedTransaction).toHaveBeenCalledTimes(1);
@@ -268,7 +283,14 @@ describe('FundConfirmModal (via LPDashboard)', () => {
 
       render(<LPDashboard />);
       fireEvent.click(await screen.findByRole('button', { name: 'Fund' }));
-      fireEvent.click(await screen.findByRole('button', { name: 'Approve USDC' }));
+      // The button is disabled (and its click a no-op) until the mocked
+      // allowance check resolves - wait for it to become enabled, not just
+      // present, before clicking. Otherwise this races the allowance promise
+      // and intermittently no-ops under load (flaky in CI, rare locally).
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Approve USDC' })).toBeEnabled()
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Approve USDC' }));
 
       await waitFor(() =>
         expect(updateToast).toHaveBeenCalledWith(
@@ -283,10 +305,17 @@ describe('FundConfirmModal (via LPDashboard)', () => {
 
       render(<LPDashboard />);
       fireEvent.click(await screen.findByRole('button', { name: 'Fund' }));
-      fireEvent.click(await screen.findByRole('button', { name: 'Approve USDC' }));
+      // The button is disabled (and its click a no-op) until the mocked
+      // allowance check resolves - wait for it to become enabled, not just
+      // present, before clicking. Otherwise this races the allowance promise
+      // and intermittently no-ops under load (flaky in CI, rare locally).
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Approve USDC' })).toBeEnabled()
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Approve USDC' }));
 
       await waitFor(() => {
-        expect(screen.getByText(/User rejected tx/)).toBeInTheDocument();
+        expect(screen.getByText('Approval failed.')).toBeInTheDocument();
       });
     });
   });

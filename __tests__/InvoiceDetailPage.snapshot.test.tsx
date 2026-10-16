@@ -1,8 +1,8 @@
 import React from 'react';
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { Invoice } from '../utils/soroban';
-import { formatAddress, formatDate, formatUSDC } from '../utils/format';
+import type { Invoice } from '@/utils/soroban';
+import { formatAddress, formatDate, formatUSDC } from '@/utils/format';
 import { allInvoiceFixtures } from './fixtures/invoices';
 
 function InvoiceDetailPageSnapshot({ invoice }: { invoice: Invoice }) {

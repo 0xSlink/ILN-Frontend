@@ -49,8 +49,13 @@ describe('TokenSelector', () => {
     render(<TokenSelector label="Token" value="token-usdc" tokens={tokens} showBalances />);
 
     expect(screen.getByRole('button', { name: /USDC/i })).toBeInTheDocument();
-    expect(screen.getByAltText('', { selector: 'img' })).toHaveAttribute('src', '/tokens/usdc.svg');
-    expect(screen.getByText('Balance: 125 USDC')).toBeInTheDocument();
+    // The option list is rendered twice (desktop dropdown + mobile bottom
+    // sheet), so the trigger's logo is the first image in the DOM.
+    expect(screen.getAllByAltText('', { selector: 'img' })[0]).toHaveAttribute(
+      'src',
+      '/tokens/usdc.svg'
+    );
+    expect(screen.getAllByText('Balance: 125 USDC').length).toBeGreaterThan(0);
   });
 
   test('selects an allowed token from the dropdown', () => {
@@ -58,7 +63,7 @@ describe('TokenSelector', () => {
     render(<TokenSelector label="Token" value="token-usdc" tokens={tokens} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole('button', { name: /USDC/i }));
-    fireEvent.click(screen.getByRole('option', { name: /EURC/i }));
+    fireEvent.click(screen.getAllByRole('option', { name: /EURC/i })[0]);
 
     expect(onChange).toHaveBeenCalledWith('token-eurc');
   });
@@ -68,7 +73,7 @@ describe('TokenSelector', () => {
     render(<TokenSelector label="Token" value="token-usdc" tokens={tokens} onChange={onChange} />);
 
     fireEvent.click(screen.getByRole('button', { name: /USDC/i }));
-    const xlmOption = screen.getByRole('option', { name: /XLM/i });
+    const xlmOption = screen.getAllByRole('option', { name: /XLM/i })[0];
 
     expect(xlmOption).toHaveAttribute('aria-disabled', 'true');
     expect(xlmOption).toHaveAttribute('title', 'XLM is not in the current invoice allowlist.');

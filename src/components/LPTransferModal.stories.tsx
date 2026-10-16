@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { fn } from 'storybook/test';
 import LPTransferModal from './LPTransferModal';
 
 const meta: Meta<typeof LPTransferModal> = {
@@ -23,6 +24,6 @@ export const Default: Story = {
   args: {
     invoice: mockInvoice,
     onClose: () => {},
-    onSuccess: (invoice, newOwner) => console.log('Transferred to:', newOwner),
+    onSuccess: fn((invoice, newOwner) => `Transferred to: ${newOwner}`),
   },
 };

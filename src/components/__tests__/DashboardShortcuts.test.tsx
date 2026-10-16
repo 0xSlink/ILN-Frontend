@@ -25,9 +25,9 @@ vi.mock('../../context/ToastContext', () => ({
   useToast: vi.fn(),
 }));
 
-// Mock soroban utils
-vi.mock('../../utils/soroban', () => ({
-  getAllInvoices: vi.fn().mockResolvedValue([
+// Hoisted so the (hoisted) vi.mock factory below can reference it.
+const { INVOICES } = vi.hoisted(() => ({
+  INVOICES: [
     {
       id: 1n,
       freelancer: 'F1',
@@ -46,7 +46,22 @@ vi.mock('../../utils/soroban', () => ({
       due_date: 1714176000n,
       status: 'Pending',
     },
-  ]),
+  ],
+}));
+
+// LPDashboard reads its rows through useInvoices (react-query), not getAllInvoices.
+vi.mock('../../hooks/useInvoices', () => ({
+  useInvoices: vi.fn(),
+  useFundInvoice: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+}));
+
+import { useInvoices } from '@/hooks/useInvoices';
+
+// Mock soroban utils
+vi.mock('../../utils/soroban', () => ({
+  getInsurancePoolInfo: vi.fn(async () => null),
+  isEnrolledInInsurance: vi.fn(async () => false),
+  getAllInvoices: vi.fn().mockResolvedValue(INVOICES),
   getTokenAllowance: vi.fn().mockResolvedValue(0n),
   getPayerScoresBatch: vi.fn().mockResolvedValue(new Map()),
   fundInvoice: vi.fn(),
@@ -84,6 +99,12 @@ describe('LPDashboard Keyboard Shortcuts', () => {
     });
     (useWallet as any).mockReturnValue(mockWallet);
     (useToast as any).mockReturnValue(mockToast);
+    (useInvoices as any).mockReturnValue({
+      data: INVOICES,
+      isLoading: false,
+      dataUpdatedAt: Date.now(),
+      refetch: vi.fn(),
+    });
   });
 
   it("triggers handleFund on 'F' key press", async () => {

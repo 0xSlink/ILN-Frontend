@@ -14,13 +14,16 @@
     "close": "Cerrar"
   },
   "nav": {
+    "mainNavigation": "Navegación principal",
     "howItWorks": "Cómo funciona",
     "forFreelancers": "Para Freelancers",
     "forLPs": "Para Inversores",
     "governance": "Gobernanza",
     "payInvoices": "Pagar Facturas",
     "dashboard": "Panel",
-    "analytics": "Analíticas",
+    "analytics": "Mis Analíticas",
+    "stats": "Estadísticas del Protocolo",
+    "leaderboard": "Clasificación",
     "docs": "Documentos"
   },
   "landing": {

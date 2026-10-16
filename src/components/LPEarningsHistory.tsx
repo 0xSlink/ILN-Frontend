@@ -71,6 +71,18 @@ export default function LPEarningsHistory({
     currentPage * PAGE_SIZE
   );
 
+  const projections = useMemo(() => computeProjections(paidInvoices), [paidInvoices]);
+
+  const formatProj = useMemo(
+    () =>
+      (value: number): string => {
+        if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+        if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+        return value.toFixed(2);
+      },
+    []
+  );
+
   const [protocolFeeBps, setProtocolFeeBps] = useState<number | null>(null);
   const [showProjections, setShowProjections] = useState(true);
 

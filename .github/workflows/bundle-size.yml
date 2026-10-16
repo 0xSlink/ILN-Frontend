@@ -1,0 +1,198 @@
+name: Bundle Size
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle-size:
+    name: Bundle Size Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build with bundle analysis
+        run: pnpm run build
+        env:
+          CI: true
+          NEXT_PUBLIC_STELLAR_NETWORK: testnet
+          ANALYZE: 'true'
+
+      - name: Measure .next/static output sizes
+        id: measure
+        run: |
+          # Compute total size of the JS chunks served to clients
+          JS_BYTES=$(find .next/static/chunks -name '*.js' -type f -print0 2>/dev/null \
+            | xargs -0 wc -c 2>/dev/null \
+            | tail -1 \
+            | awk '{print $1}')
+
+          CSS_BYTES=$(find .next/static/css -name '*.css' -type f -print0 2>/dev/null \
+            | xargs -0 wc -c 2>/dev/null \
+            | tail -1 \
+            | awk '{print $1}')
+
+          JS_BYTES=${JS_BYTES:-0}
+          CSS_BYTES=${CSS_BYTES:-0}
+          TOTAL_BYTES=$(( JS_BYTES + CSS_BYTES ))
+
+          # Convert to KB / MB for display
+          JS_KB=$(awk "BEGIN { printf \"%.1f\", $JS_BYTES/1024 }")
+          CSS_KB=$(awk "BEGIN { printf \"%.1f\", $CSS_BYTES/1024 }")
+          TOTAL_KB=$(awk "BEGIN { printf \"%.1f\", $TOTAL_BYTES/1024 }")
+          TOTAL_MB=$(awk "BEGIN { printf \"%.2f\", $TOTAL_BYTES/1024/1024 }")
+
+          {
+            echo "js_bytes=$JS_BYTES"
+            echo "css_bytes=$CSS_BYTES"
+            echo "total_bytes=$TOTAL_BYTES"
+            echo "js_kb=$JS_KB"
+            echo "css_kb=$CSS_KB"
+            echo "total_kb=$TOTAL_KB"
+            echo "total_mb=$TOTAL_MB"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "JS chunks : ${JS_KB} KB"
+          echo "CSS       : ${CSS_KB} KB"
+          echo "Total     : ${TOTAL_KB} KB (${TOTAL_MB} MB)"
+
+      - name: Persist bundle size for base-branch comparison
+        # On pushes to main/develop, save the current sizes as the baseline
+        if: github.event_name == 'push'
+        run: |
+          mkdir -p .bundle-size
+          cat > .bundle-size/baseline.json <<EOF
+          {
+            "ref": "${{ github.ref }}",
+            "sha": "${{ github.sha }}",
+            "js_bytes": ${{ steps.measure.outputs.js_bytes }},
+            "css_bytes": ${{ steps.measure.outputs.css_bytes }},
+            "total_bytes": ${{ steps.measure.outputs.total_bytes }}
+          }
+          EOF
+
+      - name: Upload bundle size artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-size-${{ github.sha }}
+          path: |
+            .next/analyze/
+            .bundle-size/
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Check bundle size thresholds
+        id: threshold
+        run: |
+          # Thresholds (see docs/bundle-size.md for rationale)
+          # Total JS+CSS budget: 6.5 MB (6,815,744 bytes)
+          MAX_TOTAL_BYTES=6815744
+
+          TOTAL_BYTES=${{ steps.measure.outputs.total_bytes }}
+          TOTAL_KB=${{ steps.measure.outputs.total_kb }}
+
+          echo "Budget   : $(awk 'BEGIN { printf "%.1f", 6815744/1024/1024 }') MB"
+          echo "Actual   : ${TOTAL_KB} KB"
+
+          if [ "$TOTAL_BYTES" -gt "$MAX_TOTAL_BYTES" ]; then
+            echo "exceeded=true" >> "$GITHUB_OUTPUT"
+            echo "❌ FAIL: Bundle size ${TOTAL_KB} KB exceeds the 6.5 MB threshold."
+          else
+            echo "exceeded=false" >> "$GITHUB_OUTPUT"
+            echo "✅ PASS: Bundle size ${TOTAL_KB} KB is within the 6.5 MB threshold."
+          fi
+
+      - name: Post PR comment with bundle size delta
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        with:
+          script: |
+            const totalBytes = ${{ steps.measure.outputs.total_bytes }};
+            const totalKb    = '${{ steps.measure.outputs.total_kb }}';
+            const totalMb    = '${{ steps.measure.outputs.total_mb }}';
+            const jskb       = '${{ steps.measure.outputs.js_kb }}';
+            const csskb      = '${{ steps.measure.outputs.css_kb }}';
+            const exceeded   = '${{ steps.threshold.outputs.exceeded }}' === 'true';
+            const sha        = context.sha.slice(0, 7);
+
+            const status = exceeded
+              ? '❌ **Budget exceeded** — total bundle is over the 6.5 MB threshold.'
+              : '✅ **Within budget** — total bundle is under the 6.5 MB threshold.';
+
+            const body = [
+              '## 📦 Bundle Size Report',
+              '',
+              `> Commit: \`${sha}\``,
+              '',
+              '| Metric | Size |',
+              '| ------ | ---- |',
+              `| JavaScript chunks | ${jskb} KB |`,
+              `| CSS | ${csskb} KB |`,
+              `| **Total** | **${totalKb} KB (${totalMb} MB)** |`,
+              `| Budget | 6,656 KB (6.5 MB) |`,
+              '',
+              status,
+              '',
+              '> **Thresholds**: JS+CSS combined must stay under 6.5 MB. A single-PR regression',
+              '> larger than +50 KB requires explicit sign-off from a maintainer.',
+              `> See [docs/bundle-size.md](../blob/${process.env.HEAD_REF}/docs/bundle-size.md) for full policy.`,
+            ].join('\n');
+
+            // Find and update existing comment, or create a new one
+            const marker = '## 📦 Bundle Size Report';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c =>
+              c.user?.login === 'github-actions[bot]' && c.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Fail if budget exceeded
+        if: steps.threshold.outputs.exceeded == 'true'
+        run: |
+          echo "Bundle size exceeds the 6.5 MB threshold. See the PR comment for details."
+          exit 1

@@ -62,8 +62,8 @@ export default function LPSettingsModal({ isOpen, onClose }: LPSettingsModalProp
             <span className="material-symbols-outlined text-amber-600">info</span>
             <p className="text-xs text-amber-800 leading-relaxed">
               This setting is stored locally on this device. It helps you quickly identify and avoid
-              invoices that don't meet your risk criteria without removing them from the marketplace
-              entirely.
+              invoices that don&apos;t meet your risk criteria without removing them from the
+              marketplace entirely.
             </p>
           </div>
 

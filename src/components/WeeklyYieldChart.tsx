@@ -12,7 +12,6 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { TokenYieldMetrics } from '@/utils/per-token-yield';
-import { formatTokenAmount } from '@/utils/format';
 
 interface WeeklyYieldChartProps {
   invoices: any[];
@@ -28,7 +27,7 @@ interface ChartDataPoint {
 export default function WeeklyYieldChart({
   invoices,
   metrics,
-  showUSDEquivalent,
+  showUSDEquivalent: _showUSDEquivalent,
 }: WeeklyYieldChartProps) {
   if (invoices.length === 0 || metrics.length === 0) {
     return null;

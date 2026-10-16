@@ -87,7 +87,7 @@ export default function ParameterUpdateBanner() {
             </p>
             <Link
               href={`/governance/${update.proposalId}`}
-              className="mt-1 inline-block text-xs font-medium underline underline-offset-2 opacity-90 hover:opacity-100"
+              className="-my-3.5 mt-1 inline-flex items-center py-3.5 text-xs font-medium underline underline-offset-2 opacity-90 hover:opacity-100"
             >
               View governance proposal
             </Link>

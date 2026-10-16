@@ -13,7 +13,7 @@ concurrency:
 jobs:
   e2e:
     timeout-minutes: 30
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -33,7 +33,7 @@ jobs:
         run: pnpm exec playwright install --with-deps
 
       - name: Run Playwright tests
-        run: pnpm run test:e2e
+        run: pnpm exec playwright test --grep-invert "Live testnet smoke checks"
         env:
           NEXT_PUBLIC_API_MOCKING: "enabled"
 

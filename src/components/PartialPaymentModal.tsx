@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Invoice, TokenMetadata } from '@/utils/soroban';
-import { formatTokenAmount } from '@/utils/format';
+import { formatTokenAmount, tokenAmountToNumber } from '@/utils/format';
 
 interface PartialPaymentModalProps {
   invoice: Invoice;
@@ -44,8 +44,10 @@ export default function PartialPaymentModal({
   }, [invoice.amount, amountPaid]);
 
   const handlePayFullAmount = () => {
-    const fullAmount = formatTokenAmount(remainingBalance, token);
-    setAmountInput(fullAmount);
+    // The input is a <input type="number">: it needs a bare numeric string, not
+    // the display format (which carries thousands separators and the symbol and
+    // therefore parsed to NaN, leaving the amount at 0).
+    setAmountInput(String(tokenAmountToNumber(remainingBalance, token ?? { decimals: 7 })));
     setError(null);
   };
 

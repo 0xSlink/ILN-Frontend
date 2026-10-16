@@ -7,7 +7,7 @@ import {
 
 export interface HorizonStreamOptions {
   onEvent: (event: ParsedContractEvent) => void;
-  onStatusChange?: (status: 'connected' | 'disconnected' | 'polling') => void;
+  onStatusChange?: (status: 'connected' | 'disconnected' | 'polling' | 'error') => void;
   maxReconnectAttempts?: number;
 }
 

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ExportButton } from './ExportButton';
 
 const meta: Meta<typeof ExportButton> = {

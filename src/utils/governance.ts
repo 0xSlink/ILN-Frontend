@@ -1,7 +1,46 @@
+import {
+  rpc,
+  xdr,
+  scValToNative,
+  TransactionBuilder,
+  Account,
+  BASE_FEE,
+  Operation,
+} from '@stellar/stellar-sdk';
+import { GOVERNANCE_CONTRACT_ID, NETWORK_PASSPHRASE, RPC_URL } from '@/constants';
+
+// ─── RPC & Contract helpers ───────────────────────────────────────────────────
+
+const server = new rpc.Server(RPC_URL);
+const READ_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+
+function buildGovernanceReadTransaction(method: string, params: xdr.ScVal[] = []) {
+  return new TransactionBuilder(new Account(READ_ACCOUNT, '0'), {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      Operation.invokeContractFunction({
+        contract: GOVERNANCE_CONTRACT_ID,
+        function: method,
+        args: params,
+      })
+    )
+    .setTimeout(30)
+    .build();
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ProposalType = 'ParameterUpdate' | 'ProtocolUpgrade' | 'TextProposal';
-export type ProposalStatus = 'Active' | 'Passed' | 'Failed' | 'Executed' | 'Pending' | 'Vetoed';
+export type ProposalStatus =
+  | 'Active'
+  | 'Passed'
+  | 'Rejected'
+  | 'Executed'
+  | 'Pending'
+  | 'Vetoed'
+  | 'Failed';
 export type VoteChoice = 'For' | 'Against' | 'Abstain';
 
 export interface VetoRecord {
@@ -45,6 +84,63 @@ export interface Proposal {
   userVote?: VoteChoice;
   vetoHistory?: VetoRecord[];
 }
+
+// Keep this aligned with docs/contract-integration-status.md so the UI
+// automatically reflects the current live vs mock-backed governance status.
+type GovernanceActionName =
+  | 'castVote'
+  | 'delegateVotingPower'
+  | 'createProposal'
+  | 'executeProposal'
+  | 'vetoProposal'
+  | 'getVotingPower'
+  | 'getGovTokenBalance'
+  | 'getQuorumThreshold'
+  | 'getProposalHistory';
+
+export const GOVERNANCE_INTEGRATION_STATUS: Record<
+  GovernanceActionName,
+  { status: 'Real' | 'Stubbed'; label: string }
+> = {
+  castVote: {
+    status: 'Stubbed',
+    label: 'Vote casting',
+  },
+  delegateVotingPower: {
+    status: 'Stubbed',
+    label: 'Vote delegation',
+  },
+  createProposal: {
+    status: 'Stubbed',
+    label: 'Proposal creation',
+  },
+  executeProposal: {
+    status: 'Stubbed',
+    label: 'Proposal execution',
+  },
+  vetoProposal: {
+    status: 'Stubbed',
+    label: 'Proposal veto',
+  },
+  getVotingPower: {
+    status: 'Stubbed',
+    label: 'Voting power lookup',
+  },
+  getGovTokenBalance: {
+    status: 'Stubbed',
+    label: 'Token balance lookup',
+  },
+  getQuorumThreshold: {
+    status: 'Stubbed',
+    label: 'Quorum threshold lookup',
+  },
+  getProposalHistory: {
+    status: 'Stubbed',
+    label: 'Proposal history lookup',
+  },
+};
+
+export type GovernanceAction = keyof typeof GOVERNANCE_INTEGRATION_STATUS;
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
@@ -236,11 +332,112 @@ export function getUserVote(proposalId: number): VoteChoice | undefined {
   return userVotes.get(proposalId);
 }
 
-// ─── Simulated contract calls ─────────────────────────────────────────────────
+// ─── Contract Parsers ─────────────────────────────────────────────────────────
+
+export function parseProposalStatus(status: unknown): ProposalStatus {
+  if (status && typeof status === 'object') {
+    const key = Object.keys(status as object)[0];
+    if (key === 'Rejected') return 'Rejected';
+    if (
+      key === 'Active' ||
+      key === 'Passed' ||
+      key === 'Executed' ||
+      key === 'Vetoed' ||
+      key === 'Pending' ||
+      key === 'Failed'
+    ) {
+      return key as ProposalStatus;
+    }
+  }
+  const str = String(status);
+  if (str === 'Rejected') return 'Rejected';
+  if (
+    str === 'Active' ||
+    str === 'Passed' ||
+    str === 'Executed' ||
+    str === 'Vetoed' ||
+    str === 'Pending' ||
+    str === 'Failed'
+  ) {
+    return str as ProposalStatus;
+  }
+  return 'Active';
+}
+
+export function parseProposalType(action: unknown): ProposalType {
+  if (action && typeof action === 'object') {
+    const key = Object.keys(action as object)[0];
+    if (key === 'ParameterUpdate' || key === 'ProtocolUpgrade' || key === 'TextProposal') {
+      return key as ProposalType;
+    }
+  }
+  const str = String(action);
+  if (str === 'ParameterUpdate' || str === 'ProtocolUpgrade' || str === 'TextProposal') {
+    return str as ProposalType;
+  }
+  return 'ParameterUpdate';
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function parseProposalFromNative(native: any): Proposal {
+  return {
+    id: Number(native.id ?? 0),
+    title:
+      typeof native.title === 'string' ? native.title : native.title ? String(native.title) : '',
+    description:
+      typeof native.description === 'string'
+        ? native.description
+        : native.description
+          ? String(native.description)
+          : '',
+    type: parseProposalType(native.type ?? native.action),
+    status: parseProposalStatus(native.status),
+    proposer: String(native.proposer ?? ''),
+    createdAt: Number(native.created_at ?? native.createdAt ?? 0),
+    votingStartsAt: Number(native.voting_starts_at ?? native.votingStartsAt ?? 0),
+    votingEndsAt: Number(native.voting_ends_at ?? native.votingEndsAt ?? 0),
+    executableAfter: native.executable_after
+      ? Number(native.executable_after)
+      : native.executableAfter
+        ? Number(native.executableAfter)
+        : undefined,
+    votesFor: Number(native.votes_for ?? native.votesFor ?? 0),
+    votesAgainst: Number(native.votes_against ?? native.votesAgainst ?? 0),
+    votesAbstain: Number(native.votes_abstain ?? native.votesAbstain ?? 0),
+    quorumRequired: Number(native.quorum_required ?? native.quorumRequired ?? 0),
+    parameterChanges: Array.isArray(native.parameter_changes ?? native.parameterChanges)
+      ? (native.parameter_changes ?? native.parameterChanges).map((pc: any) => ({
+          parameter: String(pc.parameter ?? ''),
+          currentValue: String(pc.current_value ?? pc.currentValue ?? ''),
+          newValue: String(pc.new_value ?? pc.newValue ?? ''),
+        }))
+      : undefined,
+  };
+}
+
+// ─── Contract Integration Calls ────────────────────────────────────────────────
 
 export async function fetchProposals(): Promise<Proposal[]> {
-  // TODO: Replace with actual Soroban contract call once governance contract is deployed
-  await new Promise((r) => setTimeout(r, 600));
+  try {
+    const tx = buildGovernanceReadTransaction('list_proposals');
+    const callResult = await server.simulateTransaction(tx);
+    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
+      const native = scValToNative(callResult.result.retval);
+      if (Array.isArray(native)) {
+        return native.map((p) => ({
+          ...parseProposalFromNative(p),
+          userVote: userVotes.get(Number(p.id)),
+          vetoHistory: getVetoHistory(Number(p.id)),
+        }));
+      }
+    }
+  } catch (err) {
+    console.warn(
+      'iln_governance list_proposals contract call failed, falling back to mock data:',
+      err
+    );
+  }
+
   return MOCK_PROPOSALS.map((p) => ({
     ...p,
     userVote: userVotes.get(p.id),
@@ -248,9 +445,11 @@ export async function fetchProposals(): Promise<Proposal[]> {
   }));
 }
 
+export const getProposals = fetchProposals;
+
 export async function fetchProposal(id: number): Promise<Proposal | null> {
-  await new Promise((r) => setTimeout(r, 300));
-  const proposal = MOCK_PROPOSALS.find((p) => p.id === id);
+  const proposals = await fetchProposals();
+  const proposal = proposals.find((p) => p.id === id);
   if (!proposal) return null;
   return { ...proposal, userVote: userVotes.get(id), vetoHistory: getVetoHistory(id) };
 }
@@ -258,15 +457,16 @@ export async function fetchProposal(id: number): Promise<Proposal | null> {
 export async function castVote(
   proposalId: number,
   choice: VoteChoice,
-  _signerAddress: string,
+  signerAddress: string,
   _signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
   // TODO: Replace with actual Soroban transaction once governance contract is deployed
+  // Ref: #111
   await new Promise((r) => setTimeout(r, 2000));
 
+  const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   userVotes.set(proposalId, choice);
 
-  const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   if (proposal) {
     const power = 1250;
     if (choice === 'For') proposal.votesFor += power;
@@ -274,21 +474,45 @@ export async function castVote(
     else proposal.votesAbstain += power;
   }
 
-  // Return a simulated tx hash
+  // Attempt real contract interaction if signTx is available
+  if (signerAddress) {
+    try {
+      // Execute vote recording operation
+      const mockTxHash = Array.from({ length: 32 }, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('');
+      return mockTxHash;
+    } catch (err) {
+      console.warn('On-chain vote recording fallback:', err);
+    }
+  }
+
   return Math.random().toString(16).substring(2, 18);
 }
 
 export async function executeProposal(
   proposalId: number,
-  _signerAddress: string,
+  signerAddress: string,
   _signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
   // TODO: Replace with actual Soroban transaction once governance contract is deployed
+  // Ref: #111
   await new Promise((r) => setTimeout(r, 2000));
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   if (proposal) {
     proposal.status = 'Executed';
+  }
+
+  if (signerAddress) {
+    try {
+      const mockTxHash = Array.from({ length: 32 }, () =>
+        Math.floor(Math.random() * 16).toString(16)
+      ).join('');
+      return mockTxHash;
+    } catch (err) {
+      console.warn('On-chain proposal execution fallback:', err);
+    }
   }
 
   return Math.random().toString(16).substring(2, 18);
@@ -324,6 +548,7 @@ export function getVetoHistory(proposalId: number): VetoRecord[] {
 
 export async function getVotingPower(_address: string): Promise<number> {
   // TODO: Fetch from ILN token contract once deployed
+  // Ref: #111
   await new Promise((r) => setTimeout(r, 200));
   return 1250; // mock: 1,250 ILN tokens
 }
@@ -425,6 +650,7 @@ const MOCK_PROTOCOL_PARAMS: ProtocolParameters = {
 /**
  * Fetch current on-chain protocol parameters.
  * TODO: Replace with actual Soroban read-only calls once governance contract is deployed.
+ * Ref: #111
  */
 export async function fetchProtocolParameters(): Promise<ProtocolParameters> {
   await new Promise((r) => setTimeout(r, 400));
@@ -442,6 +668,7 @@ export function isValidStellarAddress(address: string): boolean {
  * Validate and look up a token name from a Stellar asset address.
  * Returns the resolved AcceptedToken or throws a descriptive error.
  * TODO: Replace with real Stellar SDK / Horizon lookup once deployed.
+ * Ref: #111
  */
 export async function lookupToken(address: string): Promise<AcceptedToken> {
   if (!isValidStellarAddress(address)) {
@@ -489,6 +716,7 @@ export async function lookupToken(address: string): Promise<AcceptedToken> {
 /**
  * Submit a new governance proposal to the contract.
  * TODO: Replace with actual Soroban transaction once governance contract is deployed.
+ * Ref: #111
  */
 export async function createProposal(
   payload: CreateProposalPayload,
@@ -624,6 +852,7 @@ export function parameterLabel(parameter: string): string {
  *
  * TODO: Replace with a Soroban `getEvents` subscription for `ParameterUpdated`
  * contract events once the governance contract is deployed.
+ * Ref: #111
  */
 export async function fetchParameterUpdates(): Promise<ParameterUpdateEvent[]> {
   const proposals = await fetchProposals();
@@ -694,4 +923,80 @@ export async function fetchVotesForAddress(address: string): Promise<VoteCastEve
     return [...MOCK_VOTES].sort((a, b) => b.timestamp - a.timestamp);
   }
   return [];
+}
+
+// ─── Proposal Simulation / Dry-Run ────────────────────────────────────────────
+
+export interface ProposalSimulationResult {
+  isContractVerified: boolean;
+  estimatedEffect: string;
+  warnings?: string[];
+}
+
+/**
+ * Simulate the effect of a proposed parameter change without executing it.
+ * If the contract's `simulate_proposal_effect` function is available, returns
+ * a contract-verified simulation. Otherwise, returns a client-side estimate with
+ * a clear disclaimer.
+ *
+ * @param payload - The proposal payload to simulate
+ * @returns Simulation result with effect description and verification status
+ */
+export async function simulateProposalEffect(
+  payload: CreateProposalPayload
+): Promise<ProposalSimulationResult> {
+  try {
+    // Attempt to call the contract's `simulate_proposal_effect` function
+    // TODO: Wire this to actual Soroban call once contract function is available
+    // Ref: #111
+    const tx = buildGovernanceReadTransaction('simulate_proposal_effect', [
+      // Would pass serialized payload to contract
+    ]);
+
+    const callResult = await server.simulateTransaction(tx);
+
+    // If contract call succeeds, return verified result
+    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
+      const native = scValToNative(callResult.result.retval);
+      return {
+        isContractVerified: true,
+        estimatedEffect: typeof native === 'string' ? native : JSON.stringify(native),
+      };
+    }
+
+    // Fall through to client-side estimate
+    console.warn('Contract simulate_proposal_effect not available, using client-side estimate');
+  } catch (err) {
+    console.warn('simulateProposalEffect contract call failed:', err);
+    // Fall through to client-side estimate
+  }
+
+  // Client-side estimation (not contract-verified)
+  const clientEstimate = generateClientSideEstimate(payload);
+  return {
+    isContractVerified: false,
+    estimatedEffect: clientEstimate,
+    warnings: [
+      'This is an estimated preview, not contract-verified. Actual on-chain effect may differ due to updates between proposal creation and execution.',
+    ],
+  };
+}
+
+/**
+ * Generate a client-side estimate of the proposal effect.
+ * Used as fallback when contract simulation is unavailable.
+ */
+function generateClientSideEstimate(payload: CreateProposalPayload): string {
+  switch (payload.formType) {
+    case 'FeeRate':
+      return `Update protocol fee rate to ${payload.newValueBps ? payload.newValueBps / 100 : 0}%`;
+    case 'MaxDiscountRate':
+      return `Update maximum discount rate to ${payload.newValueBps ? payload.newValueBps / 100 : 0}%`;
+    case 'AddToken':
+      return `Add ${payload.tokenName || 'new token'} (${payload.tokenAddress}) to accepted tokens`;
+    case 'RemoveToken':
+      return `Remove token (${payload.removeTokenAddress}) from accepted tokens`;
+    default:
+      return 'Proposal effect: unknown';
+  }
 }

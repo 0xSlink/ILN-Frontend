@@ -206,8 +206,8 @@ const leaderboard: IndexerResourceDefinition<'leaderboard'> = {
   name: 'leaderboard',
   match: exact('leaderboard'),
   query: {
-    type: { allowed: ['lp', 'freelancer'], default: 'lp' },
-    period: { allowed: ['all', '30d', '7d'], default: 'all' },
+    type: { allowed: ['lp', 'payer', 'freelancer'], default: 'lp' },
+    period: { allowed: ['all', '90d', '30d', '7d'], default: 'all' },
     limit: { pattern: /^(?:[1-9]\d?|100)$/ },
   },
   upstreamPath: ({ type, period, limit }) =>

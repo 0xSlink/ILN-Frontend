@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import FABProvider from './FABProvider';
 
 const meta: Meta<typeof FABProvider> = {

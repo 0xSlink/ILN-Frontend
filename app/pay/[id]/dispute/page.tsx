@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState, useCallback } from 'react';
+import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getInvoice, type Invoice } from '@/utils/soroban';
 import { formatUsdcFromStroops } from '@/utils/invoiceSubmission';
@@ -23,21 +23,28 @@ export default function DisputePage({ params }: { params: Promise<{ id: string }
 
   const invoiceId = BigInt(id);
 
-  const fetchInvoice = useCallback(async () => {
-    try {
-      setLoadState('loading');
-      const data = await getInvoice(invoiceId);
-      setInvoice(data);
-      setLoadState('success');
-    } catch (err) {
-      console.error(err);
-      setLoadState('error');
-    }
-  }, [invoiceId]);
-
   useEffect(() => {
-    fetchInvoice();
-  }, [fetchInvoice]);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setLoadState('loading');
+        const data = await getInvoice(invoiceId);
+        if (!cancelled) {
+          setInvoice(data);
+          setLoadState('success');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error(err);
+          setLoadState('error');
+        }
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [invoiceId]);
 
   const onFilesChange = (inputFiles: FileList | null) => {
     setError(null);
@@ -81,7 +88,7 @@ export default function DisputePage({ params }: { params: Promise<{ id: string }
       const form = new FormData();
       form.append('invoiceId', id.toString());
       form.append('reason', reason.trim());
-      files.forEach((f, i) => form.append('evidence', f, f.name));
+      files.forEach((f) => form.append('evidence', f, f.name));
 
       const res = await fetch('/dispute', { method: 'POST', body: form });
       if (!res.ok) {
@@ -93,8 +100,9 @@ export default function DisputePage({ params }: { params: Promise<{ id: string }
       setSuccessRef(json.referenceId || json.reference || 'unknown');
       setReason('');
       setFiles([]);
-    } catch (err: any) {
-      setError(err?.message || 'Submission failed.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Submission failed.';
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -200,6 +208,8 @@ export default function DisputePage({ params }: { params: Promise<{ id: string }
               onChange={(e) => setReason(e.target.value)}
               minLength={20}
               rows={6}
+              aria-describedby={error ? 'dispute-error' : undefined}
+              aria-invalid={Boolean(error)}
               className="mt-2 w-full rounded-xl border border-outline-variant/30 bg-transparent p-3 text-sm outline-none focus:border-primary"
               placeholder="Explain the issue in detail (minimum 20 characters)."
             />
@@ -227,7 +237,11 @@ export default function DisputePage({ params }: { params: Promise<{ id: string }
             )}
           </label>
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && (
+            <p id="dispute-error" className="text-sm text-red-500">
+              {error}
+            </p>
+          )}
 
           {!address ? (
             <button

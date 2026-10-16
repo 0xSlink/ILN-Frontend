@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { within, userEvent, expect } from 'storybook/test';
 import RiskBadge from './RiskBadge';
 import type { PayerScore } from '@/utils/risk';

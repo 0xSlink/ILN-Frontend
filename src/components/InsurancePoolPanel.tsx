@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { NEXT_PUBLIC_INSURANCE_POOL_ENABLED } from '@/constants';
 import { useInsurance } from '@/hooks/useInsurance';
 import { useTransaction } from '@/hooks/useTransaction';
 import { useWallet } from '@/context/WalletContext';
@@ -12,6 +13,10 @@ export default function InsurancePoolPanel() {
   const { address } = useWallet();
   const { defaultToken } = useApprovedTokens();
   const [premiumAmount, setPremiumAmount] = useState('100');
+
+  const isEnabled =
+    NEXT_PUBLIC_INSURANCE_POOL_ENABLED || process.env.NEXT_PUBLIC_INSURANCE_POOL_ENABLED === 'true';
+  if (!isEnabled) return null;
 
   const handleEnroll = async () => {
     if (!address) return;

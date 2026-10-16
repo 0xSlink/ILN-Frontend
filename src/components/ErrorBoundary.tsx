@@ -28,7 +28,21 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error(error);
+    // Enrich every React error-boundary capture with browser / OS / wallet
+    // context (#794) so the dashboard can segment by compatibility dimensions.
+    try {
+      // Dynamic import to avoid pulling errorTracking into the SSR bundle
+      // when ErrorBoundary is rendered on the server.
+      void import('@/lib/errorTracking').then(({ reportError }) => {
+        reportError(error, {
+          componentStack: info.componentStack ?? undefined,
+          source: 'ErrorBoundary',
+        });
+      });
+    } catch {
+      // fallback — still log the error even if enrichment fails
+      console.error(error);
+    }
     this.setState({ componentStack: info.componentStack ?? null });
   }
 

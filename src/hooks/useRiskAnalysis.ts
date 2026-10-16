@@ -23,7 +23,7 @@ export function useRiskAnalysis({ invoices, payerScores, trendDays = 30 }: UseRi
     return invoices.map((invoice) => {
       const payer = invoice.payer as string;
       const payerScore = payerScores?.get(payer) || null;
-      const riskFactors = calculateRiskFactors(payerScore, invoice.due_date);
+      const riskFactors = calculateRiskFactors(payerScore, Number(invoice.due_date));
       const riskScore = calculateInvoiceRiskScore(payerScore, riskFactors.fundingAge);
       const riskLevel = scoreToRiskLevel(riskScore);
 

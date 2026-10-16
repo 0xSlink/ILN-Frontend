@@ -1,10 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import { TokenYieldMetrics, TESTNET_EXCHANGE_RATES, convertToUSD } from '@/utils/per-token-yield';
 import { formatTokenAmount } from '@/utils/format';
-import AnimatedNumber from './AnimatedNumber';
 
 interface LPTokenMetricsCardsProps {
   metrics: TokenYieldMetrics[];

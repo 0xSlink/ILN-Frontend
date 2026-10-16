@@ -13,6 +13,8 @@ const mockedUseInvoiceNft = vi.mocked(useInvoiceNft);
 describe('InvoiceNftCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The card renders null unless the NFT feature flag is on.
+    vi.stubEnv('NEXT_PUBLIC_NFT_ENABLED', 'true');
   });
 
   it('renders loading skeleton initially', () => {
@@ -42,7 +44,7 @@ describe('InvoiceNftCard', () => {
     } as any);
     render(<InvoiceNftCard invoiceId={1n} invoiceStatus="Pending" walletAddress={null} />);
     expect(screen.getByText('Unable to load NFT right now.')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    fireEvent.click(screen.getByRole('button', { name: /Retry/ }));
     expect(reload).toHaveBeenCalled();
   });
 

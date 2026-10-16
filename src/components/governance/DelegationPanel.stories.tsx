@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { DelegationPanel } from './DelegationPanel';
 
 const meta: Meta<typeof DelegationPanel> = {

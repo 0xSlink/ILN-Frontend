@@ -1,0 +1,95 @@
+name: Wave Points Summary
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+jobs:
+  wave-points:
+    name: Post Wave Points Summary
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract linked issue and compute wave points
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body || '';
+            const title = context.payload.pull_request.title || '';
+            const prNumber = context.payload.pull_request.number;
+
+            // Extract issue number from Closes/Fixes/Resolves patterns
+            const pattern = /(?:closes|close|closed|fixes|fix|fixed|resolves|resolve|resolved)\s+#(\d+)/i;
+            const match = body.match(pattern) || title.match(pattern);
+
+            if (!match) {
+              console.log('No linked issue found — skipping points comment.');
+              return;
+            }
+
+            const issueNumber = parseInt(match[1], 10);
+
+            // Fetch the issue to get labels and body
+            const issue = await github.rest.issues.get({
+              ...context.repo,
+              issue_number: issueNumber,
+            });
+
+            const issueData = issue.data;
+            const labels = issueData.labels.map((l) =>
+              typeof l === 'string' ? l : l.name
+            ).filter(Boolean);
+
+            // Map complexity to wave points
+            const complexityLabels = {
+              'complexity: trivial':  { points: 100, label: 'Trivial' },
+              'complexity: low':      { points: 100, label: 'Low' },
+              'complexity: medium':   { points: 150, label: 'Medium' },
+              'complexity: high':     { points: 200, label: 'High' },
+              'complexity: critical': { points: 200, label: 'Critical' },
+            };
+
+            let complexityLabel = 'Unknown';
+            let wavePoints = 0;
+
+            for (const [key, info] of Object.entries(complexityLabels)) {
+              if (labels.includes(key)) {
+                complexityLabel = info.label;
+                wavePoints = info.points;
+                break;
+              }
+            }
+
+            // Fallback: try to parse **Complexity:** from issue body
+            if (!wavePoints) {
+              const bodyMatch = issueData.body?.match(/\*\*Complexity:\*\*\s*(trivial|low|medium|high|critical)/i);
+              if (bodyMatch) {
+                const map = { trivial: 100, low: 100, medium: 150, high: 200, critical: 200 };
+                complexityLabel = bodyMatch[1].charAt(0).toUpperCase() + bodyMatch[1].slice(1);
+                wavePoints = map[bodyMatch[1].toLowerCase()] || 0;
+              }
+            }
+
+            const commentBody = [
+              '## 🌊 Wave Points Summary',
+              '',
+              `**Linked Issue:** [#${issueNumber}](${issueData.html_url})`,
+              `**Issue Title:** ${issueData.title}`,
+              `**Complexity:** ${complexityLabel}`,
+              `**Estimated Wave Points:** ${wavePoints}`,
+              '',
+              wavePoints > 0
+                ? `*These points will be credited to the PR author upon merge.*`
+                : '*No complexity label or complexity field found on the linked issue. Please add a `complexity: *` label to ensure proper point attribution.*',
+            ].join('\n');
+
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: prNumber,
+              body: commentBody,
+            });

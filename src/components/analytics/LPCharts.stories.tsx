@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import { YieldBarChart, CapitalLineChart, OutcomePieChart } from './LPCharts';
 
 const meta: Meta<typeof YieldBarChart> = {

@@ -1,107 +1,61 @@
 import { expect, test } from '@playwright/test';
 
-// MSW runs as a service worker in e2e; block it so `page.route` sees indexer calls.
-test.use({ serviceWorkers: 'block' });
-
-const LEADERBOARD = '**/api/indexer/leaderboard?*';
-
+/**
+ * Indexer browser boundary against the real Next.js server.
+ * The e2e webServer runs without INDEXER_URL, so the proxy must fail closed
+ * with a typed `not_configured` envelope rather than fabricate data.
+ */
 test.describe('Indexer browser boundary', () => {
   test.slow();
 
-  test('leaderboard reads indexer data only through the same-origin proxy', async ({ page }) => {
+  test('proxy fails closed with a typed envelope when no indexer is configured', async ({
+    request,
+  }) => {
+    const res = await request.get('/api/indexer/leaderboard?type=lp&period=all');
+    expect(res.status()).toBe(503);
+    expect(res.headers()['cache-control']).toBe('no-store');
+    expect(await res.json()).toEqual({
+      ok: false,
+      error: { code: 'not_configured', message: expect.any(String) },
+    });
+  });
+
+  test('proxy rejects resources and parameters outside the allow-list', async ({ request }) => {
+    const unknown = await request.get('/api/indexer/admin/keys');
+    expect(unknown.status()).toBe(404);
+    expect((await unknown.json()).error.code).toBe('unknown_resource');
+
+    const badQuery = await request.get('/api/indexer/leaderboard?type=admin');
+    expect(badQuery.status()).toBe(400);
+    expect((await badQuery.json()).error.code).toBe('bad_request');
+  });
+
+  test('legacy leaderboard API reports typed failures instead of an empty list', async ({
+    request,
+  }) => {
+    const res = await request.get('/api/leaderboard?type=lp&period=all');
+    expect(res.status()).toBe(503);
+    expect(await res.json()).toEqual({ error: expect.any(String), code: 'not_configured' });
+  });
+
+  test('invoice page loads indexer data only through the same-origin proxy', async ({ page }) => {
     const indexerRequests: string[] = [];
     page.on('request', (req) => {
       const url = new URL(req.url());
-      if (url.pathname.includes('leaderboard') || url.hostname.includes('indexer')) {
+      if (url.pathname.includes('/events') || url.hostname.includes('indexer')) {
         indexerRequests.push(req.url());
       }
     });
 
-    await page.route(LEADERBOARD, (route) =>
-      route.fulfill({
-        json: {
-          ok: true,
-          resource: 'leaderboard',
-          data: [
-            { address: 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H', metric1: 4 },
-          ],
-          meta: {
-            apiVersion: '1.0.0',
-            droppedRecords: 0,
-            freshness: { lastIndexedLedger: null, lastIndexedAt: null, staleAfterMs: 300_000 },
-          },
-        },
-      })
-    );
-
-    await page.goto('/analytics/leaderboard');
-    await expect(page.getByRole('cell', { name: 'GBRPYH...OX2H' })).toBeVisible({ timeout: 30000 });
+    await page.goto('/i/1');
+    await expect(page.getByText('Event History')).toBeVisible({ timeout: 60000 });
+    // MSW serves an empty feed with no freshness headers: shown as unknown, not live.
+    await expect(page.getByText('Indexer freshness unknown')).toBeVisible();
 
     expect(indexerRequests.length).toBeGreaterThan(0);
     for (const url of indexerRequests) {
       expect(new URL(url).origin).toBe(new URL(page.url()).origin);
-      expect(new URL(url).pathname).toBe('/api/indexer/leaderboard');
+      expect(new URL(url).pathname).toBe('/api/indexer/invoices/1/events');
     }
-  });
-
-  test('leaderboard shows a typed failure and recovers on retry', async ({ page }) => {
-    let calls = 0;
-    await page.route(LEADERBOARD, (route) => {
-      calls += 1;
-      return calls === 1
-        ? route.fulfill({
-            status: 504,
-            json: {
-              ok: false,
-              error: { code: 'timeout', message: 'The indexer took too long to respond.' },
-            },
-          })
-        : route.fulfill({
-            json: {
-              ok: true,
-              resource: 'leaderboard',
-              data: [],
-              meta: {
-                apiVersion: '1.0.0',
-                droppedRecords: 0,
-                freshness: { lastIndexedLedger: null, lastIndexedAt: null, staleAfterMs: 300_000 },
-              },
-            },
-          });
-    });
-
-    await page.goto('/analytics/leaderboard');
-    const alert = page.getByRole('alert').filter({ hasText: 'Unable to load the leaderboard.' });
-    await expect(alert).toBeVisible({ timeout: 30000 });
-    await expect(alert).toContainText('The indexer took too long to respond.');
-
-    await alert.getByRole('button', { name: 'Retry' }).click();
-    await expect(alert).toBeHidden();
-  });
-
-  test('leaderboard warns when the indexer is behind', async ({ page }) => {
-    await page.route(LEADERBOARD, (route) =>
-      route.fulfill({
-        json: {
-          ok: true,
-          resource: 'leaderboard',
-          data: [],
-          meta: {
-            apiVersion: '1.0.0',
-            droppedRecords: 0,
-            freshness: {
-              lastIndexedLedger: 51234567,
-              lastIndexedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
-              staleAfterMs: 300_000,
-            },
-          },
-        },
-      })
-    );
-
-    await page.goto('/analytics/leaderboard');
-    const badge = page.locator('[data-freshness]');
-    await expect(badge).toHaveAttribute('data-freshness', 'stale', { timeout: 30000 });
-    await expect(badge).toContainText('last indexed 3 hours ago (ledger #51,234,567)');
   });
 });

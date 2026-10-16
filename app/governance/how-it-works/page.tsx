@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
@@ -211,8 +210,6 @@ export default function GovernanceHowItWorksPage() {
           </div>
         </div>
       </section>
-
-      <Footer />
     </main>
   );
 }

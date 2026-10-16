@@ -11,12 +11,7 @@
   "vitest": {
     "configFile": "vitest.config.ts"
   },
-  "reporters": [
-    "html",
-    "json",
-    "text",
-    "text-summary"
-  ],
+  "reporters": ["html", "json", "text", "text-summary"],
   "htmlReporter": {
     "baseDir": "mutation-report"
   },
@@ -27,8 +22,5 @@
   },
   "timeoutMS": 30000,
   "concurrency": 4,
-  "plugins": [
-    "@stryker-mutator/core",
-    "@stryker-mutator/vitest-runner"
-  ]
+  "plugins": ["@stryker-mutator/core", "@stryker-mutator/vitest-runner"]
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LPWhitelistManager from '../LPWhitelistManager';
 import * as soroban from '@/utils/soroban';
@@ -69,14 +69,15 @@ describe('LPWhitelistManager', () => {
       <LPWhitelistManager {...defaultProps} whitelist={['GABCDEFGHIJKL123456', 'GDEF...456']} />
     );
 
-    // Should not display empty state
-    expect(screen.queryByText('No LPs are currently whitelisted.')).not.toBeInTheDocument();
-
+    // The list is populated by an async effect, so wait for it to settle.
     await waitFor(() => {
       // Reputations should be loaded
       expect(screen.getByText('Reputation: 92')).toBeInTheDocument();
       expect(screen.getByText('Reputation: 81')).toBeInTheDocument();
     });
+
+    // Should not display empty state
+    expect(screen.queryByText('No LPs are currently whitelisted.')).not.toBeInTheDocument();
   });
 
   it('shows governance fallback if contract support is missing', async () => {
@@ -100,7 +101,7 @@ describe('LPWhitelistManager', () => {
     const addButton = screen.getByRole('button', { name: 'Add LP' });
 
     // Valid public key
-    const validKey = 'GB3P3QPDHRT6P6H46D32R2V4Q6B4G7N5P4H3T7QG6O6G7XG4Z7Z7Z7Z7';
+    const validKey = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
     await user.type(input, validKey);
     await user.click(addButton);
 
@@ -115,7 +116,7 @@ describe('LPWhitelistManager', () => {
 
   it('handles federation name resolution correctly', async () => {
     const user = userEvent.setup();
-    const resolvedKey = 'GB3P3QPDHRT6P6H46D32R2V4Q6B4G7N5P4H3T7QG6O6G7XG4Z7Z7Z7Z7';
+    const resolvedKey = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
     (federation.resolveStellarAddressFromName as any).mockResolvedValue(resolvedKey);
 
     render(<LPWhitelistManager {...defaultProps} />);
@@ -134,9 +135,11 @@ describe('LPWhitelistManager', () => {
   });
 
   it('prevents duplicate LP additions', async () => {
-    const validKey = 'GB3P3QPDHRT6P6H46D32R2V4Q6B4G7N5P4H3T7QG6O6G7XG4Z7Z7Z7Z7';
+    const validKey = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
     const user = userEvent.setup();
     render(<LPWhitelistManager {...defaultProps} whitelist={[validKey]} />);
+    // Wait for the async reputation load to populate the local whitelist.
+    await screen.findByText('Reputation: 90');
 
     const input = screen.getByPlaceholderText(/Stellar Address or federation name/i);
     await user.type(input, validKey);
@@ -154,7 +157,7 @@ describe('LPWhitelistManager', () => {
       .map((_, i) => `G${i}CDEFGHIJKL123456`);
     render(<LPWhitelistManager {...defaultProps} whitelist={fullWhitelist} />);
 
-    expect(screen.getByText('Maximum whitelist size reached.')).toBeInTheDocument();
+    expect(await screen.findByText('Maximum whitelist size reached.')).toBeInTheDocument();
     const input = screen.getByPlaceholderText(/Stellar Address or federation name/i);
     expect(input).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Add LP' })).toBeDisabled();
@@ -166,13 +169,14 @@ describe('LPWhitelistManager', () => {
       .map((_, i) => `G${i}CDEFGHIJKL123456`);
     render(<LPWhitelistManager {...defaultProps} whitelist={approachingLimitWhitelist} />);
 
-    expect(screen.getByText('Approaching whitelist limit')).toBeInTheDocument();
+    expect(await screen.findByText('Approaching whitelist limit')).toBeInTheDocument();
   });
 
   it('handles LP removal successfully', async () => {
-    const validKey = 'GB3P3QPDHRT6P6H46D32R2V4Q6B4G7N5P4H3T7QG6O6G7XG4Z7Z7Z7Z7';
+    const validKey = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
     const user = userEvent.setup();
     render(<LPWhitelistManager {...defaultProps} whitelist={[validKey]} />);
+    await screen.findByText('Reputation: 90');
 
     // Click remove
     const removeButton = await screen.findByRole('button', {

@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { fn } from 'storybook/test';
 import PartialPaymentModal from './PartialPaymentModal';
 
 const meta: Meta<typeof PartialPaymentModal> = {
@@ -38,7 +39,7 @@ export const Default: Story = {
     token: mockToken,
     isOpen: true,
     onClose: () => {},
-    onConfirm: async (amount) => console.log('Pay:', amount.toString()),
+    onConfirm: fn(async (amount) => `Pay: ${amount.toString()}`),
     submitting: false,
   },
 };

@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { fn } from 'storybook/test';
 import ColumnCustomiser from './ColumnCustomiser';
 
 const meta: Meta<typeof ColumnCustomiser> = {
@@ -26,8 +27,8 @@ export const Default: Story = {
     allColumns,
     visibleColumns: ['id', 'payer', 'amount', 'status', 'dueDate'],
     columnOrder: ['id', 'payer', 'amount', 'status', 'dueDate'],
-    onVisibilityChange: (id, visible) => console.log(id, visible),
-    onOrderChange: (order) => console.log(order),
+    onVisibilityChange: fn((id, visible) => `${id} ${visible}`),
+    onOrderChange: fn((order) => order),
     onReset: () => {},
   },
 };
@@ -37,8 +38,8 @@ export const SomeHidden: Story = {
     allColumns,
     visibleColumns: ['id', 'payer', 'amount'],
     columnOrder: ['id', 'payer', 'amount', 'status', 'dueDate'],
-    onVisibilityChange: (id, visible) => console.log(id, visible),
-    onOrderChange: (order) => console.log(order),
+    onVisibilityChange: fn((id, visible) => `${id} ${visible}`),
+    onOrderChange: fn((order) => order),
     onReset: () => {},
   },
 };

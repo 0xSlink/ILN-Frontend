@@ -119,7 +119,7 @@ export function getYieldPreview(amount: string, discountRate: string, decimals =
 export function validateInvoiceForm(
   values: InvoiceFormValues,
   walletConnected: boolean,
-  decimals = 7,
+  _decimals = 7,
   tokenSymbol = 'USDC',
   nowInSeconds = Math.floor(Date.now() / 1000)
 ): Partial<Record<keyof InvoiceFormValues | 'wallet', string>> {

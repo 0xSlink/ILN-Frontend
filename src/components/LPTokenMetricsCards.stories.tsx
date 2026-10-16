@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import LPTokenMetricsCards from './LPTokenMetricsCards';
 
 const meta: Meta<typeof LPTokenMetricsCards> = {

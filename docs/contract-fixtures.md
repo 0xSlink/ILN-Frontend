@@ -9,6 +9,7 @@ Frontend contract tests mock Soroban SDK responses to avoid blockchain dependenc
 ## Fixture Locations
 
 Frontend mocks are located in:
+
 ```
 __tests__/contract/
 ├── soroban.test.ts
@@ -22,6 +23,7 @@ __tests__/contract/
 ```
 
 Smart Contract source of truth (once documented) will be in:
+
 ```
 ILN-Smart-Contract/
 ├── docs/
@@ -37,6 +39,7 @@ ILN-Smart-Contract/
 ## Alignment Checklist
 
 ### 1. Error Codes
+
 - [ ] Document all contract error codes with descriptions in `ILN-Smart-Contract/docs/error-codes.md`
 - [ ] Cross-reference each mock error response in `__tests__/contract/*.test.ts`
 - [ ] Add linking comments like:
@@ -51,23 +54,25 @@ ILN-Smart-Contract/
   ```
 
 ### 2. Event Schemas
+
 - [ ] Document all contract events with their fields in `ILN-Smart-Contract/docs/events.md`
 - [ ] Verify mock event objects in test files match documented schema
 - [ ] Add linking comments to event fixtures
 
 ### 3. Type Alignment
+
 - [ ] Generate TypeScript types from contract schema
 - [ ] Ensure mock objects conform to generated types
 - [ ] Update mocks when contract interface changes
 
 ## Common Drift Scenarios
 
-| Scenario | Risk | Check |
-|----------|------|-------|
-| Contract adds new error code | Test gap - frontend doesn't handle new error | Cross-reference error codes list |
+| Scenario                          | Risk                                                   | Check                             |
+| --------------------------------- | ------------------------------------------------------ | --------------------------------- |
+| Contract adds new error code      | Test gap - frontend doesn't handle new error           | Cross-reference error codes list  |
 | Contract changes event field type | Type mismatch - frontend tests pass but runtime breaks | Verify field types against schema |
-| Contract renames error | Misleading test failures | Maintain error code versioning |
-| Contract removes event field | Frontend expects field that no longer exists | Run fixture validation |
+| Contract renames error            | Misleading test failures                               | Maintain error code versioning    |
+| Contract removes event field      | Frontend expects field that no longer exists           | Run fixture validation            |
 
 ## Validation Process
 

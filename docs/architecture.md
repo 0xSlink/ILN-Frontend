@@ -1,218 +1,249 @@
 # Frontend Architecture Overview
 
-This document describes the design decisions, folder structure, data flow patterns, and architectural trade-offs of the Invoice Liquidity Network (ILN) frontend. It serves as a guide for new contributors to understand the codebase structure and development conventions.
+This document describes the current structure, data flow, and library choices for the Invoice Liquidity Network (ILN) frontend. It is intentionally concise: enough context for contributors to understand where changes belong without duplicating implementation details from every route.
 
 ---
 
-## 🎨 System Architecture Diagram
+## System Shape
 
-The frontend is structured in clear architectural layers. Reading data from the Stellar network flows synchronously down through React Query, while writing transactions involves coordination between custom mutation hooks, the wallet context (external extension), and the Soroban RPC.
+ILN is a Next.js App Router frontend for a Stellar/Soroban invoice liquidity protocol. The UI is organized around the protocol's main actors: freelancers submit invoices, liquidity providers fund them, payers settle or dispute them, governance users vote on proposals, and admins monitor protocol health.
 
 ```mermaid
 graph TD
-    subgraph UI ["UI Layer (app/ & src/components/)"]
-        Dashboard["Screens & Layouts (Admin, Freelancer, LP, Payer, Marketplace)"]
-        UIComponents["Reusable UI Components (Drawers, Badges, Modals, Forms)"]
+    subgraph Routes ["app/ routes"]
+        Product["Dashboards, marketplace, pay, submit, governance, analytics, stats"]
+        Api["API routes: auth, feedback, notifications, reminders"]
     end
 
-    subgraph State ["State & Context Layer (src/context/)"]
-        WalletCtx["WalletContext (Address, Network, Freighter/WalletConnect, signTx)"]
-        ToastCtx["ToastContext (Sonner notification wrapper)"]
-        NotificationCtx["NotificationContext (In-app notifications local storage)"]
+    subgraph UI ["src/components and src/screens"]
+        Components["Reusable forms, tables, charts, modals, dashboards, stories"]
+        Screens["Dashboard and analytics screen compositions"]
     end
 
-    subgraph Hooks ["Query & Mutation Layer (src/hooks/)"]
-        RQHooks["React Query Hooks (useInvoices, useFundInvoice, useBalances)"]
-        UtilHooks["Utility Hooks (usePositionPolling, useTheme, useRecentProtocolFeed)"]
+    subgraph State ["State and data"]
+        Context["WalletContext, NotificationContext, ToastContext"]
+        Hooks["Custom hooks and React Query hooks"]
+        Providers["app/Providers.tsx"]
     end
 
-    subgraph Core ["Stellar Integration Layer (src/utils/ & src/lib/)"]
-        SorobanUtil["soroban.ts (Transaction builders, simulation, XDR parsers, polling)"]
-        HorizonClient["horizonClient.ts (Horizon XLM balances)"]
-        StellarSDK["@stellar/stellar-sdk (RPC Server, XDR, TxBuilder)"]
-        FreighterAPI["@stellar/freighter-api (Freighter extension interface)"]
+    subgraph Services ["Integration layer"]
+        Soroban["src/utils/soroban.ts"]
+        Lib["src/lib: env, Supabase, Horizon, events, wallet helpers"]
+        Indexer["Indexer REST/WebSocket"]
+        Email["Supabase and Resend"]
     end
 
-    subgraph Chain ["Stellar Network & Soroban Contracts"]
-        SorobanRPC["Soroban RPC Node"]
-        ILNContract["ILN Invoice Factoring Smart Contract"]
-        TokenContract["Token Contracts (USDC, EURC)"]
+    subgraph Network ["External systems"]
+        Wallet["Freighter wallet"]
+        Stellar["Stellar Horizon and Soroban RPC"]
+        Contract["ILN contract and token contracts"]
     end
 
-    %% Connections
-    Dashboard --> RQHooks
-    RQHooks --> SorobanUtil
-    SorobanUtil --> StellarSDK
-    StellarSDK --> SorobanRPC
-    SorobanRPC --> ILNContract
-
-    %% Write Flow (Dotted)
-    Dashboard -.->|1. Trigger Action| RQHooks
-    RQHooks -.->|2. Build Unsigned Tx| SorobanUtil
-    SorobanUtil -.->|3. Return Unsigned Tx| RQHooks
-    RQHooks -.->|4. Request Signature| WalletCtx
-    WalletCtx -.->|5. Call Freighter/WC| FreighterAPI
-    FreighterAPI -.->|6. Sign via Extension| WalletCtx
-    WalletCtx -.->|7. Return Signed XDR| RQHooks
-    RQHooks -.->|8. Submit & Poll| SorobanUtil
-    SorobanUtil -.->|9. Broadcast / Poll| SorobanRPC
-    SorobanRPC -.->|10. Execute Tx| ILNContract
-    SorobanUtil -.->|11. Toast Update| ToastCtx
+    Product --> Components
+    Product --> Screens
+    Product --> Hooks
+    Api --> Lib
+    Providers --> Context
+    Hooks --> Soroban
+    Hooks --> Lib
+    Components --> Context
+    Soroban --> Wallet
+    Soroban --> Stellar
+    Stellar --> Contract
+    Lib --> Indexer
+    Lib --> Email
 ```
 
----
+## Route Surface
 
-## 📁 Directory Structure & Conventions
+The primary route tree lives in `app/`. `/analytics` is the authenticated freelancer analytics workspace, while `/stats` is the public protocol-wide reporting page; `/leaderboard` is the canonical public cross-role ranking page. For the complete overview of canonical routes, purposes, primary consumers, and active redirects, refer to the [Route Map](route-map.md).
 
-ILN utilizes a Next.js App Router workspace with source code separated between page routing (`app/`) and core logic/reusable components (`src/`).
+A small legacy `src/app/` tree still exists for older route experiments/tests and should be treated carefully when moving code.
 
 ```
-├── app/                        # Next.js App Router root (Layouts & Pages)
-│   ├── admin/                  # Admin portal (parameters, contract governance)
-│   ├── analytics/              # Cash flow & volume charts
-│   ├── api/                    # API endpoints (reminders, feedback)
-│   ├── freelancer/             # Freelancer dashboard & invoice submission
-│   ├── governance/             # Voting portal
-│   ├── lp/                     # Liquidity Provider portfolio dashboard
-│   ├── marketplace/            # Open invoices explorer
-│   ├── payer/                  # Payer dashboard & email reminders opt-in
-│   ├── profile/                # User settings & reputation profiles
-│   ├── submit/                 # Submitter checkout & confirmation flows
-│   └── Providers.tsx           # Providers (React Query, Toasts, MSW)
-│
-├── src/                        # Core codebase
-│   ├── components/             # Presentational UI components (Bells, Drawers, etc.)
-│   ├── context/                # Global React Contexts (Wallet, Toasts, Notifications)
-│   ├── hooks/                  # Custom React Hooks & query definitions
-│   │   └── queries/            # React Query keys configuration and types
-│   ├── lib/                    # Services layer (Stellar SDK, Supabase client, Horizon)
-│   └── utils/                  # General helpers and Soroban RPC callers
-│       └── soroban.ts          # Core Stellar/Soroban bridge code
-│
-├── styles/                     # Tailwind CSS v4 stylesheets
-│   └── globals.css             # Main styling entry (The Fiscal Atelier config)
+app/
+├── admin/                       # Admin health and protocol configuration
+├── analytics/                   # Freelancer-specific cash-flow analytics (FreelancerAnalyticsDashboard)
+├── api/
+│   ├── feedback/                # GitHub-backed feedback submission
+│   ├── notifications/[address]/ # Notification API bridge
+│   └── reminders/               # Supabase/Resend payer reminder cron
+├── dashboard/                   # Personalized dashboard
+├── freelancer/                  # Freelancer workspace
+├── governance/                  # Proposal list, detail, creation, explainer
+├── i/[id]/                      # Public invoice detail
+├── leaderboard/                 # Protocol leaderboard
+├── lp/                          # LP dashboard
+│   └── compare/                 # LP invoice comparison
+├── marketplace/                 # Fundable invoice marketplace
+├── offline/                     # PWA offline fallback
+├── pay/[id]/                    # Payer checkout
+│   └── dispute/                 # Invoice dispute route
+├── payer/                       # Payer landing/dashboard route
+├── profile/[address]/           # Reputation profile and activity
+├── referrals/                   # Referral dashboard
+├── roadmap/                     # Roadmap
+├── stats/                       # Protocol stats
+├── submit/                      # Invoice submission
+├── layout.tsx                   # App shell
+└── Providers.tsx                # React Query, theme, toast, MSW, app providers
 ```
 
-### Conventions
+Core supporting code is split by responsibility:
 
-- **Client Components**: File routes and sub-components that use React state, contexts, or custom hooks must include `"use client"` at the top.
-- **Component Placement**: Routing, layout structure, and page-specific shell components live inside `app/`. Reusable, stateless, or presentation-only components belong in `src/components/` and should be accompanied by Storybook stories (`.stories.tsx`).
-- **Separation of Concerns**: UI components should never invoke `@stellar/stellar-sdk` or `rpc.Server` directly. All blockchain transactions, parsing of ScVals, and simulations are abstractly handled in `src/utils/soroban.ts` or custom hooks.
-
----
-
-## 🔄 Data Flow (Contract ➔ Hooks ➔ Components)
-
-Data flow is divided cleanly into **Read Operations** and **Write Transactions**.
-
-### 1. Read Operations (Reactive & Cached)
-
-Reads are non-blocking, simulated via the Soroban RPC, and cached by TanStack React Query.
-
-1. A **UI Component** calls a custom hook (e.g., `useInvoices()`).
-2. The **Custom Hook** uses `useQuery` mapped to a specific query key (e.g., `invoiceKeys.all`).
-3. The query function invokes a utility function from `src/utils/soroban.ts` (e.g., `getAllInvoices()`).
-4. **`soroban.ts`** uses `@stellar/stellar-sdk` to simulate a contract read invocation on the RPC server using a dummy account `READ_ACCOUNT`.
-5. The JSON-RPC response is received, converted from XDR/ScVal structures into standard TypeScript interfaces (e.g., `Invoice`), and cached.
-6. The UI Component receives the clean TypeScript array and renders it.
-
-### 2. Write Transactions (Interactive Lifecycle)
-
-Writes require user approval via a wallet browser extension.
-
-1. The user clicks a button (e.g., "Fund Invoice") triggering a mutation method returned by `useFundInvoice()`.
-2. The mutation function starts a **pending toast** to alert the user.
-3. The mutation calls the contract-building utility (e.g., `fundInvoice()`) inside `soroban.ts`, simulating the transaction to calculate appropriate resource fees.
-4. The simulation result is assembled into an unsigned transaction `Transaction` object.
-5. The mutation requests a signature from the connected wallet by calling `signTx` from `WalletContext`.
-6. The user signs the transaction in their Freighter/WalletConnect extension.
-7. The signed XDR string is returned to the mutation hook.
-8. The mutation hook submits the signed transaction via `submitSignedTransaction()`. This broadcasts the transaction to the network and polls the Soroban RPC server status until it resolves in a ledger block.
-9. On success, the toast updates from "pending" to "success," and `queryClient.invalidateQueries` is called to refetch state and synchronize the UI.
-
----
-
-## 💳 Wallet Context Design
-
-Global wallet configuration, connection status, and transaction signing are coordinated by [WalletContext.tsx](file:///Users/marvellous/Desktop/ILN-Frontend/src/context/WalletContext.tsx).
-
-For detailed documentation on the `useWallet` hook, including SEP-10 authentication flow, JWT storage strategy, and usage patterns, see [docs/hooks/use-wallet.md](hooks/use-wallet.md).
-
-- **Multi-Provider Support**: Supports Freighter extension connectivity directly, with hook placeholders for WalletConnect.
-- **Role Detection**: On connection, the context scans all invoices on-chain to detect the active address's historical involvement. It assigns a list of roles (`freelancer`, `payer`, or `lp`) dynamically. This role assignment determines access permissions for specific dashboard sections.
-- **Network Verification**: The context performs periodic assertions (every 5 seconds) checking the wallet's configured network against `NEXT_PUBLIC_NETWORK_NAME` (e.g., `TESTNET`). If a mismatch is detected, a `networkMismatch` flag is raised, blocking transactions and prompting the user to switch networks.
-- **Session Persistence**: The context stores the connected wallet address and provider name in `localStorage`. Silent reconnection is attempted on app initialization if the provider was previously authorized.
-
----
-
-## ⚡ React Query Strategy
-
-TanStack React Query (`@tanstack/react-query`) is the single source of truth for remote state cache management.
-
-### Key Management
-
-All query keys are organized structurally in [keys.ts](file:///Users/marvellous/Desktop/ILN-Frontend/src/hooks/queries/keys.ts) to prevent typos and ensure invalidations cascade correctly:
-
-```typescript
-export const invoiceKeys = {
-  all: ['invoices'] as const,
-  lists: () => [...invoiceKeys.all, 'list'] as const,
-  list: (filters: Record<string, any>) => [...invoiceKeys.lists(), { filters }] as const,
-  details: () => [...invoiceKeys.all, 'detail'] as const,
-  detail: (id: bigint | null) => [...invoiceKeys.details(), id?.toString()] as const,
-};
+```
+src/
+├── components/                  # Reusable UI, charts, dashboards, stories
+│   ├── analytics/               # Analytics widgets and tables
+│   ├── charts/                  # Chart primitives and dynamic wrappers
+│   ├── governance/              # Voting, delegation, allowlist controls
+│   ├── invoices/                # Invoice-specific management widgets
+│   ├── onboarding/              # Onboarding flow and spotlight helpers
+│   └── ui/                      # Base UI primitives
+├── context/                     # Context providers and consumer hooks (global state)
+│   ├── WalletContext.tsx         # Wallet state, network checks, roles, signing
+│   ├── NotificationContext.tsx   # In-app notification history
+│   ├── ToastContext.tsx          # Toast message layer over Sonner
+│   └── KeyboardShortcutsContext.tsx  # Keyboard shortcut and command palette state
+├── hooks/                       # Custom hooks (no createContext); may consume context
+│   ├── queries/                 # React Query keys and query hooks
+│   └── useBrowserNotifications.ts # Browser Notification API wrapper
+├── lib/                         # Env, Supabase, Horizon, events, notifications
+├── screens/                     # Larger dashboard/screen compositions
+├── utils/                       # Soroban, analytics, risk, exports, formatting
+└── i18n.ts                      # i18next setup
 ```
 
-### Dynamic Refetching Intervals
+## Data Flow
 
-Stellar ledger closing times average around 5 seconds. To avoid unnecessary RPC strain while maintaining a highly responsive UI, hooks dynamically alter their polling intervals:
+### Reads
 
-- **Active Invoices**: Checked every 15 seconds (reduced to 60 seconds if event streaming is actively handling notifications).
-- **Terminal Invoices**: If all loaded invoices are in a final terminal state (`Paid`, `Defaulted`, or `Cancelled`), the polling interval returns `false` (stops polling).
-- **Background Position Polling**: Run on a separate 60-second timer to monitor liquidation thresholds and due-date expiries.
+Most contract and indexer reads flow through hooks:
 
-### Optimistic Updates
+1. A route or component calls a hook such as `useInvoices`, `useBalances`, `useContractStats`, `useRecentProtocolFeed`, or a hook under `src/hooks/queries/`.
+2. The hook uses TanStack React Query for loading state, cache keys, refetch intervals, and invalidation.
+3. Contract reads call `src/utils/soroban.ts` or `src/lib/*` helpers to simulate Soroban reads, parse XDR/ScVal data, query Horizon, or call an indexer endpoint.
+4. Components receive typed data and render tables, cards, charts, badges, and dashboards.
 
-To make the interface feel instant, write mutations implement optimistic updates (e.g., funding an invoice immediately changes its status to "Funded" in the cache). If the transaction fails, the cache is rolled back to the previous snapshot saved in the mutation's `onMutate` context.
+### Writes
 
----
+User-approved contract writes coordinate wallet state, transaction builders, and toasts:
 
-## ⚠️ Error Handling Approach
+1. The user triggers an action such as submit, fund, pay, mark paid, cancel, dispute, vote, delegate, or transfer.
+2. A hook or utility builds and simulates the Soroban transaction.
+3. `WalletContext` requests a Freighter signature and verifies the configured Stellar network.
+4. The signed XDR is submitted and polled until resolution.
+5. Sonner toasts communicate pending/success/error states, and React Query invalidates affected invoice, balance, stats, or governance queries.
 
-Smart contract interactions can fail at multiple points (simulation, signing, submission, execution). The app handles errors defensively:
+### Server Routes
 
-1. **Simulation Failures**: If a transaction simulation fails (e.g., due to insufficient allowance or invalid inputs), the error message returned from the Soroban RPC is parsed and surfaced before the wallet extension is even triggered.
-2. **Rejections & Mismatches**: Wallet connection rejections or network mismatches raise exceptions that are caught by mutation hooks. These show user-friendly notifications and links to setup resources (e.g., Freighter installation pages).
-3. **Transaction Polling Timeout**: If `sendTransaction` succeeds but `pollTransaction` times out (exceeds `POLL_ATTEMPTS`), the app warns the user that execution is taking longer than expected and lists the transaction hash for manual lookups.
-4. **Toast Notifications**: Error boundaries and mutation callbacks catch raw error blocks, formatting them into clear descriptions with transaction hashes when available.
+API routes are used for server-only integration points:
 
----
+- `app/api/reminders/route.ts` reads Supabase reminder preferences and sends Resend emails when authorized by `CRON_SECRET`.
+- `app/api/reminders/unsubscribe/route.ts` updates reminder preferences.
+- `app/api/feedback/route.ts` can create GitHub issues from app feedback when GitHub credentials are configured.
+- `app/api/notifications/[address]/route.ts` bridges notification reads by address.
+- `app/api/leaderboard/route.ts` bridges leaderboard reads for `TopFundersWidget`.
+- All of the above validate their inputs (Stellar address shape, allow-listed enum values, string/length limits) and apply a shared in-memory rate limiter from `src/lib/rate-limit.ts`, since each is a directly reachable server endpoint independent of any client-side validation.
+- Contributor references for these server integrations live in [docs/supabase-setup.md](supabase-setup.md), [docs/feature-flags.md](feature-flags.md), [docs/api-routes.md](api-routes.md), and [docs/testing.md](testing.md).
 
-## 🔑 Environment Variable Conventions
+## State, Providers, and UI Boundaries
 
-Configuring the application across local development, staging, and production networks depends on structured environment variables.
+- `app/Providers.tsx` wires global providers, React Query, theme behavior, toasts, and local MSW startup when `NEXT_PUBLIC_API_MOCKING=enabled`.
+- `WalletContext` owns wallet address, provider state, network checks, role detection, balances, and signing.
+- `NotificationContext` stores in-app notification history.
+- `ToastContext` wraps toast behavior while `AppToaster` renders the Sonner host.
+- `KeyboardShortcutsContext` manages keyboard shortcut state and global keydown listeners.
+- Page routes should compose feature components and hooks; reusable components should stay under `src/components/`.
+- Stellar SDK and RPC details should stay in `src/utils/soroban.ts`, `src/lib/`, or focused hooks rather than being called directly from presentational components. Integration status of live vs. stubbed contract details are tracked in [docs/contract-integration-status.md](contract-integration-status.md).
 
-- **Client-Side Variables (`NEXT_PUBLIC_*`)**:
-  Variables prefixing with `NEXT_PUBLIC_` are bundled into the browser client. They define RPC links, contracts, and optional feature flags (e.g., `NEXT_PUBLIC_NFT_ENABLED`, `NEXT_PUBLIC_CONTRACT_ID`).
-- **Server-Side Variables**:
-  Secrets without the prefix (e.g., `RESEND_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`) are kept on the server and are only accessible inside Next.js API Routes (e.g., `/app/api/reminders/`). They will never leak to the client bundle.
+### Context vs Hooks Boundary
 
----
+- **`src/context/`** — React Context providers and their consumer hooks (e.g., `WalletProvider` + `useWallet`,
+  `ToastProvider` + `useToast`, `NotificationProvider` + `useNotification`,
+  `KeyboardShortcutsProvider` + `useKeyboardShortcuts`). Context files own _shared global state_ that must
+  be available to the entire subtree. If a file exports a `*Provider` or calls `createContext`, it belongs here.
 
-## ⚖️ Key Trade-offs & Decisions
+- **`src/hooks/`** — Custom React hooks that do NOT define new contexts. They may consume context hooks
+  to derive or transform state, manage local (component-level) state, wrap external APIs, or encapsulate
+  effect-heavy logic. If a file exports only hook functions (that consume context or are pure utilities),
+  it belongs here.
 
-### 1. TanStack Query vs. SWR
+### Naming Conventions
 
-While SWR is lightweight and simple, TanStack React Query was chosen for several architectural advantages:
+- `useToast` — always imported from `@/context/ToastContext` (the former re-export `@/hooks/useToast` has been removed).
+- `useWallet` — always imported from `@/context/WalletContext` for basic wallet state.
+- `useNotification` (singular) — always imported from `@/context/NotificationContext` for in-app notification items.
+- `useBrowserNotifications` (plural) — imported from `@/hooks/useBrowserNotifications` for the browser Notification API (permissions, desktop notifications).
 
-- **Advanced Query Keys**: SWR relies on simple string keys or array serialization. TanStack Query's nested array model allows targeting specific cached detail nodes for invalidation (e.g., invalidating `invoiceKeys.all` automatically updates sub-keys while maintaining clean hierarchy).
-- **Optimistic UI Utilities**: TanStack Query provides structured, built-in rollback tools. SWR requires manual mutation updates and manual variable restoration, which is prone to race conditions.
-- **Fine-Grained Cache Config**: Dynamic poll switching (e.g. disabling polling for terminal invoices) is easier to implement using React Query's `refetchInterval` function, which receives query state and data context.
+### Avoiding Duplicate Polling & State
 
-### 2. Sonner vs. React Toastify
+Invoice status changes are the primary source of duplication risk. To keep RPC usage predictable:
 
-Sonner was selected as the notification system due to the following benefits:
+1. **React Query is the single source of truth** for contract reads. Hooks should prefer `useQuery`-based data
+   over direct contract calls to avoid bypassing cache and creating redundant network requests.
+2. **Notification polling** (`useNotificationEvents`, `usePositionPolling`) should share a single
+   invoice-change detection loop. Do not add a third polling hook that independently calls `getInvoice()`.
+3. **LocalStorage-derived state** (bookmarks, watchlist, address book, LP settings, widget layout)
+   is acceptable per-hook, but state computations should not duplicate logic already present in context providers.
 
-- **In-Place Updates**: Sonner allows targeted updating of a single toast by providing its `id` (e.g., converting a "Transaction Pending..." loader toast into a success checkmark or error alert in place). React Toastify handles this less smoothly.
-- **Headless & Custom Layouts**: Sonner is fully customizable and lacks heavy default CSS sheets. It integrates cleanly with Tailwind CSS v4 and the custom warm tones of "The Fiscal Atelier" design theme.
-- **A11y Compliant**: Sonner has better default accessibility rules (live regions, keyboard escape focus), which helps meet the accessibility standards enforced in unit and storybook checks.
+## Service Worker Security Model
+
+`next-pwa` generates `public/sw.js` and the `public/workbox-*.js` runtime from the `runtimeCaching` list in
+`next.config.ts`. Because the service worker can serve cached responses on repeat visits without hitting the
+network, it is a longer-lived attack surface than a single page load and is documented here explicitly.
+
+- **Precache integrity**: every build-time asset in the Workbox precache manifest (the `self.__WB_MANIFEST`
+  array injected into `sw.js`) is keyed by a content-hash `revision`. If a build artifact changes, its
+  revision/URL changes too, so a stale or tampered precached file cannot silently masquerade as the current
+  one - the manifest itself is only trustworthy to the extent that `sw.js` was delivered over HTTPS from the
+  real origin in the first place. There is no additional signing layer on top of this; Vercel's per-deploy
+  immutable static hosting is the trust root for that initial delivery.
+- **`skipWaiting: true` + `clientsClaim: true`**: a newly installed service worker activates immediately and
+  takes control of already-open tabs, instead of waiting for every tab to close. This intentionally shortens
+  the window during which a stale worker (e.g. one associated with a previously shipped, now-patched bug)
+  keeps serving old cached responses. The trade-off is that a new worker version rolls out fast to every open
+  tab - which is also why the runtime-cached entries below use short, bounded `maxAgeSeconds`/`maxEntries`
+  windows rather than long-lived caching, so the blast radius of any single bad response is capped even in
+  the worst case.
+- **`cacheableResponse` filtering**: the `api-cache`, `pages`, and static-asset runtime caching entries only
+  persist responses with status `0` (opaque, same-origin no-cors) or `200`. Error responses, redirects, and
+  other non-success statuses are never written into the cache, so a transient 4xx/5xx from a misbehaving or
+  MITM'd endpoint cannot be replayed to the user as if it were a valid cached page or API response.
+- **Scope of trust**: the service worker cannot protect against a compromised build pipeline or a
+  same-origin MITM that serves an attacker-controlled `sw.js` directly (this is a browser platform limitation
+  shared by all Workbox-based PWAs, not specific to this app). The mitigations above bound how long any single
+  bad response can persist and ensure a new deploy supersedes the previous worker quickly; they do not replace
+  transport security (HTTPS, HSTS) or build/deploy integrity, which remain the primary controls.
+- **No mutating requests are cached**: `runtimeCaching` strategies only intercept `GET` requests by default,
+  so `POST`/`PUT`/`DELETE` calls (e.g. reminder opt-in writes) always go to the network and are never served
+  from, or written to, the service worker cache.
+
+## Environment Model
+
+The canonical local template is `.env.local.example`. Direct env references in `app/` and `src/` are checked by:
+
+```bash
+pnpm run env:check
+```
+
+The CI workflow runs the same command, and `.env.local.example.allowlist` documents runtime-provided values such as `NODE_ENV`.
+
+Client-visible configuration uses `NEXT_PUBLIC_*`, including Stellar network settings, feature flags, indexer URLs, WalletConnect project ID, app URL/version, and contract version labels. Server-only secrets such as `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `CRON_SECRET`, and GitHub feedback credentials must never be exposed with a public prefix.
+
+## Library Rationale
+
+- **Next.js App Router**: Fits route-level product areas, server API routes, PWA/offline behavior, and deployable static/client-heavy surfaces.
+- **TanStack React Query**: Provides structured cache keys, query invalidation after wallet transactions, polling controls for live protocol state, and optimistic update patterns.
+- **i18next, react-i18next, and next-intl**: Support existing locale files and leave room for route-aware internationalized UI.
+- **next-pwa**: Generates the service worker and offline support used by `app/offline/` and public PWA assets.
+- **next-themes**: Keeps theme state centralized for the light/dark design system.
+- **Sonner**: Gives mutation flows concise pending/success/error toast updates without heavyweight styling.
+- **Supabase JS and Resend**: Power opt-in payer reminder persistence and email delivery behind server-only env gates.
+- **Recharts**: Used for stats, analytics, yield, reputation, allocation, and volume visualizations.
+- **jspdf, papaparse, qrcode, and qrcode.react**: Cover invoice PDF generation, CSV import/export support, and invoice sharing flows.
+- **Storybook, Chromatic, Vitest, Playwright, jest-axe, and Stryker**: Cover component documentation, visual regression, unit/accessibility tests, browser journeys, and mutation testing.
+
+## Contributor Guidance
+
+When adding a route, update this document and the README route summary if the product surface changes. When adding an env var, update `.env.local.example` or `.env.local.example.allowlist` in the same change and run `pnpm run env:check`.

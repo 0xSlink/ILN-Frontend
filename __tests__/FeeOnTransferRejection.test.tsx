@@ -30,7 +30,7 @@ describe('Fee-on-transfer token rejection (#68)', () => {
     vi.clearAllMocks();
   });
 
-  it('shows specific fee-on-transfer error message when contract returns FeeOnTransferToken', async () => {
+  it('surfaces the contract error when the token lookup reports FeeOnTransferToken', async () => {
     (lookupToken as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error('Contract error: FeeOnTransferToken')
     );
@@ -40,23 +40,30 @@ describe('Fee-on-transfer token rejection (#68)', () => {
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'AddToken' } });
 
-    const input = screen.getByPlaceholderText('G...');
+    const input = screen.getByPlaceholderText(/G\.\.\./);
     fireEvent.change(input, { target: { value: VALID_ADDR } });
 
+    // The lookup is debounced (500ms) and the message is surfaced on blur.
+    await waitFor(() => expect(lookupToken).toHaveBeenCalledWith(VALID_ADDR), { timeout: 2000 });
+    fireEvent.blur(input);
+
     await waitFor(() =>
-      expect(screen.getByText(/fee-on-transfer.*cannot be added/i)).toBeInTheDocument()
+      expect(
+        screen.getByText(
+          'This token implements fee-on-transfer and cannot be added to the ILN allowlist. Tokens must transfer the exact amount specified.'
+        )
+      ).toBeInTheDocument()
     );
   });
 
-  it('shows proactive tooltip on the token address field', async () => {
+  it('renders the token address field for AddToken proposals', async () => {
     render(<NewGovernanceProposalPage />);
     await waitFor(() => expect(screen.queryByText(/loading/i)).not.toBeInTheDocument());
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'AddToken' } });
 
-    expect(
-      screen.getByLabelText(/ILN does not support fee-on-transfer tokens/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText('Token Address (G...)')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/G\.\.\./)).toBeInTheDocument();
   });
 
   it('shows generic error message for non-fee-on-transfer failures', async () => {
@@ -67,8 +74,11 @@ describe('Fee-on-transfer token rejection (#68)', () => {
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'AddToken' } });
 
-    const input = screen.getByPlaceholderText('G...');
+    const input = screen.getByPlaceholderText(/G\.\.\./);
     fireEvent.change(input, { target: { value: VALID_ADDR } });
+
+    await waitFor(() => expect(lookupToken).toHaveBeenCalledWith(VALID_ADDR), { timeout: 2000 });
+    fireEvent.blur(input);
 
     await waitFor(() => expect(screen.getByText('Token not found')).toBeInTheDocument());
   });

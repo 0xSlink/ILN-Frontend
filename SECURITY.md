@@ -14,10 +14,10 @@ Issues with the **smart contracts** (on-chain logic, asset security, protocol ma
 
 ## Supported Versions
 
-| Version | Supported |
-| ------- | --------- |
-| `main` (latest) | ✅ |
-| Older branches | ❌ |
+| Version         | Supported |
+| --------------- | --------- |
+| `main` (latest) | ✅        |
+| Older branches  | ❌        |
 
 ## Reporting a Vulnerability
 
@@ -46,11 +46,11 @@ Examples of issues we want to hear about:
 
 ## Response Timeline
 
-| Milestone | Target |
-| --------- | ------ |
-| Acknowledgement | Within 48 hours |
-| Initial assessment | Within 7 days |
-| Fix or mitigation | Within 30 days (critical), 90 days (moderate) |
-| Public disclosure | Coordinated with reporter after fix is released |
+| Milestone          | Target                                          |
+| ------------------ | ----------------------------------------------- |
+| Acknowledgement    | Within 48 hours                                 |
+| Initial assessment | Within 7 days                                   |
+| Fix or mitigation  | Within 30 days (critical), 90 days (moderate)   |
+| Public disclosure  | Coordinated with reporter after fix is released |
 
 We follow a coordinated disclosure model. We will credit reporters in the release notes unless they prefer to remain anonymous.

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useTransaction } from '@/hooks/useTransaction';
 import { useWallet } from '@/context/WalletContext';
 import { useToast } from '@/context/ToastContext';
-import TokenSelector, { TokenAmount } from './TokenSelector';
+import { TokenAmount } from './TokenSelector';
 import InvoiceFilterBar from './InvoiceFilterBar';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
 import { applyInvoiceFilters, useInvoiceFilters } from '@/hooks/useInvoiceFilters';
@@ -15,14 +15,7 @@ import { useInvoices } from '@/hooks/useInvoices';
 import SkeletonRow, { LP_DISCOVERY_COLUMNS } from './SkeletonRow';
 import LPRiskSummaryPanel from './LPRiskSummaryPanel';
 
-import {
-  claimDefault,
-  claimInsurance,
-  getAllInvoices,
-  getTokenAllowance,
-  Invoice,
-  submitSignedTransaction,
-} from '@/utils/soroban';
+import { claimDefault, getTokenAllowance, Invoice, submitSignedTransaction } from '@/utils/soroban';
 import { formatAddress, formatDate, formatTokenAmount, calculateYield } from '@/utils/format';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { usePayerScores } from '@/hooks/usePayerScores';
@@ -40,7 +33,6 @@ import DisputeInvoiceModal from './DisputeInvoiceModal';
 import LPTransferModal from './LPTransferModal';
 import DynamicYieldAnalyticsChart from './DynamicYieldAnalyticsChart';
 import LPYieldComparison from './LPYieldComparison';
-import LPSettingsModal from './LPSettingsModal';
 import LPOnboardingModal from './LPOnboardingModal';
 import ErrorBoundary from './ErrorBoundary';
 import { useLPSettings } from '@/hooks/useLPSettings';
@@ -56,20 +48,19 @@ type Tab = 'discovery' | 'my-funded' | 'watchlist' | 'earnings-history';
 export default function LPDashboard() {
   const router = useRouter();
   const { address, connect } = useWallet();
-  const { addToast, updateToast } = useToast();
-  const { execute, loading: txLoading, signingModal } = useTransaction();
+  const { addToast } = useToast();
+  const { execute, signingModal } = useTransaction();
   const { tokenMap, defaultToken } = useApprovedTokens();
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { isEnrolled: isEnrolledInInsurance } = useInsurance();
-  const getLocale = () => (i18n.language === 'es' ? 'es-ES' : 'en-US');
 
   const { data: invoices = [], isLoading: loading, dataUpdatedAt, refetch } = useInvoices();
 
   const [activeTab, setActiveTab] = useState<Tab>('discovery');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [isCheckingAllowance, setIsCheckingAllowance] = useState(false);
-  const [allowance, setAllowance] = useState<bigint | null>(null);
-  const [fundingError, setFundingError] = useState<string | null>(null);
+  const [_isCheckingAllowance, setIsCheckingAllowance] = useState(false);
+  const [_allowance, setAllowance] = useState<bigint | null>(null);
+  const [_fundingError, setFundingError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<keyof Invoice | 'risk' | 'yield'>('amount');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [claimingInvoiceId, setClaimingInvoiceId] = useState<string | null>(null);
@@ -79,7 +70,7 @@ export default function LPDashboard() {
   const [transferInvoice, setTransferInvoice] = useState<Invoice | null>(null);
   const [showLpOnboarding, setShowLpOnboarding] = useState(false);
   const [riskFilter, setRiskFilter] = useState<'all' | 'at-risk' | 'disputed'>('all');
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [_isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [overriddenInvoiceIds, setOverriddenInvoiceIds] = useState<string[]>([]);
   const [isWidgetManagerOpen, setIsWidgetManagerOpen] = useState(false);
   const { settings } = useLPSettings();
@@ -216,7 +207,7 @@ export default function LPDashboard() {
 
     setClaimingInsuranceId(invoice.id.toString());
 
-    const result = await execute(
+    await execute(
       async (signTx) => {
         const { claimInsurance } = await import('@/utils/soroban');
         const tx = await claimInsurance(address, invoice.id);
@@ -336,7 +327,7 @@ export default function LPDashboard() {
     }
   };
 
-  const handleKeyDown = (
+  const handleRowKeyDown = (
     e: React.KeyboardEvent<HTMLTableRowElement>,
     invoice: any,
     index: number
@@ -449,7 +440,7 @@ export default function LPDashboard() {
     },
   ];
 
-  const discoveryColumns: DataTableColumn<any>[] = [
+  const _discoveryColumns: DataTableColumn<any>[] = [
     ...commonColumns,
     {
       id: 'risk',
@@ -497,7 +488,7 @@ export default function LPDashboard() {
     },
   ];
 
-  const watchlistColumns: DataTableColumn<any>[] = [
+  const _watchlistColumns: DataTableColumn<any>[] = [
     ...commonColumns,
     {
       id: 'watchAddedAt',
@@ -860,8 +851,11 @@ export default function LPDashboard() {
                       return (
                         <tr
                           key={invoice.id.toString()}
+                          role="row"
+                          tabIndex={0}
                           className={`hover:bg-surface-variant/10 transition-colors ${selectedInvoiceIds.includes(invoice.id.toString()) ? 'bg-primary/5' : ''} ${isBelowThreshold ? 'opacity-50 grayscale-[0.5]' : ''}`}
                           onClick={() => !isBelowThreshold && handleFund(invoice)}
+                          onKeyDown={(event) => handleRowKeyDown(event, invoice, index)}
                         >
                           <td className="px-6 py-5">
                             <input
@@ -1086,7 +1080,7 @@ function TokenAwareAmount({
   return <TokenAmount amount={formatTokenAmount(amount, token)} token={token} />;
 }
 
-function StepPill({
+function _StepPill({
   active,
   complete,
   children,

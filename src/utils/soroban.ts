@@ -210,15 +210,112 @@ export async function getAllInvoices(): Promise<Invoice[]> {
   return invoices;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseInvoiceFromNative(native: any): Invoice {
+  return {
+    id: BigInt(native.id ?? 0),
+    freelancer: String(native.freelancer ?? native.submitter ?? ''),
+    payer: String(native.payer ?? ''),
+    amount: BigInt(native.amount ?? 0),
+    due_date: BigInt(native.due_date ?? 0),
+    discount_rate: Number(native.discount_rate ?? 0),
+    status: parseStatus(native.status),
+    funder: native.funder ? String(native.funder) : undefined,
+    funded_at: native.funded_at ? BigInt(native.funded_at) : undefined,
+    token: native.token ? String(native.token) : undefined,
+  };
+}
+
+export async function listInvoicesBySubmitter(submitterAddress: string): Promise<Invoice[]> {
+  try {
+    const params: xdr.ScVal[] = [Address.fromString(submitterAddress).toScVal()];
+    let callResult = await server.simulateTransaction(
+      buildReadTransaction(CONTRACT_ID, 'list_invoices_by_submitter', params)
+    );
+    if (!rpc.Api.isSimulationSuccess(callResult) || !callResult.result?.retval) {
+      callResult = await server.simulateTransaction(
+        buildReadTransaction(CONTRACT_ID, 'list_invoices_by_freelancer', params)
+      );
+    }
+    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
+      const native = scValToNative(callResult.result.retval);
+      if (Array.isArray(native)) {
+        return native.map(parseInvoiceFromNative);
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+export async function listInvoicesByPayer(payerAddress: string): Promise<Invoice[]> {
+  try {
+    const params: xdr.ScVal[] = [Address.fromString(payerAddress).toScVal()];
+    const callResult = await server.simulateTransaction(
+      buildReadTransaction(CONTRACT_ID, 'list_invoices_by_payer', params)
+    );
+    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
+      const native = scValToNative(callResult.result.retval);
+      if (Array.isArray(native)) {
+        return native.map(parseInvoiceFromNative);
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+export async function listInvoicesByLp(lpAddress: string): Promise<Invoice[]> {
+  try {
+    const params: xdr.ScVal[] = [Address.fromString(lpAddress).toScVal()];
+    const callResult = await server.simulateTransaction(
+      buildReadTransaction(CONTRACT_ID, 'list_invoices_by_lp', params)
+    );
+    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
+      const native = scValToNative(callResult.result.retval);
+      if (Array.isArray(native)) {
+        return native.map(parseInvoiceFromNative);
+      }
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 export async function getWalletRoles(address: string): Promise<WalletRole[]> {
   const normalized = address.toLowerCase();
-  const invoices = await getAllInvoices();
   const roles = new Set<WalletRole>();
 
-  for (const invoice of invoices) {
-    if (invoice.freelancer?.toLowerCase() === normalized) roles.add('freelancer');
-    if (invoice.payer?.toLowerCase() === normalized) roles.add('payer');
-    if (invoice.funder?.toLowerCase() === normalized) roles.add('lp');
+  try {
+    const [submitterInvoices, payerInvoices, lpInvoices] = await Promise.all([
+      listInvoicesBySubmitter(address),
+      listInvoicesByPayer(address),
+      listInvoicesByLp(address),
+    ]);
+
+    if (submitterInvoices.length > 0) roles.add('freelancer');
+    if (payerInvoices.length > 0) roles.add('payer');
+    if (lpInvoices.length > 0) roles.add('lp');
+
+    if (roles.size > 0) {
+      return Array.from(roles);
+    }
+  } catch {
+    // ignore error and proceed to fallback
+  }
+
+  try {
+    const invoices = await getAllInvoices();
+    for (const invoice of invoices) {
+      if (invoice.freelancer?.toLowerCase() === normalized) roles.add('freelancer');
+      if (invoice.payer?.toLowerCase() === normalized) roles.add('payer');
+      if (invoice.funder?.toLowerCase() === normalized) roles.add('lp');
+    }
+  } catch {
+    // ignore fallback failure
   }
 
   return Array.from(roles);
@@ -699,7 +796,7 @@ export async function disputeInvoice(payer: string, invoice_id: bigint, reason_h
  * instruction; export a placeholder so consumers can safely call it
  * and bundlers don't fail on missing named exports.
  */
-export async function updateLPWhitelist(args: { invoiceId: bigint; whitelist: string[] }) {
+export async function updateLPWhitelist(_args: { invoiceId: bigint; whitelist: string[] }) {
   // In production this should build and return a transaction for signing.
   // For now, throw to indicate unsupported on-chain instruction.
   throw new Error('updateLPWhitelist is not supported by the deployed contract');
@@ -801,7 +898,7 @@ export async function submitInvoice(
     } else {
       invoiceId = BigInt(raw as any);
     }
-  } catch (_) {
+  } catch {
     // If we can't parse it, proceed without the ID — it'll be shown after poll
   }
 

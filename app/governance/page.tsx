@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
 import VoteProgressBar from '@/components/VoteProgressBar';
 import QuorumProgressBar from '@/components/QuorumProgressBar';
 import TokenAllowlistPanel from '@/components/governance/TokenAllowlistPanel';
+import GovernanceMockStatusBanner from '@/components/governance/GovernanceMockStatusBanner';
 import VotingPowerDisplay from '@/components/VotingPowerDisplay';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import PageHeader from '@/components/PageHeader';
@@ -35,6 +35,7 @@ function StatusBadge({ status }: { status: ProposalStatus }) {
     },
     Passed: { color: 'bg-primary/15 text-primary border-primary/30', icon: 'check_circle' },
     Failed: { color: 'bg-red-500/15 text-red-500 border-red-500/30', icon: 'cancel' },
+    Rejected: { color: 'bg-red-500/15 text-red-500 border-red-500/30', icon: 'cancel' },
     Executed: {
       color: 'bg-purple-500/15 text-purple-500 border-purple-500/30',
       icon: 'rocket_launch',
@@ -295,6 +296,7 @@ export default function GovernancePage() {
           {/* Voting Power Display */}
           {isConnected && (
             <div className="mb-8">
+              <GovernanceMockStatusBanner action="getVotingPower" />
               <VotingPowerDisplay votingPower={votingPower} />
             </div>
           )}
@@ -362,8 +364,6 @@ export default function GovernancePage() {
           </ErrorBoundary>
         </div>
       </section>
-
-      <Footer />
     </main>
   );
 }

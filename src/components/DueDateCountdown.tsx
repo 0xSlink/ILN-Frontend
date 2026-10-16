@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { formatDate } from '@/utils/format';
 
 interface DueDateCountdownProps {
   dueDate: bigint;

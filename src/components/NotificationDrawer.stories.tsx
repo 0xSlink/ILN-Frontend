@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import NotificationDrawer from './NotificationDrawer';
 
 const meta: Meta<typeof NotificationDrawer> = {

@@ -3,11 +3,13 @@
  * These operate as mocked Soroban calls until the governance contract is deployed.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { rpc, nativeToScVal } from '@stellar/stellar-sdk';
 
 import {
   castVote,
   createProposal,
   fetchProposals,
+  getProposals,
   fetchProposal,
   fetchProtocolParameters,
   getVotingPower,
@@ -19,6 +21,9 @@ import {
   formatVotingPower,
   isValidStellarAddress,
   parameterLabel,
+  parseProposalStatus,
+  parseProposalFromNative,
+  simulateProposalEffect,
   MOCK_PROPOSALS,
   type CreateProposalPayload,
 } from '@/utils/governance';
@@ -77,23 +82,69 @@ describe('governance – castVote', () => {
   });
 });
 
-describe('governance – fetchProposals', () => {
-  it('returns an array of proposals', async () => {
-    vi.useFakeTimers();
-    const p = fetchProposals();
-    vi.runAllTimers();
-    const proposals = await p;
+describe('governance – fetchProposals & SDK boundary', () => {
+  it('calls Soroban list_proposals and parses on-chain response correctly', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData: {} as any,
+        minResourceFee: '100',
+        events: [],
+        result: {
+          retval: nativeToScVal([
+            {
+              id: 10,
+              title: 'On-Chain Governance Proposal',
+              description: 'Proposal description from Soroban contract',
+              type: { ParameterUpdate: [] },
+              status: { Rejected: [] },
+              proposer: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+              created_at: 1700000000,
+              voting_starts_at: 1700000000,
+              voting_ends_at: 1700864000,
+              votes_for: 1000,
+              votes_against: 2500,
+              votes_abstain: 50,
+              quorum_required: 500,
+            },
+          ]),
+        },
+      } as any);
+
+    const proposals = await fetchProposals();
+
+    expect(mockSimulate).toHaveBeenCalled();
+    expect(proposals.length).toBe(1);
+    expect(proposals[0].id).toBe(10);
+    expect(proposals[0].title).toBe('On-Chain Governance Proposal');
+    expect(proposals[0].status).toBe('Rejected');
+    expect(proposals[0].type).toBe('ParameterUpdate');
+    expect(proposals[0].votesFor).toBe(1000);
+    expect(proposals[0].votesAgainst).toBe(2500);
+
+    mockSimulate.mockRestore();
+  });
+
+  it('getProposals is an alias to fetchProposals', () => {
+    expect(getProposals).toBe(fetchProposals);
+  });
+
+  it('returns an array of proposals on fallback', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValueOnce(new Error('RPC Connection Error'));
+    const proposals = await fetchProposals();
     expect(Array.isArray(proposals)).toBe(true);
     expect(proposals.length).toBeGreaterThan(0);
-    vi.useRealTimers();
+    mockSimulate.mockRestore();
   });
 
   it('each proposal has required fields', async () => {
-    vi.useFakeTimers();
-    const p = fetchProposals();
-    vi.runAllTimers();
-    const proposals = await p;
-    vi.useRealTimers();
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValueOnce(new Error('Simulate Error'));
+    const proposals = await fetchProposals();
     for (const proposal of proposals) {
       expect(proposal).toHaveProperty('id');
       expect(proposal).toHaveProperty('title');
@@ -101,6 +152,51 @@ describe('governance – fetchProposals', () => {
       expect(proposal).toHaveProperty('votesFor');
       expect(proposal).toHaveProperty('votesAgainst');
     }
+    mockSimulate.mockRestore();
+  });
+});
+
+describe('governance – parseProposalStatus & contract parsers', () => {
+  it('maps contract Rejected status correctly', () => {
+    expect(parseProposalStatus({ Rejected: [] })).toBe('Rejected');
+    expect(parseProposalStatus('Rejected')).toBe('Rejected');
+  });
+
+  it('maps other contract enum statuses correctly', () => {
+    expect(parseProposalStatus({ Active: [] })).toBe('Active');
+    expect(parseProposalStatus({ Passed: [] })).toBe('Passed');
+    expect(parseProposalStatus({ Executed: [] })).toBe('Executed');
+    expect(parseProposalStatus({ Vetoed: [] })).toBe('Vetoed');
+    expect(parseProposalStatus('Active')).toBe('Active');
+    expect(parseProposalStatus('Passed')).toBe('Passed');
+  });
+
+  it('falls back to Active for unknown status', () => {
+    expect(parseProposalStatus('UnknownVal')).toBe('Active');
+  });
+
+  it('parseProposalFromNative parses native struct correctly', () => {
+    const nativeStruct = {
+      id: 42,
+      title: 'Upgrade Protocol',
+      description: 'Upgrade to v2',
+      type: { ProtocolUpgrade: [] },
+      status: { Rejected: [] },
+      proposer: 'GPROPOSER',
+      created_at: 100,
+      voting_starts_at: 100,
+      voting_ends_at: 200,
+      votes_for: 300,
+      votes_against: 150,
+      votes_abstain: 20,
+      quorum_required: 100,
+    };
+    const parsed = parseProposalFromNative(nativeStruct);
+    expect(parsed.id).toBe(42);
+    expect(parsed.title).toBe('Upgrade Protocol');
+    expect(parsed.type).toBe('ProtocolUpgrade');
+    expect(parsed.status).toBe('Rejected');
+    expect(parsed.proposer).toBe('GPROPOSER');
   });
 });
 
@@ -276,5 +372,105 @@ describe('governance – fetchProtocolParameters', () => {
     expect(params).toHaveProperty('maxDiscountRateBps');
     expect(params).toHaveProperty('acceptedTokens');
     expect(Array.isArray(params.acceptedTokens)).toBe(true);
+  });
+});
+
+describe('governance – simulateProposalEffect', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('returns a result with isContractVerified and estimatedEffect fields', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Update Fee Rate',
+      description: 'Proposal to update fee rate',
+      newValueBps: 300,
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    expect(result).toHaveProperty('isContractVerified');
+    expect(result).toHaveProperty('estimatedEffect');
+    expect(typeof result.isContractVerified).toBe('boolean');
+    expect(typeof result.estimatedEffect).toBe('string');
+  });
+
+  it('generates estimate for FeeRate proposals', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Update Fee Rate',
+      description: 'Test proposal',
+      newValueBps: 400,
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    expect(result.estimatedEffect).toContain('fee rate');
+    expect(result.estimatedEffect).toContain('4');
+  });
+
+  it('generates estimate for MaxDiscountRate proposals', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'MaxDiscountRate',
+      title: 'Update Discount Rate',
+      description: 'Test proposal',
+      newValueBps: 600,
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    expect(result.estimatedEffect).toContain('discount rate');
+    expect(result.estimatedEffect).toContain('6');
+  });
+
+  it('generates estimate for AddToken proposals', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'AddToken',
+      title: 'Add Token',
+      description: 'Test proposal',
+      tokenAddress: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
+      tokenName: 'Wrapped Bitcoin',
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    expect(result.estimatedEffect).toContain('Add');
+    expect(result.estimatedEffect).toContain('Wrapped Bitcoin');
+  });
+
+  it('generates estimate for RemoveToken proposals', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'RemoveToken',
+      title: 'Remove Token',
+      description: 'Test proposal',
+      removeTokenAddress: 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75',
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    expect(result.estimatedEffect).toContain('Remove');
+  });
+
+  it('includes disclaimer for client-side estimates', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Update Fee Rate',
+      description: 'Test proposal',
+      newValueBps: 250,
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    if (!result.isContractVerified) {
+      expect(result.warnings).toBeDefined();
+      if (result.warnings) {
+        expect(result.warnings.length).toBeGreaterThan(0);
+      }
+    }
   });
 });

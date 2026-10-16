@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import ColumnCustomiser, { ColumnConfig } from './ColumnCustomiser';
 import { RowActionsMenu, type RowAction } from './RowActionsMenu';
+import useMediaQuery, { MOBILE_QUERY } from '@/hooks/useMediaQuery';
+import ProgressiveDisclosureCards from './ProgressiveDisclosureCards';
 
 export interface ColumnDefinition<T> extends ColumnConfig {
   renderCell: (item: T) => React.ReactNode;
@@ -57,9 +59,14 @@ export default function InvoiceTable<T>({
   const selectable = selectedKeys !== undefined && onSelectionChange !== undefined;
   const isMobile = useMediaQuery(MOBILE_QUERY);
 
-  // State for order and visibility
-  const [columnOrder, setColumnOrder] = useState<string[]>([]);
-  const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
+  // State for order and visibility — lazily initialised from localStorage
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    const defaultOrder = columns.map((c) => c.id);
+    return defaultOrder;
+  });
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(() => {
+    return columns.filter((c) => c.isMandatory !== false).map((c) => c.id);
+  });
   const [isInitialised, setIsInitialised] = useState(false);
 
   // Load from localStorage on mount
@@ -74,17 +81,15 @@ export default function InvoiceTable<T>({
         const validOrder = config.order.filter((id: string) => columns.some((c) => c.id === id));
         const missingFromOrder = defaultOrder.filter((id) => !validOrder.includes(id));
 
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setColumnOrder([...validOrder, ...missingFromOrder]);
+
         setVisibleColumns(config.visibility || defaultVisible);
       } catch (e) {
         console.error('Failed to load table config', e);
-        setColumnOrder(defaultOrder);
-        setVisibleColumns(defaultVisible);
       }
-    } else {
-      setColumnOrder(defaultOrder);
-      setVisibleColumns(defaultVisible);
     }
+
     setIsInitialised(true);
   }, [tableId, columns]);
 
@@ -113,7 +118,7 @@ export default function InvoiceTable<T>({
     setVisibleColumns(defaultVisible);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent, item: T, index: number) => {
+  const handleKeyDown = (e: React.KeyboardEvent, item: T, _index: number) => {
     if (e.key === 'Enter') {
       router.push(`/i/${keyExtractor(item)}`);
     } else if (e.key === 'ArrowDown') {

@@ -1,6 +1,14 @@
 'use client';
 
-import { useEffect, useReducer, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
@@ -100,15 +108,8 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
   const [submittedInvoiceId, setSubmittedInvoiceId] = useState<string | null>(null);
   const [lastTxHash, setLastTxHash] = useState<string | null>(null);
   // Optional referral code — captured client-side; passed to the contract.
-  const [referralCode, setReferralCode] = useState('');
+  const [referralCode, setReferralCode] = useState(() => searchParams.get('ref') ?? '');
   const redirectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const refParam = searchParams.get('ref');
-    if (refParam) {
-      setReferralCode(refParam);
-    }
-  }, [searchParams]);
 
   useEffect(
     () => () => {
@@ -154,10 +155,10 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
   }, [form, effectiveTokenId, isConnected, selectedToken, tokensLoading, networkMismatch, t]);
 
   const displayErrors = useMemo(() => {
-    const combined = { ...errors };
+    const combined: Record<string, string | undefined> = { ...errors };
     for (const [key, val] of Object.entries(validationErrors)) {
       if (touched[key as keyof InvoiceFormValues] || touched.all) {
-        combined[key as keyof typeof combined] = val;
+        combined[key] = val;
       }
     }
     return combined;
@@ -347,7 +348,7 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
             <div className="mt-4">
               <Link
                 href="/invoices/batch"
-                className="inline-flex items-center gap-2 text-sm text-primary hover:underline font-medium"
+                className="-my-2.5 inline-flex items-center gap-2 py-2.5 text-sm text-primary hover:underline font-medium"
               >
                 <span className="material-symbols-outlined text-[18px]">upload_file</span>
                 Submit multiple invoices (CSV/Batch)
@@ -468,6 +469,7 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                       value={form.payer}
                       onBlur={() => handleBlur('payer')}
                       aria-describedby={displayErrors.payer ? 'payer-error' : undefined}
+                      aria-invalid={Boolean(displayErrors.payer)}
                       onChange={(event) => {
                         setField('payer', event.target.value);
                         setAddressBookQuery(event.target.value);
@@ -518,6 +520,7 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                       value={form.amount}
                       onBlur={() => handleBlur('amount')}
                       aria-describedby={displayErrors.amount ? 'amount-error' : undefined}
+                      aria-invalid={Boolean(displayErrors.amount)}
                       onChange={(event) => handleAmountChange(event.target.value)}
                       className="w-full rounded-2xl bg-surface-container-low px-4 py-3.5 text-sm border border-outline-variant/15 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                       placeholder="5000.00"
@@ -562,6 +565,7 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                       value={form.dueDate}
                       onBlur={() => handleBlur('dueDate')}
                       aria-describedby={displayErrors.dueDate ? 'due-date-error' : undefined}
+                      aria-invalid={Boolean(displayErrors.dueDate)}
                       onChange={(event) => setField('dueDate', event.target.value)}
                       min={getMinimumDueDate()}
                       className="w-full rounded-2xl bg-surface-container-low px-4 py-3.5 text-sm border border-outline-variant/15 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
@@ -625,6 +629,7 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                       aria-describedby={
                         displayErrors.discountRate ? 'discount-rate-error' : undefined
                       }
+                      aria-invalid={Boolean(displayErrors.discountRate)}
                       onChange={(event) => setField('discountRate', event.target.value)}
                       className="w-full rounded-2xl bg-surface-container-low px-4 py-3.5 text-sm border border-outline-variant/15 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                       placeholder="3.00"

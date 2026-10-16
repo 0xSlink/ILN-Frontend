@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { IndexerError } from '@/lib/indexer/errors';
 import { loadIndexerResource } from '@/lib/indexer/server';
+import { checkRateLimit, getClientKey } from '@/lib/rate-limit';
 import type { IndexerErrorEnvelope } from '@/lib/indexer/types';
 
 /**
@@ -11,9 +12,31 @@ import type { IndexerErrorEnvelope } from '@/lib/indexer/types';
 export const dynamic = 'force-dynamic';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
+// Several indexer-backed views can load on one page, so allow more than single-resource routes.
+const RATE_LIMIT_MAX_REQUESTS = 60;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+
+function errorResponse(error: IndexerError, headers: Record<string, string> = {}) {
+  const body: IndexerErrorEnvelope = {
+    ok: false,
+    error: { code: error.code, message: error.message },
+  };
+  return NextResponse.json(body, { status: error.status, headers: { ...NO_STORE, ...headers } });
+}
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;
+
+  const rateLimit = checkRateLimit(
+    `indexer:${getClientKey(req)}`,
+    RATE_LIMIT_MAX_REQUESTS,
+    RATE_LIMIT_WINDOW_MS
+  );
+  if (!rateLimit.allowed) {
+    return errorResponse(new IndexerError('rate_limited'), {
+      'Retry-After': String(rateLimit.retryAfterSeconds),
+    });
+  }
 
   try {
     const envelope = await loadIndexerResource(path, req.nextUrl.searchParams, {
@@ -25,10 +48,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
     if (!(err instanceof IndexerError)) {
       console.error('[indexer] unexpected proxy failure:', (err as Error)?.name ?? 'Error');
     }
-    const body: IndexerErrorEnvelope = {
-      ok: false,
-      error: { code: error.code, message: error.message },
-    };
-    return NextResponse.json(body, { status: error.status, headers: NO_STORE });
+    return errorResponse(error);
   }
 }

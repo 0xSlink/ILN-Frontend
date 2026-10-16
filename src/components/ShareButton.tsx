@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import type { Invoice } from '@/utils/soroban';
-import { formatAddress, tokenAmountToNumber } from '@/utils/format';
+import { tokenAmountToNumber } from '@/utils/format';
 
 const TWEET_MAX_CHARS = 280;
 

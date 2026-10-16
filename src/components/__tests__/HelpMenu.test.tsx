@@ -1,21 +1,33 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 
 // Mock react-joyride so tests don't need full Joyride runtime
-vi.mock('react-joyride', () => ({
-  __esModule: true,
-  default: ({ run, callback }: { run: boolean; callback: (d: { status: string }) => void }) => {
+// PageTour imports the named `Joyride` export, so both shapes are provided.
+vi.mock('react-joyride', () => {
+  const JoyrideMock = ({
+    run,
+    onEvent,
+  }: {
+    run: boolean;
+    onEvent: (d: { status: string }) => void;
+  }) => {
     if (run) {
       return (
         <div data-testid="joyride-mock">
-          <button onClick={() => callback({ status: 'finished' })}>Finish tour</button>
-          <button onClick={() => callback({ status: 'skipped' })}>Skip</button>
+          <button onClick={() => onEvent({ status: 'finished' })}>Finish tour</button>
+          <button onClick={() => onEvent({ status: 'skipped' })}>Skip</button>
         </div>
       );
     }
     return null;
-  },
-  STATUS: { FINISHED: 'finished', SKIPPED: 'skipped' },
-}));
+  };
+
+  return {
+    __esModule: true,
+    default: JoyrideMock,
+    Joyride: JoyrideMock,
+    STATUS: { FINISHED: 'finished', SKIPPED: 'skipped' },
+  };
+});
 
 import { HelpMenu } from '../tours/HelpMenu';
 

@@ -7,7 +7,6 @@ import { formatNetworkLabel } from '@/utils/network';
 export default function NetworkMismatchBanner() {
   const {
     networkMismatch,
-    rpcMismatch,
     mismatchDetails,
     switchingNetwork,
     walletNetwork,

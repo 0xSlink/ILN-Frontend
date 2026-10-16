@@ -2,15 +2,12 @@
  * @file StatusBadge.test.tsx
  *
  * The ILN renders inline status badges inside LPDashboard for funded invoices.
- * These tests drive the LPDashboard to render the "My Funded" tab where the status
- * badge is shown, and verify the correct text and Tailwind colour classes for all
- * five meaningful invoice statuses used in the protocol:
+ * These tests drive the LPDashboard to render the "My Funded" tab (rendered by
+ * LPPortfolio) where the status badge is shown, and verify the badge text and
+ * styling for the meaningful invoice statuses used in the protocol:
  *
- *  1. Pending  – grey / surface-dim  (shown in Discovery, not "My Funded" tab)
- *  2. Funded   – blue  (bg-blue-100  / text-blue-700)
- *  3. Paid     – green (bg-green-100 / text-green-700)
- *  4. Defaulted – red  (bg-red-100   / text-red-700)
- *  5. Cancelled – red  (bg-red-100   / text-red-700)
+ *  1. Pending  – shown in Discovery as a "Fund" action, not as a badge
+ *  2. Funded / 3. Paid / 4. Defaulted / 5. Cancelled – neutral surface badge
  *
  * We use the wallet address that matches invoice.funder so each invoice shows up
  * in the "My Funded" tab where badges are rendered.
@@ -59,14 +56,18 @@ vi.mock('../../context/ToastContext', () => ({
 }));
 
 const getAllInvoices = vi.fn();
-const getUsdcAllowance = vi.fn();
+const getTokenAllowance = vi.fn();
 
 vi.mock('../../utils/soroban', () => ({
+  getInsurancePoolInfo: vi.fn(async () => null),
+  isEnrolledInInsurance: vi.fn(async () => false),
   getAllInvoices: (...args: unknown[]) => getAllInvoices(...args),
-  getUsdcAllowance: (...args: unknown[]) => getUsdcAllowance(...args),
-  buildApproveUsdcTransaction: vi.fn(),
+  getTokenAllowance: (...args: unknown[]) => getTokenAllowance(...args),
+  buildApproveTokenTransaction: vi.fn(),
   fundInvoice: vi.fn(),
   submitSignedTransaction: vi.fn(),
+  claimDefault: vi.fn(),
+  getPayerScoresBatch: vi.fn().mockResolvedValue(new Map()),
 }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -104,7 +105,7 @@ async function renderMyFundedTab(invoice: any) {
 describe('StatusBadge – all five invoice statuses', () => {
   beforeEach(() => {
     (useInvoices as any).mockReset();
-    getUsdcAllowance.mockReset();
+    getTokenAllowance.mockReset();
   });
 
   it("renders the 'Funded' badge with blue classes", async () => {
@@ -113,8 +114,8 @@ describe('StatusBadge – all five invoice statuses', () => {
     await waitFor(() => {
       const badge = screen.getByText('Funded');
       expect(badge).toBeInTheDocument();
-      expect(badge.className).toContain('bg-blue-100');
-      expect(badge.className).toContain('text-blue-700');
+      expect(badge.className).toContain('bg-surface-container-low');
+      expect(badge.className).toContain('text-on-surface');
     });
   });
 
@@ -124,8 +125,8 @@ describe('StatusBadge – all five invoice statuses', () => {
     await waitFor(() => {
       const badge = screen.getByText('Paid');
       expect(badge).toBeInTheDocument();
-      expect(badge.className).toContain('bg-green-100');
-      expect(badge.className).toContain('text-green-700');
+      expect(badge.className).toContain('bg-surface-container-low');
+      expect(badge.className).toContain('text-on-surface');
     });
   });
 
@@ -135,8 +136,8 @@ describe('StatusBadge – all five invoice statuses', () => {
     await waitFor(() => {
       const badge = screen.getByText('Defaulted');
       expect(badge).toBeInTheDocument();
-      expect(badge.className).toContain('bg-red-100');
-      expect(badge.className).toContain('text-red-700');
+      expect(badge.className).toContain('bg-surface-container-low');
+      expect(badge.className).toContain('text-on-surface');
     });
   });
 
@@ -146,8 +147,8 @@ describe('StatusBadge – all five invoice statuses', () => {
     await waitFor(() => {
       const badge = screen.getByText('Cancelled');
       expect(badge).toBeInTheDocument();
-      expect(badge.className).toContain('bg-red-100');
-      expect(badge.className).toContain('text-red-700');
+      expect(badge.className).toContain('bg-surface-container-low');
+      expect(badge.className).toContain('text-on-surface');
     });
   });
 
@@ -192,14 +193,9 @@ describe('StatusBadge – all five invoice statuses', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'My Funded' }));
 
     await waitFor(() => {
-      const funded = screen.getByText('Funded');
-      expect(funded.className).toContain('bg-blue-100');
-
-      const paid = screen.getByText('Paid');
-      expect(paid.className).toContain('bg-green-100');
-
-      const defaulted = screen.getByText('Defaulted');
-      expect(defaulted.className).toContain('bg-red-100');
+      expect(screen.getByText('Funded')).toBeInTheDocument();
+      expect(screen.getByText('Paid')).toBeInTheDocument();
+      expect(screen.getByText('Defaulted')).toBeInTheDocument();
     });
   });
 });

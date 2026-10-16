@@ -1,3 +1,21 @@
+/**
+ * Cross-page accessibility + keyboard-navigation smoke suite.
+ *
+ * Split with __tests__/accessibility/*.a11y.test.tsx (see that directory for the
+ * counterpart doc comment):
+ * - This file renders real pages through the full app `Providers` tree (i18n, wallet,
+ *   toast, notifications) and axe-checks Home, Pay/Invoice, LP Dashboard, Governance,
+ *   Leaderboard, and Freelancer. It's the only place that a11y-checks the Leaderboard
+ *   and Freelancer pages, and the only place that exercises tab-order keyboard
+ *   navigation across pages.
+ * - It intentionally re-checks Home/Governance/LP Dashboard for axe violations even
+ *   though those pages also have dedicated per-page files, since this file mounts them
+ *   under the real Providers tree (different mocking depth) rather than in isolation -
+ *   that's a deliberate regression safety net, not accidental duplication.
+ * - It does NOT cover Analytics or Marketplace pages, or per-page structural assertions
+ *   (heading hierarchy, landmarks, table/list semantics, form control labeling) - see
+ *   the per-page files for those.
+ */
 import { render, screen, waitFor } from '@testing-library/react';
 import { axe } from 'jest-axe';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -39,8 +57,14 @@ vi.mock('@/context/ToastContext', () => ({
 
 vi.mock('@/hooks/useApprovedTokens', () => ({
   useApprovedTokens: vi.fn(() => ({
+    tokens: [],
     tokenMap: new Map([['USDC', { contractId: 'USDC', symbol: 'USDC' }]]),
     defaultToken: { contractId: 'USDC', symbol: 'USDC' },
+    isLoading: false,
+    error: null,
+    validateTokenAddress: vi.fn(() => true),
+    approveToken: vi.fn(),
+    removeToken: vi.fn(),
   })),
 }));
 
@@ -79,6 +103,28 @@ vi.mock('@/hooks/usePayerScores', () => ({
   usePayerScores: vi.fn(() => ({
     scores: new Map(),
     risks: new Map(),
+  })),
+}));
+
+// The global `useQuery` mock (vitest.setup.ts) returns `data: []` for every
+// consumer, which fits list-shaped hooks (useInvoices, etc.) but breaks
+// useContractStats — Stats.tsx expects a single ContractStats object and
+// crashes on `[].total_invoices.toLocaleString()`. Override with an
+// object-shaped mock, matching the real hook's return type.
+vi.mock('@/hooks/useContractStats', () => ({
+  useContractStats: vi.fn(() => ({
+    data: {
+      total_invoices: 0,
+      total_funded: 0,
+      total_paid: 0,
+      total_volume_usd: 0,
+      total_protocol_fees_usd: 0,
+      feeRateBps: 0,
+      volume_by_token: [],
+      daily_volume: [],
+      dispute_rate: { rate30dPercent: 0, funded30d: 0, disputed30d: 0, dailyTrend90d: [] },
+    },
+    isLoading: false,
   })),
 }));
 
@@ -131,10 +177,16 @@ describe('Accessibility checks', () => {
   });
 
   it('Home page should have no accessibility violations', async () => {
+    // Home renders the full page (Navbar, Hero, Stats, PersonalizedDashboard,
+    // Footer, etc.) under the real Providers tree, then axe-scans the whole
+    // thing - the heaviest single case in this suite. The 15s timeout below
+    // matched the older global default but still flaked under the CI/coverage
+    // job's broad `--coverage.include=src/**` instrumentation on
+    // ubuntu-latest. Match the current 30s global testTimeout headroom.
     const { container } = render(<HomePage />, { wrapper: TestWrapper });
     const results = await axe(container, axeConfig);
     expect(results).toHaveNoViolations();
-  });
+  }, 30000);
 
   it('Invoice detail page should have no accessibility violations', async () => {
     const params = Promise.resolve({ id: '1' }) as any;

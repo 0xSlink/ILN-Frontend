@@ -25,7 +25,7 @@ vi.mock('react-i18next', () => ({
 
 describe('RoadmapPage', () => {
   it('renders roadmap page with header', () => {
-    const { asFragment } = render(<RoadmapPage />);
+    render(<RoadmapPage />);
 
     // Check for main heading
     expect(screen.getByText('ILN Roadmap')).toBeInTheDocument();
@@ -52,10 +52,10 @@ describe('RoadmapPage', () => {
   it('shows status counts', () => {
     render(<RoadmapPage />);
 
-    // Check for status summary badges
-    expect(screen.getByText(/Completed/)).toBeInTheDocument();
-    expect(screen.getByText(/In Progress/)).toBeInTheDocument();
-    expect(screen.getByText(/Planned/)).toBeInTheDocument();
+    // Check for status summary badges (each status also labels its own items)
+    expect(screen.getAllByText(/Completed/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/In Progress/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Planned/).length).toBeGreaterThan(0);
   });
 
   it('displays GitHub CTA section', () => {
@@ -68,11 +68,11 @@ describe('RoadmapPage', () => {
     expect(githubLink).toHaveAttribute('target', '_blank');
   });
 
-  it('renders Navbar and Footer', () => {
+  it('renders Navbar but not Footer (footer is home-page-only)', () => {
     render(<RoadmapPage />);
 
     expect(screen.getByTestId('navbar')).toBeInTheDocument();
-    expect(screen.getByTestId('footer')).toBeInTheDocument();
+    expect(screen.queryByTestId('footer')).not.toBeInTheDocument();
   });
 
   it('snapshot test matches expected output', () => {

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Proposal, VoteChoice } from '@/utils/governance';
 import QuorumProgressBar from './QuorumProgressBar';
 import VoteProgressBar from './VoteProgressBar';
+import GovernanceMockStatusBanner from './governance/GovernanceMockStatusBanner';
 
 interface VoteSectionProps {
   proposal: Proposal;
@@ -105,6 +106,8 @@ export default function VoteSection({
 
   return (
     <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 space-y-6">
+      <GovernanceMockStatusBanner action="castVote" />
+
       <div>
         <div className="flex items-center justify-between gap-3 mb-3">
           <div>

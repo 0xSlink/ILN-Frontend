@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useWallet } from '@/context/WalletContext';
-import { useToast } from '@/context/ToastContext';
 import { useTransaction } from '@/hooks/useTransaction';
 import TokenSelector, { TokenAmount } from './TokenSelector';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
@@ -12,9 +11,8 @@ import {
   Invoice,
   submitSignedTransaction,
 } from '@/utils/soroban';
-import { formatTokenAmount, formatDate, calculateYield } from '@/utils/format';
-import { useFundInvoice } from '@/hooks/useInvoices';
-import { getPayerScore, PayerScoreResult } from '@/utils/soroban';
+import { formatTokenAmount, calculateYield } from '@/utils/format';
+import { PayerScoreResult } from '@/utils/soroban';
 import { fetchProtocolParameters } from '@/utils/governance';
 import FieldTooltip from './FieldTooltip';
 
@@ -33,8 +31,7 @@ export default function FundConfirmModal({
   onSuccess,
   payerScore,
 }: FundConfirmModalProps) {
-  const { address, signTx } = useWallet();
-  const { addToast, updateToast } = useToast();
+  const { address } = useWallet();
   const { execute, loading: txLoading, error: txError, signingModal } = useTransaction();
   const isApproving = txLoading; // or more specific state if needed
   const isFunding = txLoading;
@@ -43,25 +40,22 @@ export default function FundConfirmModal({
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [fundingError, setFundingError] = useState<string | null>(null);
   const [faqExpanded, setFaqExpanded] = useState(false);
-  const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
+  const defaultSelectedTokenId = invoice?.token ?? defaultToken?.contractId ?? null;
+  const [selectedTokenId, setSelectedTokenId] = useState<string | null>(defaultSelectedTokenId);
+  const selectedTokenIdToUse = selectedTokenId ?? defaultSelectedTokenId;
+  const [renderedAtSeconds] = useState(() => Date.now() / 1000);
   const [protocolFeeBps, setProtocolFeeBps] = useState<number | null>(null);
   const modalRef = useFocusTrap<HTMLDivElement>(true, onClose);
 
-  useEffect(() => {
-    if (invoice && !selectedTokenId) {
-      setSelectedTokenId(invoice.token || defaultToken?.contractId || null);
-    }
-  }, [invoice, selectedTokenId, defaultToken]);
-
   const selectedToken = useMemo(() => {
-    return selectedTokenId ? tokenMap.get(selectedTokenId) || null : null;
-  }, [selectedTokenId, tokenMap]);
+    return selectedTokenIdToUse ? tokenMap.get(selectedTokenIdToUse) || null : null;
+  }, [selectedTokenIdToUse, tokenMap]);
 
   const isTokenMismatch = !!(
     invoice &&
-    selectedTokenId &&
+    selectedTokenIdToUse &&
     invoice.token &&
-    selectedTokenId !== invoice.token
+    selectedTokenIdToUse !== invoice.token
   );
 
   const selectedInvoiceToken = invoice
@@ -105,7 +99,14 @@ export default function FundConfirmModal({
 
   useEffect(() => {
     if (!invoice || !address) return;
-    void refreshAllowance(invoice, address);
+    const inv = invoice;
+    const walletAddress = address;
+
+    async function fetchAllowance() {
+      await refreshAllowance(inv, walletAddress);
+    }
+
+    void fetchAllowance();
   }, [address, refreshAllowance, invoice]);
 
   if (!invoice) return null;
@@ -275,7 +276,7 @@ export default function FundConfirmModal({
                 <p className="text-lg text-on-surface-variant">
                   {isCheckingAllowance
                     ? 'Checking current allowance...'
-                    : `You're authorising ILN to spend ${selectedToken ? formatTokenAmount(invoice.amount, selectedToken) : invoice.amount.toString()} ${selectedToken?.symbol || tokenSymbol} from your wallet. This is a one-time approval.`}
+                    : `You're authorising ILN to spend ${selectedToken ? formatTokenAmount(invoice.amount, selectedToken) : `${invoice.amount.toString()} ${tokenSymbol}`} from your wallet. This is a one-time approval.`}
                 </p>
               </div>
 
@@ -440,7 +441,7 @@ export default function FundConfirmModal({
                 <div className="flex justify-between text-sm border-t border-surface-dim pt-4">
                   <span className="text-on-surface-variant">Days until due:</span>
                   <span className="font-bold text-on-surface">
-                    {Math.max(0, Math.ceil((Number(invoice.due_date) - Date.now() / 1000) / 86400))}{' '}
+                    {Math.max(0, Math.ceil((Number(invoice.due_date) - renderedAtSeconds) / 86400))}{' '}
                     days
                   </span>
                 </div>

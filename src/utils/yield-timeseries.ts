@@ -12,8 +12,7 @@ export interface YieldDataPoint {
   cumulative: number;
 }
 
-const TOKEN_SYMBOLS = ['USDC', 'EURC', 'XLM'] as const;
-type TokenSymbol = (typeof TOKEN_SYMBOLS)[number];
+type TokenSymbol = 'USDC' | 'EURC' | 'XLM';
 
 function weekStart(ts: number): string {
   const d = new Date(ts * 1000);

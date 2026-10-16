@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { isValidStellarAddress, getVotingPower as fetchVotingPower } from '@/utils/governance';
+import { isValidStellarAddress } from '@/utils/governance';
 import { resolveFederatedAddress } from '@/utils/federation';
 import { useWallet } from '@/context/WalletContext';
 import { useTransaction } from '@/hooks/useTransaction';
+import GovernanceMockStatusBanner from '@/components/governance/GovernanceMockStatusBanner';
 import {
   Users,
   UserPlus,
@@ -12,7 +13,6 @@ import {
   AlertCircle,
   Loader2,
   CheckCircle2,
-  RefreshCcw,
   ShieldCheck,
 } from 'lucide-react';
 
@@ -26,17 +26,19 @@ export const DelegationPanel: React.FC = () => {
 
   // Mock delegation state
   const [currentDelegation, setCurrentDelegation] = useState<string | null>(null);
-  const [ownBalance, setOwnBalance] = useState(1250);
-  const [incomingDelegations, setIncomingDelegations] = useState(450);
-  const [loading, setLoading] = useState(true);
+  const [ownBalance, _setOwnBalance] = useState(1250);
+  const [incomingDelegations, _setIncomingDelegations] = useState(450);
+  const [_loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (isConnected && address) {
-      // Simulate fetching current delegation status
-      setTimeout(() => {
-        setLoading(false);
-      }, 800);
-    }
+    if (!isConnected || !address) return;
+
+    // Simulate fetching current delegation status
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 800);
+
+    return () => clearTimeout(timer);
   }, [isConnected, address]);
 
   const totalVotingWeight = ownBalance + incomingDelegations;
@@ -101,6 +103,8 @@ export const DelegationPanel: React.FC = () => {
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 p-6 shadow-sm">
+      <GovernanceMockStatusBanner action="delegateVotingPower" />
+
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center space-x-2">
           <ShieldCheck className="w-6 h-6 text-indigo-600" />

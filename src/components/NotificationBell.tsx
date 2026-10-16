@@ -53,12 +53,27 @@ export default function NotificationBell() {
   const prevUnreadRef = useRef(unreadCount);
   const [isPulsing, setIsPulsing] = useState(false);
 
+  const [announcement, setAnnouncement] = useState('');
+
   useEffect(() => {
     if (unreadCount > prevUnreadRef.current) {
       setIsPulsing(true);
-      const timer = setTimeout(() => setIsPulsing(false), 2000);
+
+      // Announce new notifications to screen readers
+      const newCount = unreadCount - prevUnreadRef.current;
+      setAnnouncement(`${newCount} new notification${newCount > 1 ? 's' : ''}`);
+
+      // Clear visual pulse after 2 seconds
+      const pulseTimer = setTimeout(() => setIsPulsing(false), 2000);
+
+      // Clear announcement after screen readers have time to read it
+      const announceTimer = setTimeout(() => setAnnouncement(''), 3000);
+
       prevUnreadRef.current = unreadCount;
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(pulseTimer);
+        clearTimeout(announceTimer);
+      };
     }
     prevUnreadRef.current = unreadCount;
   }, [unreadCount]);
@@ -115,6 +130,11 @@ export default function NotificationBell() {
           </span>
         )}
       </button>
+
+      {/* Screen reader announcement for new notifications */}
+      <div role="status" aria-live="polite" className="sr-only" aria-label="Notification updates">
+        {announcement}
+      </div>
 
       {open && <NotificationDrawer onClose={() => setOpen(false)} />}
     </div>

@@ -83,4 +83,27 @@ describe('GET /api/indexer/[...path]', () => {
     expect(res.status).toBe(503);
     expect((await res.json()).error.code).toBe('not_configured');
   });
+
+  it('rate limits per client with a typed envelope and Retry-After', async () => {
+    global.fetch = vi
+      .fn()
+      .mockImplementation(
+        async () => new Response('[]', { headers: { 'X-Indexer-Api-Version': '1.0.0' } })
+      );
+    const request = () =>
+      GET(
+        new NextRequest('http://localhost/api/indexer/leaderboard', {
+          headers: { 'x-forwarded-for': '198.51.100.77' },
+        }),
+        { params: Promise.resolve({ path: ['leaderboard'] }) }
+      );
+
+    for (let i = 0; i < 60; i += 1) expect((await request()).status).toBe(200);
+
+    const limited = await request();
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get('retry-after')).toMatch(/^\d+$/);
+    expect((await limited.json()).error.code).toBe('rate_limited');
+    expect(global.fetch).toHaveBeenCalledTimes(60);
+  });
 });

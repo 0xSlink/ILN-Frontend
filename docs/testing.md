@@ -1,139 +1,86 @@
-# Testing Guide
+# Testing strategy
 
-This document outlines the testing strategy and setup for the ILN-Frontend project.
+The repository uses a layered testing setup rather than a single test tool. Use the tool that matches the risk you are changing:
 
-## Testing Stack
+- Unit and integration tests with Vitest for utilities, hooks, and component behavior.
+- Browser-level regression tests with Playwright for critical flows such as wallet connection, invoice workflows, governance, and responsive layouts.
+- Accessibility checks with jest-axe for component-level accessibility regressions.
+- Visual regression and UI documentation with Storybook plus Chromatic for high-risk components and design-system states.
+- MSW to mock network responses where a real backend or contract node is unnecessary.
 
-- **Unit & Integration Tests**: [Vitest](https://vitest.dev/)
-- **E2E Tests**: [Playwright](https://playwright.dev/)
-- **Visual Regression**: [Storybook](https://storybook.js.org/) + [Chromatic](https://chromatic.com/)
-- **Mutation Testing**: [Stryker](https://stryker-mutator.io/)
+## When to use which tool
 
-## Running Tests
+| Scenario                                               | Preferred tool        | Why                                                                                              |
+| ------------------------------------------------------ | --------------------- | ------------------------------------------------------------------------------------------------ |
+| Pure logic, state hooks, or small component behavior   | Vitest                | Fast feedback, easy to run locally, and already used across `__tests__/` and `src/**/__tests__`. |
+| Full user journey in a browser                         | Playwright            | Exercises real navigation and interaction across the app.                                        |
+| Accessibility regressions for a component              | jest-axe              | Best fit for screen-reader and semantic HTML issues.                                             |
+| UI consistency and visual diffs                        | Storybook + Chromatic | Lets contributors review component states and catch unintended styling changes.                  |
+| API or contract responses that should be deterministic | MSW                   | Keeps tests isolated from external services and matches the current mock setup.                  |
 
-### Unit Tests
+## Test locations and conventions
 
-```bash
-# Run once
-npm test
+### Vitest
 
-# Watch mode
-npm run test:watch
-```
+Vitest suites live in the repository test folders and next to relevant source files:
 
-### E2E Tests
+- `__tests__/` for broader app-level, contract, and integration coverage.
+- `src/**/__tests__/` for hooks, utilities, and focused component tests.
 
-```bash
-# Run all E2E tests
-npm run test:e2e
-
-# Run specific test file
-npm run test:e2e -- responsive-mobile.spec.ts
-```
-
-### Storybook
+Run locally with:
 
 ```bash
-# Start Storybook development server
-npm run storybook
-
-# Build Storybook
-npm run build-storybook
+pnpm test
+pnpm test:watch
 ```
 
-### Mutation Testing
+### Playwright
+
+End-to-end tests live under `e2e/` and should focus on the user flows that are too expensive to prove with unit tests alone. Run them with:
 
 ```bash
-# Run mutation testing (generates report in mutation-report/)
-npm run test:mutation
+pnpm run test:e2e
 ```
 
-Mutation testing is run on a weekly schedule via CI. It validates that tests would actually catch real regressions by simulating code mutations and checking if tests fail.
+### Accessibility
 
-#### Baseline Mutation Score
+Accessibility checks are integrated into the Vitest-based component test suites and should be used for UI changes that affect semantics, tab order, or ARIA state. The repo already depends on `jest-axe`.
 
-Mutation testing is configured to focus on high-value code:
-- **Target directories**: `src/utils/`, `src/hooks/`
-- **Thresholds**: 
-  - High: 90% (target)
-  - Medium: 75%
-  - Low: 60% (minimum acceptable)
+### Storybook and Chromatic
 
-Results are uploaded as workflow artifacts for analysis.
+Storybook stories should be added alongside high-value components when the component has meaningful variations such as loading, empty, error, or success states. Start Storybook locally with:
 
-## Test Structure
-
-### Unit Tests
-
-Place unit tests alongside source files:
-```
-src/
-  utils/
-    calculate.ts
-    calculate.test.ts
-  hooks/
-    useInvoice.ts
-    useInvoice.test.ts
+```bash
+pnpm run storybook
 ```
 
-### E2E Tests
+Use Chromatic in CI for visual regression review on the main branch and release branches.
 
-Place E2E tests in dedicated directory:
+## MSW and fixtures
+
+The app already uses Mock Service Worker to stub network traffic in local tests and browser-based development. The handlers live in [src/mocks/handlers.ts](../src/mocks/handlers.ts), and the fixture data is stored under [src/mocks/fixtures](../src/mocks/fixtures). When adding a new test that depends on an API response:
+
+1. Prefer extending the existing MSW handlers rather than adding ad-hoc fetch stubs inline.
+2. Keep fixtures small and representative of the real schema.
+3. Reuse the shared handlers for Stellar, leaderboard, and notification endpoints so tests stay consistent.
+
+## Coverage gates
+
+The contract integration workflow in [.github/workflows/contract-tests.yml](../.github/workflows/contract-tests.yml) runs Vitest with coverage against the contract-facing code paths and enforces a 90% coverage threshold. The gate is intentionally scoped to the contract layer (`src/utils/soroban`, `src/utils/contract-stats`, `src/utils/governance`, and `src/lib/contract`) because those modules carry the highest risk of regressions and are the most expensive to validate through UI-only tests.
+
+## Recommended workflow for contributors
+
+1. Start with a Vitest test for any bug fix or local logic change.
+2. Add or update Playwright coverage when the change affects an end-to-end user journey.
+3. Add a Storybook story when the change introduces new component states or visual variants.
+4. Run the relevant test command before opening a PR.
+
+## Common commands
+
+```bash
+pnpm test
+pnpm run test:e2e
+pnpm run test:mutation
+pnpm run storybook
+pnpm run build-storybook
 ```
-e2e/
-  responsive-mobile.spec.ts
-  contract-integration.spec.ts
-```
-
-### Stories
-
-Place Storybook stories with components:
-```
-src/components/
-  WalletButton.tsx
-  WalletButton.stories.tsx
-```
-
-## Coverage Goals
-
-- **Unit Test Coverage**: Target 80%+ for utils and hooks
-- **Storybook Coverage**: All high-risk components should have stories covering default, loading, error, and empty states
-- **E2E Coverage**: All major user flows and responsive behavior
-
-## Mobile Responsive Testing
-
-The `e2e/responsive-mobile.spec.ts` suite tests layout integrity across multiple viewports:
-
-- **375×812** (iPhone SE)
-- **390×844** (Google Pixel)
-
-Tests verify:
-- No horizontal overflow
-- Touch targets meet 44×44px minimum
-- Layout adapts properly to mobile
-
-Current coverage:
-- ✅ Home, Marketplace, Submit, Dashboard
-- ✅ Governance, Governance/New
-- ✅ Invoices, Invoices/Batch
-- ✅ Stats, Tokens
-
-## Best Practices
-
-1. **Unit Tests**: Test business logic, utilities, and hooks in isolation
-2. **E2E Tests**: Test critical user flows end-to-end with real browser
-3. **Stories**: Document component states and variations visually
-4. **Mutation Testing**: Use to validate test quality, not to achieve 100% (diminishing returns)
-
-## CI/CD Integration
-
-- **Per-PR**: Unit tests + E2E tests (required to pass)
-- **Weekly**: Mutation testing (informational, generates artifacts)
-- **On Push to Main**: Chromatic visual regression checks
-
-## Resources
-
-- [Vitest Documentation](https://vitest.dev/guide/)
-- [Playwright Documentation](https://playwright.dev/docs/intro)
-- [Storybook Documentation](https://storybook.js.org/docs/)
-- [Stryker Documentation](https://stryker-mutator.io/docs/)

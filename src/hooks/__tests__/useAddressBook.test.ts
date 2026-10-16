@@ -2,18 +2,21 @@ import { renderHook, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import useAddressBook from '../useAddressBook';
 
-const TEST_WALLET = 'GDCXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXABCD';
+// vi.mock is hoisted above module-level consts, so the address is hoisted too.
+const { TEST_WALLET } = vi.hoisted(() => ({
+  TEST_WALLET: 'GDCXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXABCD',
+}));
+
+vi.mock('../../context/WalletContext', () => ({
+  useWallet: () => ({
+    address: TEST_WALLET,
+  }),
+}));
 
 describe('useAddressBook', () => {
   beforeEach(() => {
     // Clear localStorage before each test
     localStorage.clear();
-    // Mock the wallet context
-    vi.mock('../../context/WalletContext', () => ({
-      useWallet: () => ({
-        address: TEST_WALLET,
-      }),
-    }));
   });
 
   it('loads address book from localStorage', () => {

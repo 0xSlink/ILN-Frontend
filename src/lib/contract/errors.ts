@@ -10,7 +10,8 @@ export type ContractErrorCode =
   | 'ArithmeticOverflow'
   | 'TokenNotSupported'
   | 'ContractPaused'
-  | 'InvalidInvoiceState';
+  | 'InvalidInvoiceState'
+  | 'FeeOnTransferToken';
 
 export interface ContractErrorInfo {
   title: string;
@@ -78,6 +79,12 @@ export const CONTRACT_ERROR_MAP: Record<ContractErrorCode, ContractErrorInfo> = 
     title: 'Invalid Invoice State',
     message: 'The invoice is not in the correct state to perform this action.',
     remediation: 'Verify the current status of the invoice before proceeding.',
+  },
+  FeeOnTransferToken: {
+    title: 'Unsupported Token Type',
+    message:
+      'This token implements fee-on-transfer and cannot be added to the ILN allowlist. Tokens must transfer the exact amount specified.',
+    remediation: 'Choose a standard token that transfers the full amount without deducting a fee.',
   },
 };
 

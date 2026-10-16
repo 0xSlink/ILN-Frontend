@@ -11,7 +11,8 @@ describe('QuorumProgressBar', () => {
     expect(bar).toHaveAttribute('aria-valuemax', '100000');
     expect(bar).toHaveAttribute('aria-valuenow', '40000');
     expect(bar).toHaveAttribute('aria-valuetext', expect.stringContaining('40%'));
-    expect(screen.getByText(/Quorum pending/i)).toBeInTheDocument();
+    // Rendered twice: the visible badge and the sr-only live-region status.
+    expect(screen.getAllByText(/Quorum pending/i).length).toBeGreaterThan(0);
   });
 
   it('announces quorum met with accessible values', () => {
@@ -22,7 +23,7 @@ describe('QuorumProgressBar', () => {
     expect(bar).toHaveAttribute('aria-valuemax', '100000');
     expect(bar).toHaveAttribute('aria-valuenow', '100000');
     expect(bar).toHaveAttribute('aria-valuetext', expect.stringContaining('100%'));
-    expect(screen.getByText(/Quorum met/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Quorum met/i).length).toBeGreaterThan(0);
   });
 
   it('updates label when votes change', () => {

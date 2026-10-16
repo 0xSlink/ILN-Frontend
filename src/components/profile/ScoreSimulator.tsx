@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Info, TrendingUp, AlertTriangle } from 'lucide-react';
+import { TrendingUp, AlertTriangle } from 'lucide-react';
 
 interface ScoreSimulatorProps {
   currentPaid: number;
@@ -12,7 +12,7 @@ interface ScoreSimulatorProps {
 export const ScoreSimulator: React.FC<ScoreSimulatorProps> = ({
   currentPaid,
   currentSubmitted,
-  currentDefaulted,
+  currentDefaulted: _currentDefaulted,
 }) => {
   const [additionalPaid, setAdditionalPaid] = useState<number>(0);
   const [additionalDefaulted, setAdditionalDefaulted] = useState<number>(0);
@@ -36,14 +36,18 @@ export const ScoreSimulator: React.FC<ScoreSimulatorProps> = ({
   useEffect(() => {
     // Simple animation logic for the score transition
     if (typeof projectedScore === 'number') {
-      let start = typeof displayScore === 'number' ? displayScore : 0;
+      const start = typeof displayScore === 'number' ? displayScore : 0;
       const end = projectedScore;
       const duration = 500;
-      const startTime = performance.now();
+      // Anchor on the first frame's timestamp: performance.now() is not
+      // guaranteed to share a time origin with requestAnimationFrame, and a
+      // negative elapsed time drove the displayed score far below the real one.
+      let startTime: number | null = null;
 
       const animate = (currentTime: number) => {
+        if (startTime === null) startTime = currentTime;
         const elapsed = currentTime - startTime;
-        const progress = Math.min(elapsed / duration, 1);
+        const progress = Math.min(Math.max(elapsed / duration, 0), 1);
         const current = start + (end - start) * progress;
 
         setDisplayScore(Math.round(current));

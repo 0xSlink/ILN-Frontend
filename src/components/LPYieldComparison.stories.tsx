@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import LPYieldComparison from './LPYieldComparison';
 
 const meta: Meta<typeof LPYieldComparison> = {

@@ -31,7 +31,7 @@ export default function DisputeInvoiceModal({
     if (!address || !canSubmit) return;
 
     const reasonHash = await hashEvidence(evidence);
-    const toastId = addToast({ type: 'pending', title: 'Submitting dispute...' });
+    addToast({ type: 'pending', title: 'Submitting dispute...' });
 
     try {
       const tx = await disputeInvoice(address, invoice.id, reasonHash);

@@ -57,6 +57,8 @@ export default function InvoiceMarketplaceCard({
   minReputation = 0,
   isBookmarked = false,
   onBookmark,
+  isSelected = false,
+  onToggleCompare,
 }: InvoiceMarketplaceCardProps) {
   const [override, setOverride] = useState(false);
   const token = tokenMap.get(invoice.token ?? '') ?? defaultToken;

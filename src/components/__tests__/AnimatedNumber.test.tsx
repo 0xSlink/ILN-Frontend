@@ -54,8 +54,9 @@ afterEach(() => {
 
 describe('AnimatedNumber', () => {
   it('renders with initial value of 0', () => {
+    // The default formatter renders two decimal places (decimals prop, default 2).
     render(<AnimatedNumber value={100} duration={10} />);
-    expect(screen.getByTestId('animated-number').textContent).toBe('0');
+    expect(screen.getByTestId('animated-number').textContent).toBe('0.00');
   });
 
   it('animates to target value after duration', async () => {
@@ -64,7 +65,7 @@ describe('AnimatedNumber', () => {
     // Wait for animation to complete
     await waitFor(
       () => {
-        expect(screen.getByTestId('animated-number').textContent).toBe('100');
+        expect(screen.getByTestId('animated-number').textContent).toBe('100.00');
       },
       { timeout: 500 }
     );
@@ -75,7 +76,7 @@ describe('AnimatedNumber', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByTestId('animated-number').textContent).toBe('1,247');
+        expect(screen.getByTestId('animated-number').textContent).toBe('1,247.00');
       },
       { timeout: 500 }
     );
@@ -164,7 +165,7 @@ describe('AnimatedNumber', () => {
     render(<AnimatedNumber value={100} duration={1000} />);
 
     // Should immediately show final value without animation
-    expect(screen.getByTestId('animated-number').textContent).toBe('100');
+    expect(screen.getByTestId('animated-number').textContent).toBe('100.00');
   });
 
   it('re-animates when value prop changes', async () => {
@@ -173,7 +174,7 @@ describe('AnimatedNumber', () => {
     // First animation completes
     await waitFor(
       () => {
-        expect(screen.getByTestId('animated-number').textContent).toBe('50');
+        expect(screen.getByTestId('animated-number').textContent).toBe('50.00');
       },
       { timeout: 500 }
     );
@@ -184,7 +185,7 @@ describe('AnimatedNumber', () => {
     // Second animation completes
     await waitFor(
       () => {
-        expect(screen.getByTestId('animated-number').textContent).toBe('100');
+        expect(screen.getByTestId('animated-number').textContent).toBe('100.00');
       },
       { timeout: 500 }
     );
@@ -199,12 +200,12 @@ describe('AnimatedNumber', () => {
     render(<AnimatedNumber value={100} />);
 
     // Should start at 0
-    expect(screen.getByTestId('animated-number').textContent).toBe('0');
+    expect(screen.getByTestId('animated-number').textContent).toBe('0.00');
 
     // Wait for default animation to complete (1500ms + buffer)
     await waitFor(
       () => {
-        expect(screen.getByTestId('animated-number').textContent).toBe('100');
+        expect(screen.getByTestId('animated-number').textContent).toBe('100.00');
       },
       { timeout: 2000 }
     );

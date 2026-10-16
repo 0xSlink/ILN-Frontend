@@ -20,7 +20,7 @@ interface YieldAnalyticsChartProps {
   isLoading?: boolean;
 }
 
-const RANGES: YieldRange[] = [30, 60, 90];
+const RANGES: YieldRange[] = [30, 60, 90] as unknown as YieldRange[];
 
 const TOKEN_COLORS: Record<string, string> = {
   USDC: '#6366f1',

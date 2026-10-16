@@ -5,7 +5,7 @@ import I18nProvider from '@/components/I18nProvider';
 import { ToastProvider } from '@/context/ToastContext';
 import { WalletProvider } from '@/context/WalletContext';
 import { NotificationProvider } from '@/context/NotificationContext';
-import NotificationEventPoller from '@/components/NotificationEventPoller';
+import { KeyboardShortcutsProvider } from '@/context/KeyboardShortcutsContext';
 import OnboardingFlow from '@/components/onboarding/OnboardingFlow';
 import FABProvider from '@/components/FABProvider';
 import FeedbackWidget from '@/components/FeedbackWidget';
@@ -73,24 +73,26 @@ export default function RootLayout({
               <ContractEventSync />
               <WalletProvider>
                 <NotificationProvider>
-                  <OfflineBanner />
-                  <NetworkMismatchBanner />
-                  <FABProvider />
-                  <div className="min-h-screen flex flex-col">
-                    <div className="flex-1">
-                      <Suspense fallback={null}>{children}</Suspense>
+                  <KeyboardShortcutsProvider>
+                    <OfflineBanner />
+                    <NetworkMismatchBanner />
+                    <FABProvider />
+                    <div className="min-h-screen flex flex-col">
+                      <div className="flex-1">
+                        <Suspense fallback={null}>{children}</Suspense>
+                      </div>
                     </div>
-                  </div>
-                  <Suspense fallback={null}>
-                    <OnboardingFlow />
-                  </Suspense>
-                  <Suspense fallback={null}>
-                    <WhatsNewModal />
-                  </Suspense>
-                  <Suspense fallback={null}>
-                    <CommandPalette />
-                  </Suspense>
-                  <FeedbackWidget />
+                    <Suspense fallback={null}>
+                      <OnboardingFlow />
+                    </Suspense>
+                    <Suspense fallback={null}>
+                      <WhatsNewModal />
+                    </Suspense>
+                    <Suspense fallback={null}>
+                      <CommandPalette />
+                    </Suspense>
+                    <FeedbackWidget />
+                  </KeyboardShortcutsProvider>
                 </NotificationProvider>
               </WalletProvider>
             </ToastProvider>

@@ -3,25 +3,29 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=20.9.0 <21"
+    "node": ">=20.19.0 <21"
   },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "env:check": "node scripts/check-env-example.mjs",
     "lint:fix": "eslint --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=1",
     "test:watch": "vitest",
+    "verify": "pnpm run lint && pnpm run env:check && pnpm run format:check && pnpm exec tsc --noEmit && pnpm test",
+    "clean": "rm -rf .next .turbo storybook-static coverage test-results playwright-report .lighthouseci tsconfig.tsbuildinfo",
     "test:e2e": "playwright test",
     "test:mutation": "stryker run",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "chromatic": "chromatic --exit-zero-on-changes",
     "prepare": "husky",
-    "generate:changelog": "npx git-cliff --config .gitcliff.toml"
+    "generate:changelog": "npx git-cliff --config .gitcliff.toml",
+    "scaffold:component": "npx tsx scripts/scaffold-component.ts"
   },
   "dependencies": {
     "@react-email/components": "1.0.12",
@@ -31,7 +35,6 @@
     "@tanstack/react-query": "^5.100.5",
     "@types/papaparse": "^5.5.2",
     "@types/qrcode": "^1.5.6",
-    "build-storybook": "^1.0.0",
     "i18next": "^26.0.8",
     "i18next-browser-languagedetector": "^8.2.1",
     "jspdf": "^4.2.1",
@@ -81,17 +84,17 @@
     "eslint-plugin-prettier": "^5.5.6",
     "eslint-plugin-storybook": "^10.4.1",
     "git-cliff": "^2.13.1",
+    "husky": "9.1.7",
     "jest-axe": "^10.0.0",
     "jsdom": "^29.0.2",
+    "lint-staged": "15.5.2",
     "msw": "^2.7.0",
     "playwright": "^1.60.0",
     "prettier": "3.5.3",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.5",
     "vite": "^8.0.14",
-    "husky": "9.1.7",
-    "lint-staged": "15.5.2"
+    "vitest": "^4.1.5"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": [

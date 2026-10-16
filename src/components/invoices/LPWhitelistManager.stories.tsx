@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import LPWhitelistManager from './LPWhitelistManager';
 
 const meta: Meta<typeof LPWhitelistManager> = {

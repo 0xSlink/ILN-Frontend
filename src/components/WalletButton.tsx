@@ -53,105 +53,106 @@ export default function WalletButton() {
 
   if (isConnected) {
     return (
-      <div className="flex flex-col items-end gap-3 sm:flex-row sm:items-center">
-        <div className="flex flex-col items-end gap-2">
-          {!networkMismatch ? (
-            <div className="flex flex-wrap justify-end gap-2">
-              {isLoadingBalances && balances.size === 0 && unavailable.size === 0 ? (
-                <span className="rounded-full border border-outline-variant/15 bg-surface-container-low px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-on-surface-variant">
-                  Loading balances...
-                </span>
-              ) : (
-                allowedTokens.map((token) => {
-                  const amount = balances.get(token.contractId);
-                  const isUnavailable = unavailable.has(token.contractId);
-                  // Not yet loaded and not flagged unavailable — skip until it resolves.
-                  if (amount === undefined && !isUnavailable) return null;
+      <div className="relative" ref={dropdownRef}>
+        <button
+          onClick={() => setDropdownOpen(!dropdownOpen)}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full border border-outline-variant/15 transition-all focus:outline-none focus:ring-2 focus:ring-primary/50
+            ${dropdownOpen ? 'bg-surface-container' : 'bg-surface-container-low hover:bg-surface-container'}
+          `}
+          title={address!}
+          aria-expanded={dropdownOpen}
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${networkMismatch ? 'bg-error animate-pulse' : 'bg-green-500'}`}
+            aria-label={networkMismatch ? 'Wrong network' : 'Connected'}
+          />
+          <span
+            className={`text-[10px] font-bold uppercase ${networkMismatch ? 'text-error' : 'text-primary'}`}
+          >
+            {networkMismatch ? 'Wrong Network' : NETWORK_NAME}
+          </span>
+          <span className="text-on-surface-variant/30">|</span>
+          <span
+            className={`text-sm font-mono font-medium ${networkMismatch ? 'text-error' : 'text-on-surface'}`}
+          >
+            {formatAddress(address!)}
+          </span>
+          <span
+            className="material-symbols-outlined text-[16px] text-on-surface-variant transition-transform duration-200"
+            style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'none' }}
+          >
+            expand_more
+          </span>
+        </button>
 
-                  return (
-                    <span
-                      key={token.contractId}
-                      className="flex items-center gap-1.5 rounded-full border border-outline-variant/15 bg-surface-container-low px-3 py-1 text-xs font-bold text-on-surface"
-                    >
-                      <TokenAmount amount={formatTokenAmount(amount ?? 0n, token)} token={token} />
-                      {isUnavailable ? (
-                        <button
-                          type="button"
-                          onClick={connect}
-                          title={`No ${token.symbol} trustline found for this wallet. Add one to hold ${token.symbol}.`}
-                          className="rounded-full bg-primary-container px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-on-primary-container hover:bg-primary-container/80 transition-colors"
-                        >
-                          Add Trustline
-                        </button>
-                      ) : null}
-                    </span>
-                  );
-                })
-              )}
-            </div>
-          ) : null}
-          <div className="flex items-center gap-2">
-            <TestnetFaucetButton />
-            <div className="relative group" ref={dropdownRef}>
+        {dropdownOpen && (
+          <div className="absolute right-0 mt-2 min-w-[240px] rounded-xl border border-outline-variant/20 bg-surface-container-high shadow-xl z-[60] animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
+            {!networkMismatch && (
+              <div className="flex flex-col gap-1.5 p-3">
+                <p className="px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-on-surface-variant/70">
+                  Balances
+                </p>
+                {isLoadingBalances && balances.size === 0 && unavailable.size === 0 ? (
+                  <p className="px-1 text-xs text-on-surface-variant">Loading balances...</p>
+                ) : (
+                  allowedTokens.map((token) => {
+                    const amount = balances.get(token.contractId);
+                    const isUnavailable = unavailable.has(token.contractId);
+                    // Not yet loaded and not flagged unavailable — skip until it resolves.
+                    if (amount === undefined && !isUnavailable) return null;
+
+                    return (
+                      <div
+                        key={token.contractId}
+                        className="flex items-center justify-between gap-2 rounded-lg px-1 py-1 text-sm font-bold text-on-surface"
+                      >
+                        <TokenAmount
+                          amount={formatTokenAmount(amount ?? 0n, token)}
+                          token={token}
+                        />
+                        {isUnavailable ? (
+                          <button
+                            type="button"
+                            onClick={connect}
+                            title={`No ${token.symbol} trustline found for this wallet. Add one to hold ${token.symbol}.`}
+                            className="rounded-full bg-primary-container px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-on-primary-container hover:bg-primary-container/80 transition-colors"
+                          >
+                            Add Trustline
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1 border-t border-outline-variant/10 p-2">
+              <TestnetFaucetButton />
               <button
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full border border-outline-variant/15 transition-all focus:outline-none focus:ring-2 focus:ring-primary/50
-                  ${dropdownOpen ? 'bg-surface-container' : 'bg-surface-container-low hover:bg-surface-container'}
-                `}
-                title={address!}
-                aria-expanded={dropdownOpen}
+                onClick={() => {
+                  void handleCopyAddress();
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-container-highest text-sm text-on-surface w-full text-left transition-colors"
               >
-                <span
-                  className={`w-2 h-2 rounded-full ${networkMismatch ? 'bg-error animate-pulse' : 'bg-green-500'}`}
-                  aria-label={networkMismatch ? 'Wrong network' : 'Connected'}
-                />
-                <span
-                  className={`text-[10px] font-bold uppercase ${networkMismatch ? 'text-error' : 'text-primary'}`}
-                >
-                  {networkMismatch ? 'Wrong Network' : NETWORK_NAME}
+                <span className="material-symbols-outlined text-[16px]">
+                  {copied ? 'check' : 'content_copy'}
                 </span>
-                <span className="text-on-surface-variant/30">|</span>
-                <span
-                  className={`text-sm font-mono font-medium ${networkMismatch ? 'text-error' : 'text-on-surface'}`}
-                >
-                  {formatAddress(address!)}
-                </span>
-                <span
-                  className="material-symbols-outlined text-[16px] text-on-surface-variant transition-transform duration-200"
-                  style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'none' }}
-                >
-                  expand_more
-                </span>
+                {copied ? 'Copied!' : 'Copy Address'}
               </button>
-
-              {dropdownOpen && (
-                <div className="absolute right-0 mt-2 p-2 bg-surface-container-high border border-outline-variant/20 rounded-xl shadow-xl z-[60] flex flex-col min-w-[180px] animate-in fade-in zoom-in-95 duration-150">
-                  <button
-                    onClick={() => {
-                      void handleCopyAddress();
-                    }}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-container-highest text-sm text-on-surface w-full text-left transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">
-                      {copied ? 'check' : 'content_copy'}
-                    </span>
-                    {copied ? 'Copied!' : 'Copy Address'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      disconnect();
-                      setDropdownOpen(false);
-                    }}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-error-container hover:text-on-error-container text-error text-sm w-full text-left transition-colors mt-1"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">logout</span>
-                    Disconnect
-                  </button>
-                </div>
-              )}
+              <button
+                onClick={() => {
+                  disconnect();
+                  setDropdownOpen(false);
+                }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-error-container hover:text-on-error-container text-error text-sm w-full text-left transition-colors"
+              >
+                <span className="material-symbols-outlined text-[16px]">logout</span>
+                Disconnect
+              </button>
             </div>
           </div>
-        </div>
+        )}
       </div>
     );
   }

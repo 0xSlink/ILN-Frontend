@@ -1,6 +1,6 @@
 ## Summary
 
-<!-- What does this PR do and why? Keep it to a few sentences — link to context (issue, design doc, discussion) rather than re-explaining it here. -->
+<!-- What does this PR do and why? Provide a brief summary of the overall goal — link to context (issue, design doc, discussion). -->
 
 ## Related Issue
 
@@ -23,6 +23,33 @@ Closes #
 - [ ] Docs
 - [ ] Perf
 - [ ] Test
+
+## Detailed Changes & Rationale
+
+<!-- Describe the specific changes made and why. For multi-part or non-trivial PRs, break down changes by feature, component, or task. -->
+
+### 1. Key Changes
+
+-
+
+### 2. Implementation Details
+
+-
+
+## Files Changed Summary
+
+<!-- Optional summary list of created, modified, or deleted files to aid review. -->
+
+- **Created**:
+- **Modified**:
+- **Deleted**:
+
+## Breaking Changes
+
+<!-- Does this PR introduce breaking API, configuration, or data format changes? -->
+
+- [ ] No breaking changes
+- [ ] Yes (describe impact and migration steps below):
 
 ## Screenshots
 

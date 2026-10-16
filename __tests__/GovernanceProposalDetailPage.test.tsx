@@ -1,7 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, beforeEach, expect } from 'vitest';
 import ProposalDetailPage from '../app/governance/[id]/page';
-import { useRouter } from 'next/navigation';
 import { useWallet } from '@/context/WalletContext';
 import { useTransaction } from '@/hooks/useTransaction';
 import { useToast } from '@/context/ToastContext';
@@ -14,6 +13,21 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/context/WalletContext', () => ({
   useWallet: vi.fn(),
+}));
+
+// These pages render the app chrome (notification bell), which needs the
+// notification context.
+vi.mock('@/context/NotificationContext', () => ({
+  useNotification: () => ({
+    notifications: [],
+    unreadCount: 0,
+    setNotifications: vi.fn(),
+    addNotification: vi.fn(),
+    markAsRead: vi.fn(),
+    markAllAsRead: vi.fn(),
+    clearUnread: vi.fn(),
+    isRead: vi.fn(() => true),
+  }),
 }));
 
 vi.mock('@/hooks/useTransaction', () => ({

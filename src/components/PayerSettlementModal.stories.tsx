@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { fn } from 'storybook/test';
 import PayerSettlementModal from './PayerSettlementModal';
 
 const meta: Meta<typeof PayerSettlementModal> = {
@@ -38,7 +39,7 @@ export const Default: Story = {
     token: mockToken,
     isOpen: true,
     onClose: () => {},
-    onConfirm: async (amount) => console.log('Settle:', amount.toString()),
+    onConfirm: fn(async (amount) => `Settle: ${amount.toString()}`),
     submitting: false,
   },
 };

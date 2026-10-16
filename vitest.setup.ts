@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, vi } from 'vitest';
 import '@testing-library/jest-dom';
+import { configure } from '@testing-library/react';
 import { toHaveNoViolations } from 'jest-axe';
 import { server } from './src/mocks/server';
 
@@ -9,6 +10,13 @@ declare const expect: any;
 // Extend expect with jest-axe matchers
 expect.extend(toHaveNoViolations);
 
+// Testing Library's default waitFor/findBy timeout is 1000ms, which is too
+// tight once the process is under heavy CPU load - e.g. the CI/coverage job's
+// `--coverage.include=src/**` glob instruments most of the codebase and can
+// starve pending promises well past 1s. Matches the testTimeout/hookTimeout
+// headroom in vitest.config.ts.
+configure({ asyncUtilTimeout: 5_000 });
+
 // Mock ResizeObserver for recharts / other components that use it
 class ResizeObserverMock {
   observe = vi.fn();
@@ -17,20 +25,26 @@ class ResizeObserverMock {
 }
 global.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
 
+// Files that opt into `@vitest-environment node` (e.g. route-handler tests)
+// have no DOM, so the browser-only shims below are applied conditionally.
+const hasDom = typeof window !== 'undefined';
+
 // Mock matchMedia for testing components that use prefers-reduced-motion
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: vi.fn(), // deprecated
-    removeListener: vi.fn(), // deprecated
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-});
+if (hasDom) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(), // deprecated
+      removeListener: vi.fn(), // deprecated
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
 
 // Mock react-query
 vi.mock('@tanstack/react-query', () => ({
@@ -54,6 +68,25 @@ vi.mock('@tanstack/react-query', () => ({
   QueryClient: vi.fn(),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   QueryClientProvider: ({ children }: { children: any }) => children,
+}));
+
+// Mock @stellar/freighter-api. The real implementation races a postMessage
+// against a 2s setTimeout fallback (see its `isConnected`/`getAddress`
+// internals) waiting for a browser extension that doesn't exist in jsdom.
+// Any test that renders the real WalletContext without mocking it (e.g.
+// i18n.test.tsx) leaves that timer pending past the test's own duration;
+// when it eventually fires, `window` may already be torn down by a later
+// test file's environment, throwing "ReferenceError: window is not defined"
+// as an unhandled error attributed to whatever happens to be running then.
+// Test files that need specific wallet behavior already override this with
+// their own vi.mock('@stellar/freighter-api', ...), which takes precedence.
+vi.mock('@stellar/freighter-api', () => ({
+  isConnected: vi.fn().mockResolvedValue({ isConnected: false }),
+  getAddress: vi.fn().mockResolvedValue({ address: '' }),
+  setAllowed: vi.fn().mockResolvedValue({ isAllowed: false }),
+  signTransaction: vi.fn().mockResolvedValue({ signedTxXdr: '' }),
+  getNetwork: vi.fn().mockResolvedValue({ network: 'TESTNET', networkPassphrase: '' }),
+  requestAccess: vi.fn().mockResolvedValue({ address: '' }),
 }));
 
 // Mock next/navigation
@@ -90,7 +123,9 @@ const localStorageMock = (() => {
   };
 })();
 
-Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+if (hasDom) {
+  Object.defineProperty(window, 'localStorage', { value: localStorageMock });
+}
 Object.defineProperty(global, 'localStorage', { value: localStorageMock });
 
 // Mock react 'use' hook for Next.js params
@@ -108,8 +143,10 @@ vi.mock('react', async () => {
   };
 });
 
-// Initialize i18n
-import './src/i18n';
+// Initialize i18n (browser-only: the language detector needs a DOM)
+if (hasDom) {
+  await import('./src/i18n');
+}
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));
 afterEach(() => server.resetHandlers());

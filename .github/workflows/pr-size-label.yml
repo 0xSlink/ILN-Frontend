@@ -1,0 +1,50 @@
+name: PR Size Label
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  size-label:
+    name: size-label
+    runs-on: ubuntu-latest
+    steps:
+      # pr-size-labeler applies labels via the REST API, which errors if the
+      # label doesn't exist yet - make sure size/XS..size/XL are present first.
+      - name: Ensure size labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          declare -A colors=(
+            [size/XS]=3CBF00
+            [size/S]=5D9801
+            [size/M]=A87B01
+            [size/L]=D46A00
+            [size/XL]=D93F0B
+          )
+          for label in "${!colors[@]}"; do
+            gh label create "$label" --repo "$REPO" --color "${colors[$label]}" --force
+          done
+
+      - name: Apply size label
+        uses: codelytv/pr-size-labeler@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: 'size/XS'
+          xs_max_size: '50'
+          s_label: 'size/S'
+          s_max_size: '250'
+          m_label: 'size/M'
+          m_max_size: '600'
+          l_label: 'size/L'
+          l_max_size: '1200'
+          xl_label: 'size/XL'
+          fail_if_xl: 'false'
+          # Lockfiles and generated output blow up diff size without reflecting
+          # real review effort.
+          files_to_ignore: 'pnpm-lock.yaml package-lock.json yarn.lock CHANGELOG.md'

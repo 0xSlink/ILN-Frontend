@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DelegationPanel } from '@/components/governance/DelegationPanel';
 import { useWallet } from '@/context/WalletContext';
@@ -19,7 +19,9 @@ vi.mock('@/utils/federation', () => ({
 }));
 
 vi.mock('@/utils/governance', () => ({
-  isValidStellarAddress: vi.fn((addr) => addr.startsWith('G') && addr.length === 56),
+  // Relaxed so the panel's demo "known delegators" (short placeholder ids like
+  // `GABC123...`) still resolve and can trigger the cycle check.
+  isValidStellarAddress: vi.fn((addr: string) => addr.startsWith('G') && addr.length >= 8),
   getVotingPower: vi.fn().mockResolvedValue(1250),
 }));
 

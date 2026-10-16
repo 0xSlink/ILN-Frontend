@@ -20,7 +20,14 @@ import {
 export type NotificationCategory = 'invoice' | 'lp' | 'governance' | 'reputation';
 
 export type NotificationType =
-  'funded' | 'settled' | 'expired' | 'disputed' | 'info' | 'warning' | 'proposal' | 'reputation';
+  | 'funded'
+  | 'settled'
+  | 'expired'
+  | 'disputed'
+  | 'info'
+  | 'warning'
+  | 'proposal'
+  | 'reputation';
 
 export interface NotificationItem {
   id: string;

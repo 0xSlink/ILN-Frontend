@@ -103,8 +103,8 @@ describe('calcAvgWeeklyYieldPct', () => {
     // 10 USDC at 5% discount = 0.5 USDC yield over 30 days (≈4.28 weeks)
     const inv = makeInvoice({});
     const result = calcAvgWeeklyYieldPct([inv], LP, 30);
-    // (0.5 / 10) / (30/7) * 100 ≈ 0.1167%
+    // (0.5 / 10) / (30/7) * 100 ≈ 1.1667%
     expect(result).toBeGreaterThan(0);
-    expect(result).toBeLessThan(1);
+    expect(result).toBeCloseTo(1.1667, 3);
   });
 });

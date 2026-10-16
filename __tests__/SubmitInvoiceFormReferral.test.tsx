@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import SubmitInvoiceForm from '../src/components/SubmitInvoiceForm';
 import { useSearchParams } from 'next/navigation';
@@ -21,6 +21,11 @@ vi.mock('../src/context/WalletContext', () => ({
     disconnect: vi.fn(),
     networkMismatch: false,
   }),
+}));
+
+// SubmitInvoiceForm reads the toast context (directly and via useTransaction).
+vi.mock('../src/context/ToastContext', () => ({
+  useToast: () => ({ addToast: vi.fn(() => 'toast-id'), updateToast: vi.fn() }),
 }));
 
 // Mock useTransaction
