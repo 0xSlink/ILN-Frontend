@@ -170,6 +170,23 @@ node scripts/measure-bundle-size.mjs --json   # machine-readable output
 
 Exit code 0 means within budget; 1 means exceeded or the build output is missing.
 
+### Per-route budget: governance routes
+
+The aggregate 6.5 MB budget above is too coarse to catch a regression
+isolated to one route group — a 200 KB regression in `/governance` barely
+moves a 6.5 MB total. `scripts/check-route-bundle-size.mjs` reads
+`.next/app-build-manifest.json` after a build and sums the JS chunks Next
+attributes to each governance route (`/governance`, `/governance/[id]`,
+`/governance/new`, `/governance/how-it-works`), failing if any one of them
+exceeds its own 400 KB (300 KB for the static how-it-works page) budget.
+Wired into `.github/workflows/bundle-size.yml`, right after the build step.
+
+```bash
+pnpm run build
+node scripts/check-route-bundle-size.mjs          # human-readable report
+node scripts/check-route-bundle-size.mjs --json   # machine-readable output
+```
+
 **Result.** The build step must run where dependencies are installed; this working copy intentionally has no `node_modules` (see the coordination note in `docs/backend-checklist-cross-link-coordination.md`), so the recorded verdict below is prepared for the PR's `bundle-size` CI check rather than re-measured locally. **Cumulative verdict: pending CI verification — the PR must show the ✅ budget row before merge.** The batch's changes are documentation-heavy (checklists, coordination records) plus attribute-level accessibility fixes and one small dialog component; no new third-party dependency was introduced, so the known Turbopack chunk-duplication baseline (~5.57 MB) is expected to dominate the total. The residual risk is the pre-existing duplication documented above, not this batch's additions.
 
 **Per-category contribution accounting.** The cumulative total is the CI-tracked JS+CSS sum; the categories below contributed to it incrementally:

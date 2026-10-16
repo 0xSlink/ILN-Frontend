@@ -25,6 +25,7 @@
     "db:dry-run": "node scripts/migrate-supabase.mjs dry-run",
     "check:file-sizes": "node scripts/check-file-sizes.mjs",
     "check:bundle-size": "node scripts/measure-bundle-size.mjs",
+    "check:route-bundle-size": "node scripts/check-route-bundle-size.mjs",
     "lint:fix": "eslint --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
