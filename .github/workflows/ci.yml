@@ -46,8 +46,8 @@ jobs:
       - name: Run TypeScript type check
         run: pnpm exec tsc --noEmit
 
-      - name: Run npm audit for security vulnerabilities
-        run: npm audit --audit-level=moderate
+      - name: Run pnpm audit for security vulnerabilities
+        run: pnpm audit --audit-level=moderate
 
       - name: Check for postinstall script changes in dependencies
         run: |
