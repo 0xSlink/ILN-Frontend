@@ -119,7 +119,10 @@ test.describe('Wallet privacy across tabs (production build)', () => {
     // Simulate wallet-scoped caches a real session would have accumulated,
     // per WALLET_SCOPED_PREFIXES in src/utils/walletStorage.ts.
     await tabA.evaluate(() => {
-      localStorage.setItem(`iln-address-book-${'GTABAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEA'}`, '[]');
+      localStorage.setItem(
+        `iln-address-book-${'GTABAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEA'}`,
+        '[]'
+      );
       localStorage.setItem('iln-watchlist', '[]');
       localStorage.setItem('freelancerInvoices', '[]');
     });
@@ -134,7 +137,9 @@ test.describe('Wallet privacy across tabs (production build)', () => {
 
     // Disconnect from tab A via the real UI control.
     const disconnectButton = tabA.getByRole('button', { name: /disconnect/i }).first();
-    const walletMenuTrigger = tabA.getByRole('button', { name: /address|wallet|G[A-Z0-9]{3,}/i }).first();
+    const walletMenuTrigger = tabA
+      .getByRole('button', { name: /address|wallet|G[A-Z0-9]{3,}/i })
+      .first();
     if (await walletMenuTrigger.isVisible({ timeout: 5000 }).catch(() => false)) {
       await walletMenuTrigger.click();
     }

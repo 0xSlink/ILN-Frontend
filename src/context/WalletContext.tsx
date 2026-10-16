@@ -33,6 +33,9 @@ import {
   getWalletConnectAddress,
   signTransactionWithWalletConnect,
 } from '@/lib/walletConnect';
+import { getPendingTransactions, reconcilePendingTransactions } from '@/lib/pending-transactions';
+import { getSorobanTransactionStatus } from '@/utils/soroban';
+import { notifyTxSuccess } from '@/utils/txEvents';
 import WalletSelectionModal from '@/components/WalletSelectionModal';
 import { useToast } from './ToastContext';
 
@@ -170,6 +173,28 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
     }
   }, []);
 
+  /**
+   * Refresh locally-remembered submissions from RPC network truth (#1143).
+   * Runs after every reconnect and on page reload (via the silent-reconnect
+   * effect below). Only the network can settle an entry; `not_found` keeps it
+   * for the next pass instead of assuming a verdict.
+   */
+  const reconcileStaleTransactions = useCallback(async () => {
+    try {
+      if (getPendingTransactions().length === 0) return;
+      const summary = await reconcilePendingTransactions(async (hash) => {
+        const status = await getSorobanTransactionStatus(hash);
+        return status === 'not_found' ? 'confirming' : status;
+      });
+      if (summary.confirmed.length > 0) {
+        // Settled while we were away — let chain-derived views refresh.
+        notifyTxSuccess();
+      }
+    } catch (e) {
+      console.error('Pending transaction reconciliation failed', e);
+    }
+  }, []);
+
   const checkConnection = useCallback(async () => {
     try {
       const installed = extractConnectionState(await isConnected());
@@ -181,12 +206,14 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
           setAddress(address);
           localStorage.setItem(STORAGE_KEY, address);
           await checkNetwork();
+          // Background refresh: must not block connection setup.
+          void reconcileStaleTransactions();
         }
       }
     } catch (e) {
       console.error('Check connection failed', e);
     }
-  }, [checkNetwork]);
+  }, [checkNetwork, reconcileStaleTransactions]);
 
   const attemptSilentReconnect = useCallback(async () => {
     const savedProvider = getStoredWalletProvider();
@@ -196,6 +223,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
       if (wcAddress) {
         setAddress(wcAddress);
         localStorage.setItem(STORAGE_KEY, wcAddress);
+        // Background refresh: must not block connection setup.
+        void reconcileStaleTransactions();
       }
       return;
     }
@@ -231,6 +260,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
       setAddress(address);
       localStorage.setItem(STORAGE_KEY, address);
       await checkNetwork();
+      // Background refresh: must not block reconnect timing.
+      void reconcileStaleTransactions();
       journeyRecovery.markRecovered('wallet');
     } catch (e) {
       console.error('Silent reconnect failed', e);
@@ -240,7 +271,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
     } finally {
       setIsReconnecting(false);
     }
-  }, [checkNetwork]);
+  }, [checkNetwork, reconcileStaleTransactions]);
 
   useEffect(() => {
     attemptSilentReconnect();
@@ -565,6 +596,14 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
 
     if (typeof signed === 'string') {
       return signed;
+    }
+
+    // Wallet closed / dismissed without returning a payload: treat as an
+    // explicit cancellation without touching local UI state (#1144).
+    if (!signed || typeof signed !== 'object') {
+      throw new Error(
+        'USER_REJECTED: Wallet closed before signing completed. No changes were made.'
+      );
     }
 
     if (signed.error) {

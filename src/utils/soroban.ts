@@ -21,6 +21,7 @@ import {
 } from '@/constants';
 import { parseAmountToUnits, parseDiscountRateToBps, toUnixTimestamp } from './invoiceSubmission';
 import { fetchNativeXlmBalance } from '@/lib/horizonClient';
+import { recordPendingTransaction, removePendingTransaction } from '@/lib/pending-transactions';
 
 // ─── RPC & constants ──────────────────────────────────────────────────────────
 
@@ -1250,10 +1251,20 @@ export async function submitInvoiceTransaction({
     throw new Error(`Transaction submission failed with status ${sent.status}.`);
   }
 
+  // Recorded before polling so a reload during confirmation can still be
+  // reconciled from network truth afterwards (#1143).
+  recordPendingTransaction({ hash: sent.hash, label: 'submit_invoice' });
+
   const finalResult = await server.pollTransaction(sent.hash, { attempts: POLL_ATTEMPTS });
   if (finalResult.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    // Explicit on-chain failure settles the entry; timeouts/unknown keep it
+    // for a later reconcile pass instead of assuming a verdict.
+    if (finalResult.status === rpc.Api.GetTransactionStatus.FAILED) {
+      removePendingTransaction(sent.hash);
+    }
     throw new Error(`Transaction failed with status ${String(finalResult.status)}.`);
   }
+  removePendingTransaction(sent.hash);
 
   return {
     invoiceId: extractInvoiceIdFromTransaction(finalResult) ?? simulatedInvoiceId,
@@ -1397,15 +1408,41 @@ export async function buildApproveUsdcTransaction(args: {
 
 // ─── Write: generic signed transaction dispatcher ─────────────────────────────
 
+/** Submission progress reported to lifecycle observers (#1142). */
+export type SubmissionProgress = 'signed' | 'submitted' | 'confirming';
+
+/**
+ * Read one transaction's settlement from RPC network truth (#1143).
+ * Never throws: unreachable RPC maps to `not_found` so callers keep the
+ * pending entry for a later reconcile pass instead of assuming a verdict.
+ */
+export async function getSorobanTransactionStatus(
+  hash: string
+): Promise<'confirmed' | 'failed' | 'confirming' | 'not_found'> {
+  try {
+    const res = await server.getTransaction(hash);
+    if (res.status === rpc.Api.GetTransactionStatus.SUCCESS) return 'confirmed';
+    if (res.status === rpc.Api.GetTransactionStatus.FAILED) return 'failed';
+    return 'not_found';
+  } catch {
+    return 'not_found';
+  }
+}
+
 export async function submitSignedTransaction({
   tx,
   signTx,
+  onStatus,
+  pendingLabel = 'transaction',
 }: {
   tx: Transaction;
   signTx: (txXdr: string) => Promise<string>;
+  onStatus?: (stage: SubmissionProgress) => void;
+  pendingLabel?: string;
 }): Promise<{ txHash: string }> {
   const prepared = await server.prepareTransaction(tx);
   const signedXdr = await signTx(prepared.toXDR());
+  onStatus?.('signed');
   const signedTx = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE) as Transaction;
   const sent = await server.sendTransaction(signedTx);
 
@@ -1416,10 +1453,22 @@ export async function submitSignedTransaction({
     throw new Error(`Transaction submission failed with status ${sent.status}.`);
   }
 
+  onStatus?.('submitted');
+  // Recorded before polling so a reload during confirmation can still be
+  // reconciled from network truth afterwards (#1143).
+  recordPendingTransaction({ hash: sent.hash, label: pendingLabel });
+  onStatus?.('confirming');
+
   const finalResult = await server.pollTransaction(sent.hash, { attempts: POLL_ATTEMPTS });
   if (finalResult.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    // Explicit on-chain failure settles the entry; timeouts/unknown keep it
+    // for a later reconcile pass instead of assuming a verdict.
+    if (finalResult.status === rpc.Api.GetTransactionStatus.FAILED) {
+      removePendingTransaction(sent.hash);
+    }
     throw new Error(`Transaction failed with status ${String(finalResult.status)}.`);
   }
+  removePendingTransaction(sent.hash);
   return { txHash: sent.hash };
 }
 

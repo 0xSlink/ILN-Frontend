@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console -- CLI script: human-readable and --json stdout output is its interface. */
 /**
  * Per-route production bundle budget for the governance routes (Issue #1152).
  *
@@ -44,9 +45,7 @@ let manifest;
 try {
   manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 } catch (err) {
-  console.error(
-    `Could not read ${manifestPath}. Run \`pnpm run build\` first.\n(${err.message})`
-  );
+  console.error(`Could not read ${manifestPath}. Run \`pnpm run build\` first.\n(${err.message})`);
   process.exit(1);
 }
 
@@ -56,8 +55,6 @@ try {
 function routeKeyToPath(key) {
   return key.replace(/\/page$/, '') || '/';
 }
-
-const staticRoot = join(process.cwd(), buildDir, 'static');
 
 function fileSize(relativePath) {
   // Manifest paths are relative to .next/, e.g. "static/chunks/app/governance/page-abc123.js".

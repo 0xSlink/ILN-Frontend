@@ -6,6 +6,7 @@ import { formatAddress, formatRelativeTime, formatUSDC } from '@/utils/format';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
 } from '@/components/IndexerUnavailableNotice';
+import DataSourceCaption from '@/components/DataSourceCaption';
 
 type InvoiceEventType =
   | 'submitted'
@@ -390,6 +391,7 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
       <div className="mb-6">
         <p className="text-xs font-bold uppercase tracking-widest text-primary">Event History</p>
         <h2 className="mt-2 text-xl font-semibold text-on-surface">Invoice audit trail</h2>
+        <DataSourceCaption metric="invoice-activity" className="mt-1" />
       </div>
 
       <div className="space-y-4 relative">

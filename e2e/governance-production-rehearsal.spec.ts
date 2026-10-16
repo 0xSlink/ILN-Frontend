@@ -99,9 +99,7 @@ test.describe('Governance journey rehearsal (production build)', () => {
     }
   });
 
-  test('failure: proposals list recovers gracefully when the read call fails', async ({
-    page,
-  }) => {
+  test('failure: proposals list recovers gracefully when the read call fails', async ({ page }) => {
     // fetchProposals already falls back to mock data on any RPC failure, so
     // forcing every outbound RPC call to fail rehearses that fallback
     // against the real failure path instead of the network being

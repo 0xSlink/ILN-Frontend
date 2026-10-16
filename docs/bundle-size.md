@@ -191,11 +191,11 @@ node scripts/check-route-bundle-size.mjs --json   # machine-readable output
 
 **Per-category contribution accounting.** The cumulative total is the CI-tracked JS+CSS sum; the categories below contributed to it incrementally:
 
-| Category | Batch contribution | Bundle impact |
-| --- | --- | --- |
-| Governance (real delegation transaction code) | New hooks and transaction builders in existing modules | Code-level only; no new dependency |
-| Admin UI (confirmation dialog, health dashboard additions) | One new small component (`AdminConfirmDialog`) | Negligible (< 2 KB unminified source; inlined in existing route chunk) |
-| Status/history views | Existing on-chain history panel | No change |
-| Docs and coordination artifacts (#117, #956) | Markdown only | Zero (not bundled) |
+| Category                                                   | Batch contribution                                     | Bundle impact                                                          |
+| ---------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------- |
+| Governance (real delegation transaction code)              | New hooks and transaction builders in existing modules | Code-level only; no new dependency                                     |
+| Admin UI (confirmation dialog, health dashboard additions) | One new small component (`AdminConfirmDialog`)         | Negligible (< 2 KB unminified source; inlined in existing route chunk) |
+| Status/history views                                       | Existing on-chain history panel                        | No change                                                              |
+| Docs and coordination artifacts (#117, #956)               | Markdown only                                          | Zero (not bundled)                                                     |
 
 If CI reports an overage: first run `ANALYZE=true pnpm run build` and check for a new duplicated heavy chunk (per "Why the baseline is larger than the per-package estimates" above), then apply the mitigation strategies listed under "Reducing Bundle Size".

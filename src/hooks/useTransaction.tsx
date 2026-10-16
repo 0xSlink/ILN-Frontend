@@ -10,6 +10,12 @@ import { useWallet } from '@/context/WalletContext';
 import { notifyTxSuccess } from '@/utils/txEvents';
 import { recordSigningAttempt } from '@/lib/signing-alert';
 import {
+  canRetryLifecycleStatus,
+  classifyTransactionError,
+  isInFlightLifecycleStatus,
+  type TransactionLifecycleStatus,
+} from '@/lib/transaction-lifecycle';
+import {
   parseContractError,
   CONTRACT_ERROR_MAP,
   UNKNOWN_CONTRACT_ERROR,
@@ -43,6 +49,10 @@ export interface UseTransactionResult {
   error: string | null;
   success: boolean;
   isSigning: boolean;
+  /** Typed lifecycle state; only RPC settlement moves it to confirmed/failed (#1142). */
+  lifecycleStatus: TransactionLifecycleStatus;
+  /** Settlement hash when the operation resolved to one. */
+  txHash: string | null;
   signingModal: ReactNode;
 }
 
@@ -65,6 +75,40 @@ export function useTransaction(): UseTransactionResult {
   const [isSigning, setIsSigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [lifecycleStatus, setLifecycleStatus] = useState<TransactionLifecycleStatus>('unsigned');
+  const [txHash, setTxHash] = useState<string | null>(null);
+  // Synchronous in-flight guard: a second execute while one is running is
+  // ignored so retry/reconnect paths can never duplicate a submission (#1143).
+  const inFlightRef = useRef(false);
+  const lifecycleRef = useRef<TransactionLifecycleStatus>('unsigned');
+
+  /** Advance only forward along unsigned → signed → submitted → confirming. */
+  const advanceLifecycle = useCallback((next: TransactionLifecycleStatus) => {
+    const rank: Record<TransactionLifecycleStatus, number> = {
+      unsigned: 0,
+      signed: 1,
+      submitted: 2,
+      confirming: 3,
+      confirmed: 4,
+      failed: -1,
+      cancelled: -1,
+    };
+    const current = lifecycleRef.current;
+    if (next === 'failed' || next === 'cancelled' || next === 'confirmed') {
+      lifecycleRef.current = next;
+      setLifecycleStatus(next);
+      return;
+    }
+    if (rank[next] > rank[current]) {
+      lifecycleRef.current = next;
+      setLifecycleStatus(next);
+    }
+  }, []);
+
+  const setLifecycle = useCallback((next: TransactionLifecycleStatus) => {
+    lifecycleRef.current = next;
+    setLifecycleStatus(next);
+  }, []);
 
   const activeToastIdRef = useRef<string | null>(null);
   const inFlightKeysRef = useRef<Set<string>>(new Set());
@@ -135,6 +179,12 @@ export function useTransaction(): UseTransactionResult {
         return null;
       }
 
+      // Ignore a second execute while one is in flight: re-submitting would
+      // duplicate the on-chain action (#1143).
+      if (inFlightRef.current || isInFlightLifecycleStatus(lifecycleRef.current)) {
+        return null;
+      }
+
       // Wrong-network protection: block signing and explain required network before any mutation (#1145)
       if (networkMismatch) {
         const currentNetwork = walletNetwork ? normalizeWalletNetwork(walletNetwork) : 'unknown';
@@ -154,6 +204,7 @@ export function useTransaction(): UseTransactionResult {
       const successTitle = resolvedOptions.successTitle ?? 'Transaction complete';
       const successMessage = resolvedOptions.successMessage ?? 'Your transaction was confirmed.';
 
+      inFlightRef.current = true;
       // Transaction retry idempotency (#1146): deduplicate concurrent or recent duplicate operations
       const opKey =
         resolvedOptions.idempotencyKey ||
@@ -163,12 +214,14 @@ export function useTransaction(): UseTransactionResult {
 
       // If identical operation is already in flight, prevent duplicate signing/submission
       if (inFlightKeysRef.current.has(opKey)) {
+        inFlightRef.current = false;
         return null;
       }
 
       // If already confirmed within 5 minutes, return confirmed result idempotently
       const cached = confirmedOperationsRef.current.get(opKey);
       if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
+        inFlightRef.current = false;
         return cached.result as T;
       }
 
@@ -176,6 +229,8 @@ export function useTransaction(): UseTransactionResult {
       setLoading(true);
       setError(null);
       setSuccess(false);
+      setTxHash(null);
+      setLifecycle('unsigned');
 
       const toastId = addToast({
         type: 'pending',
@@ -188,11 +243,19 @@ export function useTransaction(): UseTransactionResult {
         typeof txOrOperation === 'function'
           ? txOrOperation
           : async (signTx) => {
-              const { txHash } = await submitSignedTransaction({ tx: txOrOperation, signTx });
-              return txHash as unknown as T;
+              const { txHash: settledHash } = await submitSignedTransaction({
+                tx: txOrOperation,
+                signTx,
+                pendingLabel: resolvedOptions.expectedAction ?? 'transaction',
+                onStatus: (stage) => advanceLifecycle(stage),
+              });
+              return settledHash as unknown as T;
             };
 
       const retry = async () => {
+        // Only a failed transaction may be retried; cancelled / in-flight /
+        // confirmed must never re-submit (#1142).
+        if (!canRetryLifecycleStatus(lifecycleRef.current)) return;
         // Clear in-flight lock for idempotency key to allow clean retry (#1146)
         inFlightKeysRef.current.delete(opKey);
         if (executeRef.current) {
@@ -201,9 +264,18 @@ export function useTransaction(): UseTransactionResult {
       };
 
       try {
-        const signTxForOperation: SignTxFn = (txXdr) =>
-          signTxWithUi(txXdr, resolvedOptions.expectedAction);
+        const signTxForOperation: SignTxFn = async (txXdr) => {
+          const signed = await signTxWithUi(txXdr, resolvedOptions.expectedAction);
+          advanceLifecycle('signed');
+          return signed;
+        };
+        // Function operations manage their own submission; mark confirmation
+        // while awaiting so the lifecycle reflects network truth (#1142).
+        if (typeof txOrOperation === 'function') {
+          advanceLifecycle('confirming');
+        }
         const result = await operation(signTxForOperation);
+        if (typeof result === 'string') setTxHash(result);
 
         // Record confirmed result in idempotency cache
         confirmedOperationsRef.current.set(opKey, {
@@ -223,6 +295,7 @@ export function useTransaction(): UseTransactionResult {
         }
 
         setSuccess(true);
+        setLifecycle('confirmed');
         recordSigningAttempt({
           flow: resolvedOptions.expectedAction ?? 'transaction',
           success: true,
@@ -240,10 +313,58 @@ export function useTransaction(): UseTransactionResult {
         notifyTxSuccess();
         return result;
       } catch (err: any) {
+        const classification = classifyTransactionError(err);
+
+        // Declined signature / closed wallet: keep every piece of local UI
+        // state unchanged — no error escalation, no invalidation, no success
+        // signal, and no retry that could duplicate the action (#1144).
+        if (classification.kind === 'cancelled') {
+          setSuccess(false);
+          setError(null);
+          setLifecycle('cancelled');
+          recordSigningAttempt({
+            flow: resolvedOptions.expectedAction ?? 'transaction',
+            success: false,
+            errorCode: 'USER_REJECTED',
+            errorMessage: classification.message,
+          });
+          updateToast(toastId, {
+            type: 'info',
+            title: 'Transaction cancelled',
+            message: 'Signature declined in wallet. No changes were made.',
+          });
+          activeToastIdRef.current = null;
+          return null;
+        }
+
+        // Wrong network: block signing safely until the wallet switches.
+        // No retry is offered — retrying on the wrong network cannot settle
+        // and risks a duplicate once the network changes (#1144).
+        if (classification.kind === 'wrong-network') {
+          setSuccess(false);
+          setError(classification.message);
+          setLifecycle('failed');
+          recordSigningAttempt({
+            flow: resolvedOptions.expectedAction ?? 'transaction',
+            success: false,
+            errorCode: 'NETWORK_MISMATCH',
+            errorMessage: classification.message,
+          });
+          updateToast(toastId, {
+            type: 'error',
+            title: 'Wrong network',
+            message: `${classification.message}. Switch your wallet to ${resolvedOptions.expectedAction ? 'the required' : 'the correct'} network, then try again. No changes were made.`,
+          });
+          activeToastIdRef.current = null;
+          return null;
+        }
+
         const formattedErr = formatContractError(err);
         const message = formattedErr.message;
         const isRejected = formattedErr.code === 'USER_REJECTED' || isWalletRejection(message);
         setError(formattedErr.userFriendlyMessage);
+        setSuccess(false);
+        setLifecycle(isRejected ? 'cancelled' : 'failed');
 
         recordSigningAttempt({
           flow: resolvedOptions.expectedAction ?? 'transaction',
@@ -297,6 +418,7 @@ export function useTransaction(): UseTransactionResult {
         activeToastIdRef.current = null;
         return null;
       } finally {
+        inFlightRef.current = false;
         inFlightKeysRef.current.delete(opKey);
         setLoading(false);
         setIsSigning(false);
@@ -305,10 +427,12 @@ export function useTransaction(): UseTransactionResult {
     [
       address,
       addToast,
+      advanceLifecycle,
       isConnected,
       networkMismatch,
       walletNetwork,
       queryClient,
+      setLifecycle,
       signTxWithUi,
       updateToast,
     ]
@@ -340,6 +464,8 @@ export function useTransaction(): UseTransactionResult {
     error,
     success,
     isSigning,
+    lifecycleStatus,
+    txHash,
     signingModal: (
       <>
         {previewModal}
