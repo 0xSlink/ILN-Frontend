@@ -8,7 +8,12 @@ const globalFetch = global.fetch;
 function envelope(data: unknown[], droppedRecords = 0) {
   return {
     ok: true,
-    json: async () => ({ ok: true, resource: 'invoice.events', data, meta: { droppedRecords } }),
+    json: async () => ({
+      ok: true,
+      resource: 'invoice.events',
+      data,
+      meta: { apiVersion: '1.0.0', droppedRecords },
+    }),
   };
 }
 

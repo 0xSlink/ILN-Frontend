@@ -6,7 +6,7 @@ const okEnvelope = {
   ok: true,
   resource: 'leaderboard',
   data: [{ address: 'GAAA', metric1: 1 }],
-  meta: { droppedRecords: 0 },
+  meta: { apiVersion: '1.0.0', droppedRecords: 0 },
 };
 
 function respond(body: unknown, status = 200) {
@@ -54,6 +54,7 @@ describe('fetchIndexer', () => {
     ['a mismatched resource', { ...okEnvelope, resource: 'analytics.funding' }],
     ['non-list data', { ...okEnvelope, data: { rows: [] } }],
     ['missing meta', { ok: true, resource: 'leaderboard', data: [] }],
+    ['missing apiVersion', { ...okEnvelope, meta: { droppedRecords: 0 } }],
     ['an unknown error code', { ok: false, error: { code: 'teapot', message: 'x' } }],
   ])('treats %s as a schema error', async (_label, body) => {
     const err = await captureError(

@@ -167,19 +167,20 @@ Here is a detailed guide of the configuration options available:
 
 ### 🗄️ Notifications, Databases & Email (Backend/Cron)
 
-| Variable                        | Description                                                                       |
-| :------------------------------ | :-------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | The endpoint URL for the Supabase database.                                       |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anonymous browser-safe public key for Supabase.                                   |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Backend service key used by reminder crons to bypass RLS policies.                |
-| `RESEND_API_KEY`                | API key from Resend.com used to dispatch payer reminder emails.                   |
-| `CRON_SECRET`                   | Secret token to secure `/api/reminders` GET trigger from unauthorized calls.      |
-| `NOTIFICATION_API`              | External backend base URL to fetch notifications.                                 |
-| `INDEXER_URL`                   | Server-only base URL of the indexer; the browser reaches it via `/api/indexer/*`. |
-| `INDEXER_API_KEY`               | Server-only bearer credential for the indexer. Never use a `NEXT_PUBLIC_` name.   |
-| `INDEXER_TIMEOUT_MS`            | Upstream indexer timeout in ms (default `8000`).                                  |
-| `NEXT_PUBLIC_INDEXER_API_URL`   | Deprecated: read server-side only as a fallback for `INDEXER_URL`.                |
-| `NEXT_PUBLIC_APP_URL`           | Base URL of the deployed application (defaults to `https://app.iln.finance`).     |
+| Variable                        | Description                                                                            |
+| :------------------------------ | :------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | The endpoint URL for the Supabase database.                                            |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anonymous browser-safe public key for Supabase.                                        |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Backend service key used by reminder crons to bypass RLS policies.                     |
+| `RESEND_API_KEY`                | API key from Resend.com used to dispatch payer reminder emails.                        |
+| `CRON_SECRET`                   | Secret token to secure `/api/reminders` GET trigger from unauthorized calls.           |
+| `NOTIFICATION_API`              | External backend base URL to fetch notifications.                                      |
+| `INDEXER_URL`                   | Server-only base URL of the indexer; the browser reaches it via `/api/indexer/*`.      |
+| `INDEXER_API_KEY`               | Server-only bearer credential for the indexer. Never use a `NEXT_PUBLIC_` name.        |
+| `INDEXER_TIMEOUT_MS`            | Upstream indexer timeout in ms (default `8000`).                                       |
+| `INDEXER_API_VERSION_POLICY`    | `strict` (default) requires `X-Indexer-Api-Version: 1.x`; `allow-missing` for rollout. |
+| `NEXT_PUBLIC_INDEXER_API_URL`   | Deprecated: read server-side only as a fallback for `INDEXER_URL`.                     |
+| `NEXT_PUBLIC_APP_URL`           | Base URL of the deployed application (defaults to `https://app.iln.finance`).          |
 
 ### 🧪 Testing & Analytics
 

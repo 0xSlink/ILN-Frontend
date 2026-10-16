@@ -16,12 +16,13 @@ const CONFIG: IndexerServerConfig = {
   baseUrl: 'https://indexer.internal.example',
   apiKey: SECRET,
   timeoutMs: 50,
+  versionPolicy: 'strict',
 };
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(body), {
     status: 200,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Indexer-Api-Version': '1.2.0' },
     ...init,
   });
 }
@@ -46,6 +47,7 @@ describe('readIndexerServerConfig', () => {
       baseUrl: 'https://indexer.internal.example',
       apiKey: SECRET,
       timeoutMs: 2500,
+      versionPolicy: 'strict',
     });
   });
 
@@ -127,6 +129,7 @@ describe('requestIndexer', () => {
     expect(url).toBe('https://indexer.internal.example/leaderboard?type=lp');
     expect(init.headers.Authorization).toBe(`Bearer ${SECRET}`);
     expect(init.cache).toBe('no-store');
+    expect(init.headers['Accept-Version']).toBe('1');
   });
 
   it('omits the Authorization header when no key is configured', async () => {
@@ -209,7 +212,7 @@ describe('loadIndexerResource', () => {
       ok: true,
       resource: 'leaderboard',
       data: [{ address: 'GAAA', metric1: 3 }],
-      meta: { droppedRecords: 1 },
+      meta: { apiVersion: '1.2.0', droppedRecords: 1 },
     });
   });
 

@@ -57,6 +57,8 @@ export interface IndexerResourceDataMap {
 }
 
 export interface IndexerResponseMeta {
+  /** Indexer API version negotiated by the proxy, or `unknown` under `allow-missing`. */
+  apiVersion: string;
   /** Records the indexer sent that failed validation and were omitted. */
   droppedRecords: number;
 }

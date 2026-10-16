@@ -10,12 +10,20 @@
  *   INDEXER_URL         Base URL of the indexer REST API (required).
  *   INDEXER_API_KEY     Bearer credential sent to the indexer (optional).
  *   INDEXER_TIMEOUT_MS  Upstream timeout in ms (default 8000, clamped 1000–30000).
+ *   INDEXER_API_VERSION_POLICY  `strict` (default) or `allow-missing`; see version.ts.
  */
 
 import { assertNoPublicIndexerSecrets } from './env-guard';
 import { IndexerError, indexerErrorCodeForStatus } from './errors';
 import { resolveIndexerRequest } from './resources';
 import type { IndexerResourceName, IndexerSuccessEnvelope } from './types';
+import {
+  INDEXER_VERSION_REQUEST_HEADER,
+  INDEXER_VERSION_RESPONSE_HEADER,
+  negotiateIndexerVersion,
+  SUPPORTED_INDEXER_API,
+  type IndexerVersionPolicy,
+} from './version';
 
 export const DEFAULT_INDEXER_TIMEOUT_MS = 8_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -31,6 +39,7 @@ export interface IndexerServerConfig {
   baseUrl: string;
   apiKey: string | null;
   timeoutMs: number;
+  versionPolicy: IndexerVersionPolicy;
 }
 
 function parseTimeout(raw: string | undefined): number {
@@ -38,6 +47,14 @@ function parseTimeout(raw: string | undefined): number {
   const value = Number(raw);
   if (!Number.isFinite(value)) return DEFAULT_INDEXER_TIMEOUT_MS;
   return Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, Math.round(value)));
+}
+
+function parseVersionPolicy(raw: string | undefined): IndexerVersionPolicy {
+  const value = raw?.trim();
+  if (!value || value === 'strict') return 'strict';
+  if (value === 'allow-missing') return 'allow-missing';
+  // A typo must not silently weaken the check.
+  throw new IndexerError('not_configured');
 }
 
 let warnedDeprecatedUrl = false;
@@ -70,6 +87,7 @@ export function readIndexerServerConfig(source: EnvSource = process.env): Indexe
     baseUrl: parsed.toString().replace(/\/+$/, ''),
     apiKey: source.INDEXER_API_KEY?.trim() || null,
     timeoutMs: parseTimeout(source.INDEXER_TIMEOUT_MS),
+    versionPolicy: parseVersionPolicy(source.INDEXER_API_VERSION_POLICY),
   };
 }
 
@@ -106,7 +124,10 @@ export async function requestIndexer(
   const onCallerAbort = () => controller.abort();
   signal?.addEventListener('abort', onCallerAbort, { once: true });
 
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    [INDEXER_VERSION_REQUEST_HEADER]: `${SUPPORTED_INDEXER_API.major}`,
+  };
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
 
   try {
@@ -168,13 +189,18 @@ export async function loadIndexerResource(
 ): Promise<IndexerSuccessEnvelope<unknown[]>> {
   const { resource, upstreamPath } = resolveIndexerRequest(segments, searchParams);
   const config = readIndexerServerConfig(deps.env);
-  const { body } = await requestIndexer(upstreamPath, config, deps);
+  const { body, headers } = await requestIndexer(upstreamPath, config, deps);
+  // Check the contract version before parsing so drift fails as a version error.
+  const apiVersion = negotiateIndexerVersion(
+    headers.get(INDEXER_VERSION_RESPONSE_HEADER),
+    config.versionPolicy
+  );
   const { records, dropped } = resource.parse(body);
 
   return {
     ok: true,
     resource: resource.name as IndexerResourceName,
     data: records,
-    meta: { droppedRecords: dropped },
+    meta: { apiVersion, droppedRecords: dropped },
   };
 }

@@ -81,6 +81,7 @@ export async function fetchIndexer<N extends IndexerResourceName>(
       body.resource !== resource ||
       !Array.isArray(body.data) ||
       !isRecord(body.meta) ||
+      typeof body.meta.apiVersion !== 'string' ||
       typeof body.meta.droppedRecords !== 'number'
     ) {
       throw new IndexerError('schema');

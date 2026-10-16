@@ -17,7 +17,8 @@ export type IndexerErrorCode =
   | 'timeout'
   | 'network'
   | 'upstream'
-  | 'schema';
+  | 'schema'
+  | 'version_mismatch';
 
 /** HTTP status the proxy responds with for each error code. */
 export const INDEXER_ERROR_STATUS: Record<IndexerErrorCode, number> = {
@@ -32,6 +33,7 @@ export const INDEXER_ERROR_STATUS: Record<IndexerErrorCode, number> = {
   network: 502,
   upstream: 502,
   schema: 502,
+  version_mismatch: 502,
 };
 
 /** Default, user-safe message for each error code. */
@@ -47,6 +49,7 @@ export const INDEXER_ERROR_MESSAGES: Record<IndexerErrorCode, string> = {
   network: 'The indexer could not be reached.',
   upstream: 'The indexer returned an unexpected error.',
   schema: 'The indexer returned data in an unexpected format.',
+  version_mismatch: 'The indexer API version is not supported by this app.',
 };
 
 const ERROR_CODES = new Set(Object.keys(INDEXER_ERROR_STATUS));

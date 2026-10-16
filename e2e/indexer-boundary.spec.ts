@@ -25,7 +25,7 @@ test.describe('Indexer browser boundary', () => {
           data: [
             { address: 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H', metric1: 4 },
           ],
-          meta: { droppedRecords: 0 },
+          meta: { apiVersion: '1.0.0', droppedRecords: 0 },
         },
       })
     );
@@ -53,7 +53,12 @@ test.describe('Indexer browser boundary', () => {
             },
           })
         : route.fulfill({
-            json: { ok: true, resource: 'leaderboard', data: [], meta: { droppedRecords: 0 } },
+            json: {
+              ok: true,
+              resource: 'leaderboard',
+              data: [],
+              meta: { apiVersion: '1.0.0', droppedRecords: 0 },
+            },
           });
     });
 

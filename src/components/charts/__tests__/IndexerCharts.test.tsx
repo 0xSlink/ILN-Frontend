@@ -8,7 +8,12 @@ const originalFetch = global.fetch;
 function envelope(resource: string, data: unknown[]) {
   return {
     ok: true,
-    json: async () => ({ ok: true, resource, data, meta: { droppedRecords: 0 } }),
+    json: async () => ({
+      ok: true,
+      resource,
+      data,
+      meta: { apiVersion: '1.0.0', droppedRecords: 0 },
+    }),
   };
 }
 
@@ -55,6 +60,20 @@ describe('FundingChart', () => {
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     expect(screen.queryByText('No funding activity in this period')).not.toBeInTheDocument();
     expect(random).not.toHaveBeenCalled();
+  });
+  it('explains an indexer API version mismatch without offering a futile retry', async () => {
+    fetchMock().mockResolvedValue(
+      errorEnvelope(
+        'version_mismatch',
+        'The indexer API version 2.0.0 is not supported. This app requires 1.x (>= 1.0).'
+      )
+    );
+    render(<FundingChart />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveAttribute('data-error-code', 'version_mismatch');
+    expect(alert).toHaveTextContent('The indexer API version 2.0.0 is not supported.');
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
   });
 });
 

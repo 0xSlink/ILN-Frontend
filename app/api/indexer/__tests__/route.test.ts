@@ -25,11 +25,11 @@ describe('GET /api/indexer/[...path]', () => {
   });
 
   it('proxies an allow-listed resource as a no-store success envelope', async () => {
-    global.fetch = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify([{ type: 'funded', timestamp: 1_700_000_000 }]))
-      );
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify([{ type: 'funded', timestamp: 1_700_000_000 }]), {
+        headers: { 'X-Indexer-Api-Version': '1.0.0' },
+      })
+    );
 
     const res = await call('invoices/7/events');
     const body = await res.json();
@@ -40,7 +40,7 @@ describe('GET /api/indexer/[...path]', () => {
       ok: true,
       resource: 'invoice.events',
       data: [{ type: 'funded', timestamp: 1_700_000_000_000 }],
-      meta: { droppedRecords: 0 },
+      meta: { apiVersion: '1.0.0', droppedRecords: 0 },
     });
     expect(JSON.stringify(body)).not.toContain(SECRET);
   });
