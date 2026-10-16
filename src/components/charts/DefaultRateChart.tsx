@@ -14,7 +14,11 @@ import {
 } from 'recharts';
 import { calculateMovingAverage, MonthlyDefaultWithMA } from '@/utils/defaultRate';
 import { useIndexerResource } from '@/hooks/useIndexerResource';
-import { IndexerErrorState, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
+import {
+  IndexerErrorState,
+  IndexerFreshnessBadge,
+  IndexerPartialNotice,
+} from '@/components/indexer/IndexerStatus';
 
 const CHART_TICK_STYLE = {
   fill: 'var(--color-on-surface-variant, #94a3b8)',
@@ -212,7 +216,12 @@ export default function DefaultRateChart() {
           </ResponsiveContainer>
         )}
       </div>
-      {defaults.meta ? <IndexerPartialNotice dropped={defaults.meta.droppedRecords} /> : null}
+      {defaults.meta ? (
+        <div className="flex flex-col gap-2">
+          <IndexerFreshnessBadge freshness={defaults.meta.freshness} />
+          <IndexerPartialNotice dropped={defaults.meta.droppedRecords} />
+        </div>
+      ) : null}
     </div>
   );
 }

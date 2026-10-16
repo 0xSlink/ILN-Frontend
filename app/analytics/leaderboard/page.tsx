@@ -3,7 +3,11 @@
 import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { useIndexerResource } from '@/hooks/useIndexerResource';
-import { IndexerErrorState, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
+import {
+  IndexerErrorState,
+  IndexerFreshnessBadge,
+  IndexerPartialNotice,
+} from '@/components/indexer/IndexerStatus';
 
 export default function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<'lp' | 'freelancer'>('lp');
@@ -83,7 +87,8 @@ export default function LeaderboardPage() {
         )}
       </div>
       {leaderboard.meta ? (
-        <div className="mt-2">
+        <div className="mt-2 flex flex-col gap-2">
+          <IndexerFreshnessBadge freshness={leaderboard.meta.freshness} />
           <IndexerPartialNotice dropped={leaderboard.meta.droppedRecords} />
         </div>
       ) : null}

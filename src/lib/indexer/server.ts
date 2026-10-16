@@ -11,10 +11,12 @@
  *   INDEXER_API_KEY     Bearer credential sent to the indexer (optional).
  *   INDEXER_TIMEOUT_MS  Upstream timeout in ms (default 8000, clamped 1000–30000).
  *   INDEXER_API_VERSION_POLICY  `strict` (default) or `allow-missing`; see version.ts.
+ *   INDEXER_STALE_AFTER_SECONDS Age after which data is flagged stale (default 300).
  */
 
 import { assertNoPublicIndexerSecrets } from './env-guard';
 import { IndexerError, indexerErrorCodeForStatus } from './errors';
+import { parseStaleAfterMs, readIndexerFreshness } from './freshness';
 import { resolveIndexerRequest } from './resources';
 import type { IndexerResourceName, IndexerSuccessEnvelope } from './types';
 import {
@@ -40,6 +42,7 @@ export interface IndexerServerConfig {
   apiKey: string | null;
   timeoutMs: number;
   versionPolicy: IndexerVersionPolicy;
+  staleAfterMs: number;
 }
 
 function parseTimeout(raw: string | undefined): number {
@@ -88,6 +91,7 @@ export function readIndexerServerConfig(source: EnvSource = process.env): Indexe
     apiKey: source.INDEXER_API_KEY?.trim() || null,
     timeoutMs: parseTimeout(source.INDEXER_TIMEOUT_MS),
     versionPolicy: parseVersionPolicy(source.INDEXER_API_VERSION_POLICY),
+    staleAfterMs: parseStaleAfterMs(source.INDEXER_STALE_AFTER_SECONDS),
   };
 }
 
@@ -201,6 +205,10 @@ export async function loadIndexerResource(
     ok: true,
     resource: resource.name as IndexerResourceName,
     data: records,
-    meta: { apiVersion, droppedRecords: dropped },
+    meta: {
+      apiVersion,
+      droppedRecords: dropped,
+      freshness: readIndexerFreshness(headers, config.staleAfterMs),
+    },
   };
 }

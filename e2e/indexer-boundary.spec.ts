@@ -25,7 +25,11 @@ test.describe('Indexer browser boundary', () => {
           data: [
             { address: 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H', metric1: 4 },
           ],
-          meta: { apiVersion: '1.0.0', droppedRecords: 0 },
+          meta: {
+            apiVersion: '1.0.0',
+            droppedRecords: 0,
+            freshness: { lastIndexedLedger: null, lastIndexedAt: null, staleAfterMs: 300_000 },
+          },
         },
       })
     );
@@ -57,7 +61,11 @@ test.describe('Indexer browser boundary', () => {
               ok: true,
               resource: 'leaderboard',
               data: [],
-              meta: { apiVersion: '1.0.0', droppedRecords: 0 },
+              meta: {
+                apiVersion: '1.0.0',
+                droppedRecords: 0,
+                freshness: { lastIndexedLedger: null, lastIndexedAt: null, staleAfterMs: 300_000 },
+              },
             },
           });
     });
@@ -69,5 +77,31 @@ test.describe('Indexer browser boundary', () => {
 
     await alert.getByRole('button', { name: 'Retry' }).click();
     await expect(alert).toBeHidden();
+  });
+
+  test('leaderboard warns when the indexer is behind', async ({ page }) => {
+    await page.route(LEADERBOARD, (route) =>
+      route.fulfill({
+        json: {
+          ok: true,
+          resource: 'leaderboard',
+          data: [],
+          meta: {
+            apiVersion: '1.0.0',
+            droppedRecords: 0,
+            freshness: {
+              lastIndexedLedger: 51234567,
+              lastIndexedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+              staleAfterMs: 300_000,
+            },
+          },
+        },
+      })
+    );
+
+    await page.goto('/analytics/leaderboard');
+    const badge = page.locator('[data-freshness]');
+    await expect(badge).toHaveAttribute('data-freshness', 'stale', { timeout: 30000 });
+    await expect(badge).toContainText('last indexed 3 hours ago (ledger #51,234,567)');
   });
 });

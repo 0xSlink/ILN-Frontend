@@ -12,7 +12,11 @@ function envelope(data: unknown[], droppedRecords = 0) {
       ok: true,
       resource: 'invoice.events',
       data,
-      meta: { apiVersion: '1.0.0', droppedRecords },
+      meta: {
+        apiVersion: '1.0.0',
+        droppedRecords,
+        freshness: { lastIndexedLedger: null, lastIndexedAt: null, staleAfterMs: 300_000 },
+      },
     }),
   };
 }
@@ -134,8 +138,35 @@ describe('ActivityFeed', () => {
       envelope([{ type: 'submitted', timestamp: Date.now() - 60_000 }], 2)
     );
     render(<ActivityFeed invoiceId={1n} />);
-    expect(await screen.findByRole('status')).toHaveTextContent(
-      '2 records from the indexer could not be displayed'
-    );
+    expect(
+      await screen.findByText(/2 records from the indexer could not be displayed/)
+    ).toBeInTheDocument();
+  });
+
+  it('flags an empty feed from a lagging indexer as stale rather than definitive', async () => {
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        resource: 'invoice.events',
+        data: [],
+        meta: {
+          apiVersion: '1.0.0',
+          droppedRecords: 0,
+          freshness: {
+            lastIndexedLedger: 1200,
+            lastIndexedAt: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+            staleAfterMs: 300_000,
+          },
+        },
+      }),
+    });
+
+    render(<ActivityFeed invoiceId={1n} />);
+
+    expect(await screen.findByText('No activity yet for this invoice.')).toBeInTheDocument();
+    const badge = screen.getByRole('status');
+    expect(badge).toHaveAttribute('data-freshness', 'stale');
+    expect(badge).toHaveTextContent('Data may be out of date · last indexed 2 hours ago');
   });
 });

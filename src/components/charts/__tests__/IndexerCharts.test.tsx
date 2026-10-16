@@ -12,7 +12,11 @@ function envelope(resource: string, data: unknown[]) {
       ok: true,
       resource,
       data,
-      meta: { apiVersion: '1.0.0', droppedRecords: 0 },
+      meta: {
+        apiVersion: '1.0.0',
+        droppedRecords: 0,
+        freshness: { lastIndexedLedger: null, lastIndexedAt: null, staleAfterMs: 300_000 },
+      },
     }),
   };
 }

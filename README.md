@@ -178,6 +178,7 @@ Here is a detailed guide of the configuration options available:
 | `INDEXER_URL`                   | Server-only base URL of the indexer; the browser reaches it via `/api/indexer/*`.      |
 | `INDEXER_API_KEY`               | Server-only bearer credential for the indexer. Never use a `NEXT_PUBLIC_` name.        |
 | `INDEXER_TIMEOUT_MS`            | Upstream indexer timeout in ms (default `8000`).                                       |
+| `INDEXER_STALE_AFTER_SECONDS`   | Age (s) after which indexer data is shown as stale (default `300`).                    |
 | `INDEXER_API_VERSION_POLICY`    | `strict` (default) requires `X-Indexer-Api-Version: 1.x`; `allow-missing` for rollout. |
 | `NEXT_PUBLIC_INDEXER_API_URL`   | Deprecated: read server-side only as a fallback for `INDEXER_URL`.                     |
 | `NEXT_PUBLIC_APP_URL`           | Base URL of the deployed application (defaults to `https://app.iln.finance`).          |

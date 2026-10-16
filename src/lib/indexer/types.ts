@@ -7,6 +7,7 @@
  */
 
 import type { IndexerErrorCode } from './errors';
+import type { IndexerFreshness } from './freshness';
 
 export type IndexerResourceName =
   | 'analytics.defaults'
@@ -61,6 +62,8 @@ export interface IndexerResponseMeta {
   apiVersion: string;
   /** Records the indexer sent that failed validation and were omitted. */
   droppedRecords: number;
+  /** How far the indexer had caught up with the chain when it answered. */
+  freshness: IndexerFreshness;
 }
 
 export interface IndexerSuccessEnvelope<T> {

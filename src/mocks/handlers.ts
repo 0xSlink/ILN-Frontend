@@ -18,7 +18,16 @@ const horizonAccount = {
 };
 
 function indexerEnvelope(resource: string, data: unknown[]) {
-  return { ok: true, resource, data, meta: { apiVersion: '1.0.0', droppedRecords: 0 } };
+  return {
+    ok: true,
+    resource,
+    data,
+    meta: {
+      apiVersion: '1.0.0',
+      droppedRecords: 0,
+      freshness: { lastIndexedLedger: null, lastIndexedAt: null, staleAfterMs: 300_000 },
+    },
+  };
 }
 
 function stellarRpcResponse(method: string) {

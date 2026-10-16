@@ -13,7 +13,11 @@ import {
 } from 'recharts';
 import { transformFundingData } from '@/utils/funding';
 import { useIndexerResource } from '@/hooks/useIndexerResource';
-import { IndexerErrorState, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
+import {
+  IndexerErrorState,
+  IndexerFreshnessBadge,
+  IndexerPartialNotice,
+} from '@/components/indexer/IndexerStatus';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -220,7 +224,12 @@ export default function FundingChart() {
           </ResponsiveContainer>
         )}
       </div>
-      {funding.meta ? <IndexerPartialNotice dropped={funding.meta.droppedRecords} /> : null}
+      {funding.meta ? (
+        <div className="flex flex-col gap-2">
+          <IndexerFreshnessBadge freshness={funding.meta.freshness} />
+          <IndexerPartialNotice dropped={funding.meta.droppedRecords} />
+        </div>
+      ) : null}
     </div>
   );
 }

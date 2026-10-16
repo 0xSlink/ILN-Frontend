@@ -28,6 +28,7 @@ export const env = {
   INDEXER_API_KEY: process.env.INDEXER_API_KEY || '',
   INDEXER_TIMEOUT_MS: process.env.INDEXER_TIMEOUT_MS || '',
   INDEXER_API_VERSION_POLICY: process.env.INDEXER_API_VERSION_POLICY || 'strict',
+  INDEXER_STALE_AFTER_SECONDS: process.env.INDEXER_STALE_AFTER_SECONDS || '300',
 
   // Stellar / Contract – have testnet defaults in constants.ts but validated here
   NEXT_PUBLIC_CONTRACT_ID: optionalEnv(

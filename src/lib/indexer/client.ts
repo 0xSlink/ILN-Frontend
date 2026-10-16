@@ -12,6 +12,7 @@ import {
   isIndexerErrorCode,
   INDEXER_ERROR_MESSAGES,
 } from './errors';
+import { isIndexerFreshness } from './freshness';
 import type { IndexerResourceDataMap, IndexerResourceName, IndexerSuccessEnvelope } from './types';
 
 export const INDEXER_PROXY_BASE = '/api/indexer';
@@ -82,7 +83,8 @@ export async function fetchIndexer<N extends IndexerResourceName>(
       !Array.isArray(body.data) ||
       !isRecord(body.meta) ||
       typeof body.meta.apiVersion !== 'string' ||
-      typeof body.meta.droppedRecords !== 'number'
+      typeof body.meta.droppedRecords !== 'number' ||
+      !isIndexerFreshness(body.meta.freshness)
     ) {
       throw new IndexerError('schema');
     }

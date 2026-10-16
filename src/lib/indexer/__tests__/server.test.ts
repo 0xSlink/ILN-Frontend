@@ -17,6 +17,7 @@ const CONFIG: IndexerServerConfig = {
   apiKey: SECRET,
   timeoutMs: 50,
   versionPolicy: 'strict',
+  staleAfterMs: 300_000,
 };
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
@@ -48,6 +49,7 @@ describe('readIndexerServerConfig', () => {
       apiKey: SECRET,
       timeoutMs: 2500,
       versionPolicy: 'strict',
+      staleAfterMs: 300_000,
     });
   });
 
@@ -212,7 +214,11 @@ describe('loadIndexerResource', () => {
       ok: true,
       resource: 'leaderboard',
       data: [{ address: 'GAAA', metric1: 3 }],
-      meta: { apiVersion: '1.2.0', droppedRecords: 1 },
+      meta: {
+        apiVersion: '1.2.0',
+        droppedRecords: 1,
+        freshness: { lastIndexedLedger: null, lastIndexedAt: null, staleAfterMs: 300_000 },
+      },
     });
   });
 

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useToast } from '@/context/ToastContext';
 import { describeIndexerError, fetchIndexer } from '@/lib/indexer/client';
+import { isIndexerFreshness, type IndexerFreshness } from '@/lib/indexer/freshness';
+import { IndexerFreshnessBadge } from '@/components/indexer/IndexerStatus';
 
 type Funder = {
   address: string;
@@ -12,7 +14,8 @@ type Funder = {
   avgDiscountRate: number;
 };
 
-const CACHE_KEY = 'iln_top_funders_30d';
+// v2 caches carry indexer freshness so cached rows are never shown as live.
+const CACHE_KEY = 'iln_top_funders_30d_v2';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const RANK_BADGES = ['🥇', '🥈', '🥉'];
@@ -47,15 +50,21 @@ export default function TopFundersWidget() {
   const [rows, setRows] = useState<Funder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [freshness, setFreshness] = useState<IndexerFreshness | null>(null);
 
   useEffect(() => {
     const run = async () => {
       try {
         const cachedRaw = localStorage.getItem(CACHE_KEY);
         if (cachedRaw) {
-          const cached = JSON.parse(cachedRaw) as { savedAt: number; rows: Funder[] };
-          if (Date.now() - cached.savedAt < CACHE_TTL_MS) {
+          const cached = JSON.parse(cachedRaw) as {
+            savedAt: number;
+            rows: Funder[];
+            freshness?: unknown;
+          };
+          if (Date.now() - cached.savedAt < CACHE_TTL_MS && isIndexerFreshness(cached.freshness)) {
             setRows(cached.rows);
+            setFreshness(cached.freshness);
             setLoading(false);
             return;
           }
@@ -67,7 +76,15 @@ export default function TopFundersWidget() {
         );
         const normalized = normalizeFunders(envelope.data);
         setRows(normalized);
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), rows: normalized }));
+        setFreshness(envelope.meta.freshness);
+        localStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({
+            savedAt: Date.now(),
+            rows: normalized,
+            freshness: envelope.meta.freshness,
+          })
+        );
       } catch (err) {
         setRows([]);
         setError(describeIndexerError(err));
@@ -126,6 +143,12 @@ export default function TopFundersWidget() {
           No active LP leaderboard data is available right now.
         </p>
       )}
+
+      {!loading && !error && freshness ? (
+        <div className="mt-3">
+          <IndexerFreshnessBadge freshness={freshness} />
+        </div>
+      ) : null}
 
       {!loading && rows.length > 0 && (
         <div className="mt-4 space-y-3">
