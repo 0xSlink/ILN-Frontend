@@ -576,12 +576,14 @@ export async function getVotingPower(address: string): Promise<number> {
       buildTokenReadTransaction(ILN_TOKEN_CONTRACT_ID, 'balance', params)
     );
     if (!rpc.Api.isSimulationSuccess(callResult) || !callResult.result?.retval) {
-      return 1250;
+      // No authoritative balance available: report zero rather than a
+      // fabricated voting-power constant.
+      return 0;
     }
     const balance = BigInt(scValToNative(callResult.result.retval));
     return Number(balance);
   } catch {
-    return 1250;
+    return 0;
   }
 }
 
@@ -590,36 +592,15 @@ export async function getDelegationInfo(address: string): Promise<{
   delegatedAmount: number;
   incomingDelegations: number;
 }> {
-  // Mock implementation - replace with actual Soroban calls
-  // In a real implementation, this would query the governance contract
-  await new Promise((r) => setTimeout(r, 150));
-
-  // Simulate some users having delegations
-  const mockDelegations = {
-    GABC123: {
-      delegatedTo: 'GDEF456EXAMPLE789ABC012GHI345JKL678MNO901PQR234STU567VWX890YZ',
-      delegatedAmount: 500,
-      incomingDelegations: 0,
-    },
-    GDEF456: {
-      delegatedTo: null,
-      delegatedAmount: 0,
-      incomingDelegations: 1200,
-    },
-  };
-
-  const shortAddress = address.slice(0, 7);
-  const mockData = mockDelegations[shortAddress as keyof typeof mockDelegations];
-
-  if (mockData) {
-    return mockData;
-  }
-
-  // Default: no delegation
+  // TODO: Replace with actual Soroban delegation reads once the governance
+  // contract exposes them (Ref: #111). Until then, report no delegation rather
+  // than inventing per-address or randomized delegation figures that would
+  // otherwise reach the voting-power UI.
+  void address;
   return {
     delegatedTo: null,
     delegatedAmount: 0,
-    incomingDelegations: Math.floor(Math.random() * 500), // Random incoming delegations for demo
+    incomingDelegations: 0,
   };
 }
 

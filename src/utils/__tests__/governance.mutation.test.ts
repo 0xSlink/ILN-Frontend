@@ -152,15 +152,16 @@ describe('governance.vetoProposal', () => {
   });
 
   it('throws when the proposal does not exist', async () => {
-    await expect(
-      vetoProposal(999_999, '0xreason', SIGNER, signTx)
-    ).rejects.toThrow(/proposal not found/i);
+    await expect(vetoProposal(999_999, '0xreason', SIGNER, signTx)).rejects.toThrow(
+      /proposal not found/i
+    );
   });
 });
 
 describe('governance.getVotingPower', () => {
-  it('resolves a positive voting power for any address', async () => {
+  it('resolves a numeric power, falling back to 0 (no fabricated constant)', async () => {
     const power = await getVotingPower(SIGNER);
-    expect(power).toBeGreaterThan(0);
+    expect(Number.isFinite(power)).toBe(true);
+    expect(power).toBeGreaterThanOrEqual(0);
   });
 });
