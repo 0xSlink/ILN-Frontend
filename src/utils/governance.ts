@@ -335,6 +335,16 @@ export function formatVotingPower(power: number): string {
 
 const userVotes: Map<number, VoteChoice> = new Map();
 const vetoHistory: VetoRecord[] = [];
+const proposalTxHashes: Map<string, string> = new Map();
+const proposalCreationCache: Map<
+  string,
+  { txHash: string; proposalId: number; timestamp: number }
+> = new Map();
+
+export function clearGovernanceIdempotencyCache(): void {
+  proposalTxHashes.clear();
+  proposalCreationCache.clear();
+}
 
 export function getUserVote(proposalId: number): VoteChoice | undefined {
   return userVotes.get(proposalId);
@@ -476,17 +486,27 @@ async function requireGovernanceSignature(
  * Deterministic stand-in transaction hash derived from the wallet signature.
  * Replaces the previous `Math.random()` hashes so no fabricated random value
  * reaches the UI (#1141); the same signed intent always yields the same hash.
+ * Emits a 64-character hex string so it satisfies the standard Stellar
+ * transaction-hash shape enforced by `isValidTxHash` (#1148).
  */
 function deriveGovernanceTxHash(...seeds: string[]): string {
-  const seed = seeds.join('|');
-  let h1 = 0x811c9dc5;
-  let h2 = 0x01000193;
-  for (let i = 0; i < seed.length; i += 1) {
-    h1 = Math.imul(h1 ^ seed.charCodeAt(i), 16777619) >>> 0;
-    h2 = Math.imul(h2 + seed.charCodeAt(i), 31) >>> 0;
-  }
-  const hex = (n: number) => (n >>> 0).toString(16).padStart(8, '0');
-  return `${hex(h1)}${hex(h2)}${hex(h1 ^ h2)}${hex(h2 + h1)}`;
+  const mix = (salt: string): string => {
+    const seed = `${salt}|${seeds.join('|')}`;
+    let h1 = 0x811c9dc5;
+    let h2 = 0x01000193;
+    let h3 = 0xdeadbeef;
+    let h4 = 0x41c6ce57;
+    for (let i = 0; i < seed.length; i += 1) {
+      const code = seed.charCodeAt(i);
+      h1 = Math.imul(h1 ^ code, 16777619) >>> 0;
+      h2 = (Math.imul(h2 + code, 31) >>> 0) ^ (h1 >>> 3);
+      h3 = Math.imul(h3 ^ (code + i), 2654435761) >>> 0;
+      h4 = (Math.imul(h4 + code, 1597334677) >>> 0) ^ (h3 >>> 5);
+    }
+    const hex = (n: number) => (n >>> 0).toString(16).padStart(8, '0');
+    return `${hex(h1)}${hex(h2)}${hex(h3)}${hex(h4)}`;
+  };
+  return `${mix('iln:governance:a')}${mix('iln:governance:b')}`;
 }
 
 export async function castVote(
@@ -499,23 +519,49 @@ export async function castVote(
   // Ref: #111
   await new Promise((r) => setTimeout(r, 2000));
 
+  const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
+  const cacheKey = `${signerAddress || 'anon'}:vote:${proposalId}`;
+  const previousVote = userVotes.get(proposalId);
+
+  // Idempotency: if user already voted with this exact choice, return confirmed hash without duplicate counting (#1146)
+  if (previousVote === choice) {
+    const existingHash = proposalTxHashes.get(cacheKey);
+    if (existingHash) return existingHash;
+  }
+
+  // Signature gate before any mutation: a declined wallet changes nothing (#1144).
   const signed = await requireGovernanceSignature(
     `vote:${proposalId}:${choice}:${signerAddress}`,
     signerAddress,
     signTx
   );
 
-  const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
+  // If user changed their vote, adjust previous choice count
+  if (proposal && previousVote && previousVote !== choice) {
+    const power = 1250;
+    if (previousVote === 'For') {
+      proposal.votesFor = Math.max(0, proposal.votesFor - power);
+    } else if (previousVote === 'Against') {
+      proposal.votesAgainst = Math.max(0, proposal.votesAgainst - power);
+    } else if (previousVote === 'Abstain') {
+      proposal.votesAbstain = Math.max(0, (proposal.votesAbstain ?? 0) - power);
+    }
+  }
+
   userVotes.set(proposalId, choice);
 
-  if (proposal) {
+  if (proposal && previousVote !== choice) {
     const power = 1250;
     if (choice === 'For') proposal.votesFor += power;
     else if (choice === 'Against') proposal.votesAgainst += power;
     else if (choice === 'Abstain') proposal.votesAbstain = (proposal.votesAbstain ?? 0) + power;
   }
 
-  return deriveGovernanceTxHash(signed, `vote:${proposalId}:${choice}`);
+  // Deterministic hash rooted in the collected signature; cached so an
+  // idempotent replay returns the identical confirmation (#1141, #1146).
+  const txHash = deriveGovernanceTxHash(signed, `vote:${proposalId}:${choice}:${signerAddress}`);
+  proposalTxHashes.set(cacheKey, txHash);
+  return txHash;
 }
 
 export async function executeProposal(
@@ -527,18 +573,27 @@ export async function executeProposal(
   // Ref: #111
   await new Promise((r) => setTimeout(r, 2000));
 
-  const signed = await requireGovernanceSignature(
+  const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
+  if (!proposal) throw new Error('Proposal not found');
+
+  const cacheKey = `execute:${proposalId}`;
+  // Idempotent replay of an already-executed proposal: no mutation, return
+  // the cached confirmation without re-signing (#1146).
+  if (proposal.status === 'Executed') {
+    const existing = proposalTxHashes.get(cacheKey);
+    if (existing) return existing;
+  }
+
+  const executedSigned = await requireGovernanceSignature(
     `execute:${proposalId}:${signerAddress}`,
     signerAddress,
     signTx
   );
 
-  const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
-  if (proposal) {
-    proposal.status = 'Executed';
-  }
-
-  return deriveGovernanceTxHash(signed, `execute:${proposalId}`);
+  proposal.status = 'Executed';
+  const txHash = deriveGovernanceTxHash(executedSigned, `execute:${proposalId}`);
+  proposalTxHashes.set(cacheKey, txHash);
+  return txHash;
 }
 
 export async function vetoProposal(
@@ -552,6 +607,18 @@ export async function vetoProposal(
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   if (!proposal) throw new Error('Proposal not found');
 
+  const cacheKey = `veto:${proposalId}:${reasonHash}`;
+  // Idempotent replay of an identical veto: no mutation, return the cached
+  // confirmation without re-signing (#1146).
+  const existingVeto = vetoHistory.find(
+    (record) => record.proposalId === proposalId && record.reasonHash === reasonHash
+  );
+  if (existingVeto && proposal.status === 'Vetoed') {
+    const existing = proposalTxHashes.get(cacheKey);
+    if (existing) return existing;
+  }
+
+  // Signature gate before any mutation (#1144).
   const signed = await requireGovernanceSignature(
     `veto:${proposalId}:${reasonHash}:${adminAddress}`,
     adminAddress,
@@ -568,7 +635,9 @@ export async function vetoProposal(
   vetoHistory.unshift(record);
   proposal.vetoHistory = [record, ...(proposal.vetoHistory ?? [])];
 
-  return deriveGovernanceTxHash(signed, `veto:${proposalId}:${reasonHash}`);
+  const vetoTxHash = deriveGovernanceTxHash(signed, `veto:${proposalId}:${reasonHash}`);
+  proposalTxHashes.set(cacheKey, vetoTxHash);
+  return vetoTxHash;
 }
 
 export function getVetoHistory(proposalId: number): VetoRecord[] {
@@ -792,7 +861,20 @@ export async function createProposal(
 ): Promise<{ txHash: string; proposalId: number }> {
   await new Promise((r) => setTimeout(r, 2500));
 
-  // Signature first: a declined wallet must not append a proposal (#1144).
+  // Idempotency check: deduplicate rapid duplicate submissions without
+  // mutating or re-signing (#1146).
+  const idempotencyKey = `${signerAddress}:${payload.title}:${payload.formType}:${
+    payload.newValueBps ?? payload.tokenAddress ?? payload.removeTokenAddress ?? ''
+  }`;
+  const cached = proposalCreationCache.get(idempotencyKey);
+  if (cached && Date.now() - cached.timestamp < 30_000) {
+    return {
+      txHash: cached.txHash,
+      proposalId: cached.proposalId,
+    };
+  }
+
+  // Signature gate: a declined wallet must not append a proposal (#1144).
   const signed = await requireGovernanceSignature(
     `create:${payload.formType}:${payload.title}:${signerAddress}`,
     signerAddress,
@@ -879,8 +961,18 @@ export async function createProposal(
 
   MOCK_PROPOSALS.push(newProposal);
 
+  const createdTxHash = deriveGovernanceTxHash(
+    signed,
+    `create:${newId}:${payload.formType}:${signerAddress}`
+  );
+  proposalCreationCache.set(idempotencyKey, {
+    txHash: createdTxHash,
+    proposalId: newId,
+    timestamp: Date.now(),
+  });
+
   return {
-    txHash: deriveGovernanceTxHash(signed, `create:${newId}:${payload.formType}`),
+    txHash: createdTxHash,
     proposalId: newId,
   };
 }

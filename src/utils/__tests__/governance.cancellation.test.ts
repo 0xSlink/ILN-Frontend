@@ -17,6 +17,7 @@ import {
   vetoProposal,
   type CreateProposalPayload,
 } from '../governance';
+import { isValidTxHash } from '../explorer';
 
 const SIGNER = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const okSignTx = vi.fn(async (xdr: string) => `signed-${xdr}`);
@@ -80,7 +81,8 @@ describe('governance cancellation leaves state unchanged', () => {
 
   it('a collected signature still applies and yields a deterministic hash', async () => {
     const first = await castVote(6, 'For', SIGNER, okSignTx);
-    expect(first).toMatch(/^[0-9a-f]{32}$/);
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect(isValidTxHash(first)).toBe(true);
     expect(okSignTx).toHaveBeenCalled();
   });
 });

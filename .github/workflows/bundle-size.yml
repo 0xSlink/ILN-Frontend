@@ -41,6 +41,12 @@ jobs:
           NEXT_PUBLIC_STELLAR_NETWORK: testnet
           ANALYZE: 'true'
 
+      - name: Check governance route bundle budget
+        # Per-route budget (Issue #1152): catches a regression isolated to
+        # the governance routes that would be lost in the aggregate 6.5 MB
+        # budget below. See scripts/check-route-bundle-size.mjs.
+        run: node scripts/check-route-bundle-size.mjs
+
       - name: Measure .next/static output sizes
         id: measure
         run: |
