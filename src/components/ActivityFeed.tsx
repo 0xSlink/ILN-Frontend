@@ -290,8 +290,8 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
       console.error(err);
       setError('Unable to load activity feed.');
 
-      // MOCK DATA for demonstration if the API is not reachable
-      if (process.env.NODE_ENV === 'development' || true) {
+      // MOCK DATA for demonstration in development only
+      if (process.env.NODE_ENV === 'development') {
         setEvents([
           {
             type: 'submitted',

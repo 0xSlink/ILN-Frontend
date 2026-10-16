@@ -24,6 +24,7 @@ This directory contains the main contributor and operations documentation for th
 - **[error-codes.md](error-codes.md)** - Error code catalog and troubleshooting notes.
 - **[feature-flags.md](feature-flags.md)** - Overview of feature flags and current rollout settings.
 - **[i18n.md](i18n.md)** - Internationalization setup and translation workflow details.
+- **[indexer-data-boundary.md](indexer-data-boundary.md)** - Documentation of the browser/indexer data boundary, including schema contracts, authentication, timeout configuration, and operational escalation paths.
 - **[repo-size-audit.md](repo-size-audit.md)** - Repository size analysis and optimization recommendations.
 - **[supabase-setup.md](supabase-setup.md)** - Supabase configuration and local setup notes.
 
