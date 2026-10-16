@@ -159,10 +159,10 @@ Following any security incident:
 
 The following automated checks run in CI (see `.github/workflows/ci.yml`) to detect compromised or malicious dependencies before they reach production:
 
-#### **npm audit**
+#### **pnpm audit**
 
 - **Trigger:** Every pull request and pre-merge to `main`/`dev`
-- **Command:** `npm audit --audit-level=moderate`
+- **Command:** `pnpm audit --audit-level=moderate`
 - **Purpose:** Detects known CVEs in published package versions
 - **Limitation:** Only catches **published** vulnerabilities; does not catch 0-days or a new malicious version of a trusted package
 - **Response:** Audit failures block merges; maintainers must investigate and either bump to a patched version, apply a lockfile override, or accept documented risk
