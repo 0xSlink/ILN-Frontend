@@ -3,20 +3,11 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { formatAddress, formatRelativeTime, formatUSDC } from '@/utils/format';
+import { fetchInvoiceEvents } from '@/lib/indexer';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
-  type IndexerNoticeStatus,
 } from '@/components/IndexerUnavailableNotice';
 import DataSourceCaption from '@/components/DataSourceCaption';
-import { IndexerFreshnessBadge, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
-import type { IndexerResponseMeta } from '@/lib/indexer/types';
-import {
-  fetchInvoiceEvents,
-  classifyIndexerClientError,
-  indexerErrorDetail,
-  isAbortError,
-  type RawInvoiceEvent,
-} from '@/lib/indexer-client';
 
 type InvoiceEventType =
   | 'submitted'
@@ -28,6 +19,14 @@ type InvoiceEventType =
   | 'dispute_raised'
   | 'dispute_resolved'
   | 'unknown';
+
+interface RawInvoiceEvent {
+  type?: string;
+  timestamp?: number | string;
+  actor?: string;
+  data?: Record<string, unknown>;
+  [key: string]: unknown;
+}
 
 interface InvoiceEvent {
   type: InvoiceEventType;
@@ -279,34 +278,15 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
   const [events, setEvents] = useState<InvoiceEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [errorStatus, setErrorStatus] = useState<IndexerNoticeStatus>('unavailable');
   const [expandedEvents, setExpandedEvents] = useState<Record<number, boolean>>({});
-  const [meta, setMeta] = useState<IndexerResponseMeta | null>(null);
-  const [errorDetail, setErrorDetail] = useState<string | undefined>();
 
-  const fetchEvents = useCallback(
-    async (signal?: AbortSignal) => {
-      try {
-        setLoading(true);
-        setError(null);
-        setMeta(null);
-        setErrorDetail(undefined);
-        const rawEvents = await fetchInvoiceEvents(invoiceId, { signal, onMeta: setMeta });
-        setEvents(rawEvents.map(parseInvoiceEvent));
-      } catch (err) {
-        if (isAbortError(err)) {
-          return;
-        }
-        console.error(err);
+  const fetchEvents = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = await fetchInvoiceEvents(invoiceId);
+      if (result.unavailable || result.error || !result.data) {
         setEvents([]);
         setError('Unable to load activity feed.');
-        setErrorDetail(indexerErrorDetail(err));
-        const boundary = classifyIndexerClientError(err);
-        setErrorStatus(
-          boundary === 'rate-limited' || boundary === 'unauthorized' || boundary === 'malformed'
-            ? boundary
-            : 'unavailable'
-        );
 
         // Only substitute demonstration data in development. In every other
         // environment (including production) show the honest "temporarily
@@ -338,19 +318,52 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
           ]);
           setError(null);
         }
-      } finally {
-        setLoading(false);
+        return;
       }
-    },
-    [invoiceId]
-  );
+      setEvents(result.data.map(parseInvoiceEvent));
+      setError(null);
+    } catch (err) {
+      console.error(err);
+      setEvents([]);
+      setError('Unable to load activity feed.');
+
+      // Only substitute demonstration data in development. In every other
+      // environment (including production) show the honest "temporarily
+      // unavailable" state rather than fabricating an audit trail.
+      if (shouldUseDevMockFallback()) {
+        setEvents([
+          {
+            type: 'submitted',
+            timestamp: Date.now() - 86400000 * 2,
+            actor: 'GABC12345678901234567890123456789012345678901234567890123456',
+            raw: {
+              type: 'submitted',
+              timestamp: Date.now() - 86400000 * 2,
+              actor: 'GABC12345678901234567890123456789012345678901234567890123456',
+            },
+          },
+          {
+            type: 'funded',
+            timestamp: Date.now() - 86400000,
+            actor: 'GDEF5678901234567890123456789012345678901234567890123456',
+            data: { amount: '1000000000' },
+            raw: {
+              type: 'funded',
+              timestamp: Date.now() - 86400000,
+              actor: 'GDEF5678901234567890123456789012345678901234567890123456',
+              data: { amount: '1000000000' },
+            },
+          },
+        ]);
+        setError(null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [invoiceId]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    void fetchEvents(controller.signal);
-    return () => {
-      controller.abort();
-    };
+    fetchEvents();
   }, [fetchEvents]);
 
   const sortedEvents = useMemo(
@@ -385,8 +398,6 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
         </p>
         <IndexerUnavailableNotice
           dataSource="The invoice activity feed"
-          status={errorStatus}
-          detail={errorDetail}
           onRetry={() => {
             setError(null);
             setEvents([]);
@@ -402,12 +413,6 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
       <section className="mt-8 rounded-3xl border border-outline-variant/15 bg-surface-container-lowest p-8 text-center text-on-surface-variant">
         <p className="text-xs font-bold uppercase tracking-widest text-primary">Event History</p>
         <p className="mt-4 text-sm">No activity yet for this invoice.</p>
-        {meta ? (
-          <div className="mt-4 flex flex-col items-center gap-2">
-            <IndexerFreshnessBadge freshness={meta.freshness} />
-            <IndexerPartialNotice dropped={meta.droppedRecords} />
-          </div>
-        ) : null}
       </section>
     );
   }
@@ -418,12 +423,6 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
         <p className="text-xs font-bold uppercase tracking-widest text-primary">Event History</p>
         <h2 className="mt-2 text-xl font-semibold text-on-surface">Invoice audit trail</h2>
         <DataSourceCaption metric="invoice-activity" className="mt-1" />
-        {meta ? (
-          <div className="mt-2 flex flex-col gap-2">
-            <IndexerFreshnessBadge freshness={meta.freshness} />
-            <IndexerPartialNotice dropped={meta.droppedRecords} />
-          </div>
-        ) : null}
       </div>
 
       <div className="space-y-4 relative">
