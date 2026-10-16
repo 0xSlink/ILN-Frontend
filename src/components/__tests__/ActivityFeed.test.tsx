@@ -5,6 +5,13 @@ import ActivityFeed from '../ActivityFeed';
 // Mock fetch
 const globalFetch = global.fetch;
 
+function envelope(data: unknown[], droppedRecords = 0) {
+  return {
+    ok: true,
+    json: async () => ({ ok: true, resource: 'invoice.events', data, meta: { droppedRecords } }),
+  };
+}
+
 describe('ActivityFeed', () => {
   beforeEach(() => {
     global.fetch = vi.fn();
@@ -22,10 +29,7 @@ describe('ActivityFeed', () => {
   });
 
   it('should render empty state when no events', async () => {
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => [],
-    });
+    (global.fetch as any).mockResolvedValue(envelope([]));
 
     render(<ActivityFeed invoiceId={1n} />);
 
@@ -49,17 +53,17 @@ describe('ActivityFeed', () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => mockEvents,
-    });
+    (global.fetch as any).mockResolvedValue(envelope(mockEvents));
 
     render(<ActivityFeed invoiceId={1n} />);
 
     await waitFor(() => {
       expect(screen.getByText(/Invoice submitted by/)).toBeInTheDocument();
       expect(screen.getByText(/Invoice funded by/)).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'GABC12...3456' })).toBeInTheDocument();
+      expect(screen.getAllByRole('link', { name: 'GABC...3456' })[0]).toHaveAttribute(
+        'href',
+        '/profile/GABC12345678901234567890123456789012345678901234567890123456'
+      );
       expect(screen.getByText('1 hours ago')).toBeInTheDocument();
     });
   });
@@ -73,10 +77,7 @@ describe('ActivityFeed', () => {
       },
     ];
 
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => mockEvents,
-    });
+    (global.fetch as any).mockResolvedValue(envelope(mockEvents));
 
     render(<ActivityFeed invoiceId={1n} />);
 
@@ -90,14 +91,46 @@ describe('ActivityFeed', () => {
     expect(screen.getByRole('button', { name: 'Hide raw event data' })).toBeInTheDocument();
   });
 
-  it('should handle fetch error by showing mock data (in dev/demo mode)', async () => {
-    (global.fetch as any).mockRejectedValue(new Error('Network error'));
+  it('requests events through the same-origin indexer proxy', async () => {
+    (global.fetch as any).mockResolvedValue(envelope([]));
+    render(<ActivityFeed invoiceId={42n} />);
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect((global.fetch as any).mock.calls[0][0]).toBe('/api/indexer/invoices/42/events');
+  });
+
+  it('shows an explicit error instead of placeholder events when the request fails', async () => {
+    (global.fetch as any).mockRejectedValue(new TypeError('Failed to fetch'));
 
     render(<ActivityFeed invoiceId={1n} />);
 
-    await waitFor(() => {
-      expect(screen.getByText(/Invoice submitted by/)).toBeInTheDocument();
-      expect(screen.getByText(/Invoice funded by/)).toBeInTheDocument();
-    });
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Unable to load the activity feed.');
+    expect(alert).toHaveTextContent('The indexer could not be reached.');
+    expect(screen.queryByText(/Invoice submitted by/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Invoice funded by/)).not.toBeInTheDocument();
+  });
+
+  it('recovers after a retry', async () => {
+    (global.fetch as any)
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(
+        envelope([{ type: 'submitted', timestamp: Date.now() - 60_000, actor: 'GABCDEFGH123456' }])
+      );
+
+    render(<ActivityFeed invoiceId={1n} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText(/Invoice submitted by/)).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('discloses records the proxy dropped as malformed', async () => {
+    (global.fetch as any).mockResolvedValue(
+      envelope([{ type: 'submitted', timestamp: Date.now() - 60_000 }], 2)
+    );
+    render(<ActivityFeed invoiceId={1n} />);
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '2 records from the indexer could not be displayed'
+    );
   });
 });

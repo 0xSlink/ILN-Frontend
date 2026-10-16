@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useToast } from '@/context/ToastContext';
+import { describeIndexerError, fetchIndexer } from '@/lib/indexer/client';
 
 type Funder = {
   address: string;
@@ -45,6 +46,7 @@ export default function TopFundersWidget() {
   const { addToast } = useToast();
   const [rows, setRows] = useState<Funder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -59,15 +61,16 @@ export default function TopFundersWidget() {
           }
         }
 
-        const response = await fetch('/api/leaderboard?type=lp&period=30d&limit=10', {
-          cache: 'no-store',
-        });
-        const data = (await response.json()) as unknown;
-        const normalized = normalizeFunders(data);
+        const envelope = await fetchIndexer(
+          'leaderboard',
+          'leaderboard?type=lp&period=30d&limit=10'
+        );
+        const normalized = normalizeFunders(envelope.data);
         setRows(normalized);
         localStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), rows: normalized }));
-      } catch {
+      } catch (err) {
         setRows([]);
+        setError(describeIndexerError(err));
       } finally {
         setLoading(false);
       }
@@ -112,7 +115,13 @@ export default function TopFundersWidget() {
 
       {loading && <p className="mt-3 text-sm text-on-surface-variant">Loading active LPs...</p>}
 
-      {!loading && rows.length === 0 && (
+      {!loading && error && (
+        <p role="alert" className="mt-3 text-sm text-error">
+          Unable to load active LPs. {error}
+        </p>
+      )}
+
+      {!loading && !error && rows.length === 0 && (
         <p className="mt-3 text-sm text-on-surface-variant">
           No active LP leaderboard data is available right now.
         </p>

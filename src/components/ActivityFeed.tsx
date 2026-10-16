@@ -1,8 +1,11 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { formatAddress, formatRelativeTime, formatUSDC } from '@/utils/format';
+import { useIndexerResource } from '@/hooks/useIndexerResource';
+import { IndexerErrorState, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
+import type { IndexerInvoiceEvent } from '@/lib/indexer/types';
 
 type InvoiceEventType =
   | 'submitted'
@@ -15,27 +18,17 @@ type InvoiceEventType =
   | 'dispute_resolved'
   | 'unknown';
 
-interface RawInvoiceEvent {
-  type?: string;
-  timestamp?: number | string;
-  actor?: string;
-  data?: Record<string, unknown>;
-  [key: string]: unknown;
-}
-
 interface InvoiceEvent {
   type: InvoiceEventType;
   timestamp: number;
   actor?: string;
   data?: Record<string, unknown>;
-  raw: RawInvoiceEvent;
+  raw: IndexerInvoiceEvent;
 }
 
 interface ActivityFeedProps {
   invoiceId: bigint;
 }
-
-const INDEXER_API_BASE = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
 
 const EVENT_TYPE_MAP: Record<string, InvoiceEventType> = {
   submitted: 'submitted',
@@ -249,18 +242,10 @@ function normalizeEventType(value?: string): InvoiceEventType {
   return EVENT_TYPE_MAP[value.toString().toLowerCase()] ?? 'unknown';
 }
 
-function parseInvoiceEvent(raw: RawInvoiceEvent): InvoiceEvent {
-  const resolvedTimestamp = raw.timestamp
-    ? typeof raw.timestamp === 'string'
-      ? Date.parse(raw.timestamp)
-      : Number(raw.timestamp)
-    : Date.now();
+function toInvoiceEvent(raw: IndexerInvoiceEvent): InvoiceEvent {
   return {
     type: normalizeEventType(raw.type),
-    timestamp:
-      Number.isFinite(resolvedTimestamp) && !Number.isNaN(resolvedTimestamp)
-        ? resolvedTimestamp
-        : Date.now(),
+    timestamp: raw.timestamp,
     actor: raw.actor,
     data: raw.data,
     raw,
@@ -272,60 +257,9 @@ function formatEventTypeLabel(type: InvoiceEventType) {
 }
 
 export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
-  const [events, setEvents] = useState<InvoiceEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const feed = useIndexerResource('invoice.events', `invoices/${invoiceId.toString()}/events`);
   const [expandedEvents, setExpandedEvents] = useState<Record<number, boolean>>({});
-
-  const fetchEvents = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`${INDEXER_API_BASE}/invoice/${invoiceId}/events`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) throw new Error('Failed to fetch activity feed');
-      const rawEvents = (await res.json()) as RawInvoiceEvent[];
-      setEvents(rawEvents.map(parseInvoiceEvent));
-    } catch (err) {
-      console.error(err);
-      setError('Unable to load activity feed.');
-
-      // MOCK DATA for demonstration if the API is not reachable
-      if (process.env.NODE_ENV === 'development' || true) {
-        setEvents([
-          {
-            type: 'submitted',
-            timestamp: Date.now() - 86400000 * 2,
-            actor: 'GABC12345678901234567890123456789012345678901234567890123456',
-            raw: {
-              type: 'submitted',
-              timestamp: Date.now() - 86400000 * 2,
-              actor: 'GABC12345678901234567890123456789012345678901234567890123456',
-            },
-          },
-          {
-            type: 'funded',
-            timestamp: Date.now() - 86400000,
-            actor: 'GDEF5678901234567890123456789012345678901234567890123456',
-            data: { amount: '1000000000' },
-            raw: {
-              type: 'funded',
-              timestamp: Date.now() - 86400000,
-              actor: 'GDEF5678901234567890123456789012345678901234567890123456',
-              data: { amount: '1000000000' },
-            },
-          },
-        ]);
-        setError(null);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [invoiceId]);
-
-  useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
+  const events = useMemo(() => (feed.data ?? []).map(toInvoiceEvent), [feed.data]);
 
   const sortedEvents = useMemo(
     () => [...events].sort((a, b) => b.timestamp - a.timestamp),
@@ -339,7 +273,7 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
     }));
   };
 
-  if (loading) {
+  if (feed.status === 'loading') {
     return (
       <section className="mt-8 animate-pulse rounded-3xl border border-outline-variant/15 bg-surface-container-lowest p-6 shadow-xl">
         <div className="h-4 w-48 rounded-full bg-surface-container-lowest/70" />
@@ -347,6 +281,17 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
           <div className="h-28 rounded-3xl bg-surface-container-lowest" />
           <div className="h-28 rounded-3xl bg-surface-container-lowest" />
         </div>
+      </section>
+    );
+  }
+
+  if (feed.status === 'error') {
+    return (
+      <section className="mt-8 rounded-3xl border border-outline-variant/15 bg-surface-container-lowest p-8">
+        <p className="mb-4 text-center text-xs font-bold uppercase tracking-widest text-primary">
+          Event History
+        </p>
+        <IndexerErrorState error={feed.error} onRetry={feed.retry} subject="the activity feed" />
       </section>
     );
   }
@@ -365,6 +310,9 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
       <div className="mb-6">
         <p className="text-xs font-bold uppercase tracking-widest text-primary">Event History</p>
         <h2 className="mt-2 text-xl font-semibold text-on-surface">Invoice audit trail</h2>
+        <div className="mt-2">
+          <IndexerPartialNotice dropped={feed.meta.droppedRecords} />
+        </div>
       </div>
 
       <div className="space-y-4 relative">

@@ -17,6 +17,10 @@ const horizonAccount = {
   ],
 };
 
+function indexerEnvelope(resource: string, data: unknown[]) {
+  return { ok: true, resource, data, meta: { droppedRecords: 0 } };
+}
+
 function stellarRpcResponse(method: string) {
   if (method === 'getHealth') {
     return { status: 'healthy' };
@@ -55,8 +59,20 @@ function stellarRpcResponse(method: string) {
 }
 
 export const handlers = [
-  http.get('/api/leaderboard', () => {
-    return HttpResponse.json([]);
+  http.get('/api/indexer/leaderboard', () => {
+    return HttpResponse.json(indexerEnvelope('leaderboard', []));
+  }),
+
+  http.get('/api/indexer/analytics/defaults', () => {
+    return HttpResponse.json(indexerEnvelope('analytics.defaults', []));
+  }),
+
+  http.get('/api/indexer/analytics/funding', () => {
+    return HttpResponse.json(indexerEnvelope('analytics.funding', []));
+  }),
+
+  http.get('/api/indexer/invoices/:invoiceId/events', () => {
+    return HttpResponse.json(indexerEnvelope('invoice.events', []));
   }),
 
   http.get('/api/notifications/:address', () => {

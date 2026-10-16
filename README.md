@@ -65,15 +65,18 @@ The application is structured logically to support multiple participant roles (f
 ### 🧩 Core Component Layers
 
 1. **Smart Contract Layer (`src/lib/invoice-nft.ts` & `src/lib/contract/`)**
+
    - Connects frontend actions to the Soroban smart contract.
    - Reconstructs Invoice NFT metadata and tracks mint/burn/transfer event history by scanning the Horizon transaction logs and simulating Soroban contract invocations.
 
 2. **State & Context Layer (`src/context/`)**
+
    - **`WalletContext`**: Monitors Freighter wallet connection, active address, and queries multi-token balances (USDC, EURC, XLM) on Stellar.
    - **`NotificationContext`**: Handles in-app notification center persistence via `localStorage` (caps at 20 logs).
    - **`ToastContext`**: Powers non-blocking alerts.
 
 3. **Background Polling & Sync (`src/hooks/usePositionPolling.ts`)**
+
    - Monitors state transitions of funded invoices (e.g. `Funded -> Paid`, `Funded -> Defaulted`, or `Funded -> Disputed`) for the connected LP. It runs queries every 60 seconds and notifies the LP about due date expiration.
 
 4. **Payer Email Reminders (`app/api/reminders/`)**
@@ -164,17 +167,19 @@ Here is a detailed guide of the configuration options available:
 
 ### 🗄️ Notifications, Databases & Email (Backend/Cron)
 
-| Variable                        | Description                                                                   |
-| :------------------------------ | :---------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | The endpoint URL for the Supabase database.                                   |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anonymous browser-safe public key for Supabase.                               |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Backend service key used by reminder crons to bypass RLS policies.            |
-| `RESEND_API_KEY`                | API key from Resend.com used to dispatch payer reminder emails.               |
-| `CRON_SECRET`                   | Secret token to secure `/api/reminders` GET trigger from unauthorized calls.  |
-| `NOTIFICATION_API`              | External backend base URL to fetch notifications.                             |
-| `INDEXER_URL`                   | Base API URL of the ILN contract data indexer.                                |
-| `NEXT_PUBLIC_INDEXER_API_URL`   | Public indexer endpoint for activity feeds and analytics charts.              |
-| `NEXT_PUBLIC_APP_URL`           | Base URL of the deployed application (defaults to `https://app.iln.finance`). |
+| Variable                        | Description                                                                       |
+| :------------------------------ | :-------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | The endpoint URL for the Supabase database.                                       |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anonymous browser-safe public key for Supabase.                                   |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Backend service key used by reminder crons to bypass RLS policies.                |
+| `RESEND_API_KEY`                | API key from Resend.com used to dispatch payer reminder emails.                   |
+| `CRON_SECRET`                   | Secret token to secure `/api/reminders` GET trigger from unauthorized calls.      |
+| `NOTIFICATION_API`              | External backend base URL to fetch notifications.                                 |
+| `INDEXER_URL`                   | Server-only base URL of the indexer; the browser reaches it via `/api/indexer/*`. |
+| `INDEXER_API_KEY`               | Server-only bearer credential for the indexer. Never use a `NEXT_PUBLIC_` name.   |
+| `INDEXER_TIMEOUT_MS`            | Upstream indexer timeout in ms (default `8000`).                                  |
+| `NEXT_PUBLIC_INDEXER_API_URL`   | Deprecated: read server-side only as a fallback for `INDEXER_URL`.                |
+| `NEXT_PUBLIC_APP_URL`           | Base URL of the deployed application (defaults to `https://app.iln.finance`).     |
 
 ### 🧪 Testing & Analytics
 

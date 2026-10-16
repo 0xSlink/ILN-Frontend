@@ -23,7 +23,10 @@ export const env = {
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   CRON_SECRET: process.env.CRON_SECRET || '',
   NOTIFICATION_API: process.env.NOTIFICATION_API || '',
+  // Indexer – server-only; consumed by src/lib/indexer/server.ts
   INDEXER_URL: process.env.INDEXER_URL || '',
+  INDEXER_API_KEY: process.env.INDEXER_API_KEY || '',
+  INDEXER_TIMEOUT_MS: process.env.INDEXER_TIMEOUT_MS || '',
 
   // Stellar / Contract – have testnet defaults in constants.ts but validated here
   NEXT_PUBLIC_CONTRACT_ID: optionalEnv(
@@ -63,11 +66,7 @@ export const env = {
     'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
   ),
 
-  // Indexer
-  NEXT_PUBLIC_INDEXER_API_URL: optionalEnv(
-    'NEXT_PUBLIC_INDEXER_API_URL',
-    'https://api.iln.example.com'
-  ),
+  // Indexer WebSocket (REST access goes through /api/indexer, see INDEXER_URL)
   NEXT_PUBLIC_INDEXER_WS_URL: optionalEnv('NEXT_PUBLIC_INDEXER_WS_URL', 'ws://localhost:8080/ws'),
 
   // WalletConnect

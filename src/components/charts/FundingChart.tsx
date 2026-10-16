@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   AreaChart,
   Area,
@@ -12,6 +12,8 @@ import {
   type TooltipProps,
 } from 'recharts';
 import { transformFundingData } from '@/utils/funding';
+import { useIndexerResource } from '@/hooks/useIndexerResource';
+import { IndexerErrorState, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -20,7 +22,7 @@ export type TimeRange = '7D' | '30D' | '90D' | 'All';
 export interface TokenFunding {
   symbol: string;
   amount: number; // Whole unit amount
-  color: string;
+  color?: string;
 }
 
 export interface DailyFundingBucket {
@@ -48,40 +50,6 @@ const CHART_TICK_STYLE = {
 };
 
 const GRID_STROKE = 'var(--color-outline-variant, #334155)';
-
-// ─── Mock Data Generator ─────────────────────────────────────────────────────
-
-function generateMockFunding(range: TimeRange): DailyFundingBucket[] {
-  const buckets: DailyFundingBucket[] = [];
-  const now = new Date();
-  let days = 30;
-  if (range === '7D') days = 7;
-  else if (range === '90D') days = 90;
-  else if (range === 'All') days = 180;
-
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-    const usdc = Math.floor(Math.random() * 10_000) + 2_000;
-    const eurc = Math.floor(Math.random() * 5_000) + 1_000;
-    const xlm = Math.floor(Math.random() * 2_000) + 500;
-
-    buckets.push({
-      date: d.toISOString().slice(0, 10),
-      label,
-      total_usdc_equiv: usdc + eurc * 1.08 + xlm * 0.12, // rough estimation
-      invoices_funded: Math.floor(Math.random() * 5) + 1,
-      tokens: [
-        { symbol: 'USDC', amount: usdc, color: TOKEN_COLORS.USDC },
-        { symbol: 'EURC', amount: eurc, color: TOKEN_COLORS.EURC },
-        { symbol: 'XLM', amount: xlm, color: TOKEN_COLORS.XLM },
-      ],
-    });
-  }
-  return buckets;
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -126,33 +94,16 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) 
 
 export default function FundingChart() {
   const [range, setRange] = useState<TimeRange>('30D');
-  const [data, setData] = useState<DailyFundingBucket[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const baseUrl = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
-        const res = await fetch(`${baseUrl}/v1/analytics/funding?period=${range.toLowerCase()}`);
-        if (!res.ok) throw new Error('Failed to fetch');
-        const json = await res.json();
-        setData(json.daily);
-      } catch (err) {
-        // Fallback to mock data in development
-        const mockData = generateMockFunding(range);
-        setData(mockData);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [range]);
+  const funding = useIndexerResource(
+    'analytics.funding',
+    `analytics/funding?period=${range.toLowerCase()}`
+  );
+  const loading = funding.status === 'loading';
+  const data: DailyFundingBucket[] = useMemo(() => funding.data ?? [], [funding.data]);
 
   const transformedData = useMemo(() => transformFundingData(data), [data]);
 
-  const isEmpty = !loading && data.length === 0;
+  const isEmpty = funding.status === 'success' && data.length === 0;
 
   return (
     <div className="flex flex-col gap-6 rounded-[24px] border border-outline-variant/15 bg-surface-container-lowest p-6 shadow-sm">
@@ -187,7 +138,13 @@ export default function FundingChart() {
           </div>
         )}
 
-        {isEmpty ? (
+        {funding.status === 'error' ? (
+          <IndexerErrorState
+            error={funding.error}
+            onRetry={funding.retry}
+            subject="funding history"
+          />
+        ) : isEmpty ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 border-2 border-dashed border-outline-variant/20 rounded-2xl">
             <span className="material-symbols-outlined text-outline-variant/40 text-4xl">
               bar_chart
@@ -263,6 +220,7 @@ export default function FundingChart() {
           </ResponsiveContainer>
         )}
       </div>
+      {funding.meta ? <IndexerPartialNotice dropped={funding.meta.droppedRecords} /> : null}
     </div>
   );
 }

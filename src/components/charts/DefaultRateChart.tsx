@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   LineChart,
   Line,
@@ -12,11 +12,9 @@ import {
   ReferenceLine,
   type TooltipProps,
 } from 'recharts';
-import {
-  calculateMovingAverage,
-  MonthlyDefaultBucket,
-  MonthlyDefaultWithMA,
-} from '@/utils/defaultRate';
+import { calculateMovingAverage, MonthlyDefaultWithMA } from '@/utils/defaultRate';
+import { useIndexerResource } from '@/hooks/useIndexerResource';
+import { IndexerErrorState, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
 
 const CHART_TICK_STYLE = {
   fill: 'var(--color-on-surface-variant, #94a3b8)',
@@ -66,56 +64,14 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) 
   );
 }
 
-function generateMockDefaults(): MonthlyDefaultBucket[] {
-  const buckets: MonthlyDefaultBucket[] = [];
-  const now = new Date();
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(now);
-    d.setMonth(d.getMonth() - i);
-    const label = d.toLocaleDateString('en-US', {
-      month: 'short',
-      year: 'numeric',
-    });
-    const funded = Math.floor(Math.random() * 20) + 10;
-    const defaulted = Math.floor(Math.random() * Math.min(3, funded));
-    const defaultRate = funded > 0 ? (defaulted / funded) * 100 : 0;
-
-    buckets.push({
-      date: d.toISOString().slice(0, 7),
-      label,
-      defaulted,
-      funded,
-      defaultRate: Math.round(defaultRate * 100) / 100,
-    });
-  }
-  return buckets;
-}
-
 export default function DefaultRateChart() {
-  const [chartData, setChartData] = useState<MonthlyDefaultWithMA[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const baseUrl = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
-        const res = await fetch(`${baseUrl}/analytics/defaults?period=12m`);
-        if (!res.ok) throw new Error('Failed to fetch');
-        const json = await res.json();
-        const withMA = calculateMovingAverage(json.monthly || json, 1);
-        setChartData(withMA);
-      } catch {
-        const mockData = generateMockDefaults();
-        const withMA = calculateMovingAverage(mockData, 1);
-        setChartData(withMA);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
+  const defaults = useIndexerResource('analytics.defaults', 'analytics/defaults?period=12m');
+  const loading = defaults.status === 'loading';
+  const chartData: MonthlyDefaultWithMA[] = useMemo(
+    () => calculateMovingAverage(defaults.data ?? [], 1),
+    [defaults.data]
+  );
+  const hasData = chartData.length > 0;
 
   const currentRate = useMemo(() => {
     if (chartData.length === 0) return 0;
@@ -158,7 +114,7 @@ export default function DefaultRateChart() {
             Current
           </span>
           <span className="font-headline text-2xl font-bold text-on-surface">
-            {currentRate.toFixed(2)}%
+            {hasData ? `${currentRate.toFixed(2)}%` : '—'}
           </span>
         </div>
         <div className="flex flex-col gap-1 rounded-xl bg-surface-container p-4">
@@ -166,14 +122,16 @@ export default function DefaultRateChart() {
             All-time
           </span>
           <span className="font-headline text-2xl font-bold text-on-surface">
-            {allTimeRate.toFixed(2)}%
+            {hasData ? `${allTimeRate.toFixed(2)}%` : '—'}
           </span>
         </div>
         <div className="flex flex-col gap-1 rounded-xl bg-surface-container p-4">
           <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
             Trend
           </span>
-          <span className={`font-headline text-2xl font-bold ${trendClass}`}>{trendArrow}</span>
+          <span className={`font-headline text-2xl font-bold ${trendClass}`}>
+            {trend ? trendArrow : '—'}
+          </span>
         </div>
       </div>
 
@@ -184,7 +142,13 @@ export default function DefaultRateChart() {
           </div>
         )}
 
-        {chartData.length === 0 && !loading ? (
+        {defaults.status === 'error' ? (
+          <IndexerErrorState
+            error={defaults.error}
+            onRetry={defaults.retry}
+            subject="default rate history"
+          />
+        ) : defaults.status === 'success' && !hasData ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-outline-variant/20">
             <span className="material-symbols-outlined text-outline-variant/40 text-4xl">
               bar_chart
@@ -248,6 +212,7 @@ export default function DefaultRateChart() {
           </ResponsiveContainer>
         )}
       </div>
+      {defaults.meta ? <IndexerPartialNotice dropped={defaults.meta.droppedRecords} /> : null}
     </div>
   );
 }

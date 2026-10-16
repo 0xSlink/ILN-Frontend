@@ -1,39 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useWallet } from '@/context/WalletContext';
-
-type LeaderboardItem = {
-  address: string;
-  metric1?: number;
-  metric2?: number;
-};
+import { useIndexerResource } from '@/hooks/useIndexerResource';
+import { IndexerErrorState, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
 
 export default function LeaderboardPage() {
   const [activeTab, setActiveTab] = useState<'lp' | 'freelancer'>('lp');
   const [period, setPeriod] = useState('all');
-  const [data, setData] = useState<LeaderboardItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const leaderboard = useIndexerResource(
+    'leaderboard',
+    `leaderboard?type=${activeTab}&period=${period}`
+  );
+  const data = leaderboard.data ?? [];
 
   const { address } = useWallet();
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-
-      try {
-        const res = await fetch(`/api/leaderboard?type=${activeTab}&period=${period}`);
-        const result = await res.json();
-        setData(result);
-      } catch (err) {
-        console.error(err);
-      }
-
-      setLoading(false);
-    };
-
-    fetchData();
-  }, [activeTab, period]);
 
   const truncate = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
@@ -69,8 +50,14 @@ export default function LeaderboardPage() {
 
       {/* Table */}
       <div className="overflow-x-auto">
-        {loading ? (
+        {leaderboard.status === 'loading' ? (
           <p>Loading...</p>
+        ) : leaderboard.status === 'error' ? (
+          <IndexerErrorState
+            error={leaderboard.error}
+            onRetry={leaderboard.retry}
+            subject="the leaderboard"
+          />
         ) : (
           <table className="w-full border">
             <thead>
@@ -95,6 +82,11 @@ export default function LeaderboardPage() {
           </table>
         )}
       </div>
+      {leaderboard.meta ? (
+        <div className="mt-2">
+          <IndexerPartialNotice dropped={leaderboard.meta.droppedRecords} />
+        </div>
+      ) : null}
     </div>
   );
 }

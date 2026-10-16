@@ -1,6 +1,10 @@
 import type { NextConfig } from 'next';
-// @ts-ignore
+// @ts-expect-error -- next-pwa ships no type declarations
 import withPWA from 'next-pwa';
+import { assertNoPublicIndexerSecrets } from './src/lib/indexer/env-guard';
+
+// Fail the build before Next.js can inline an indexer credential into browser bundles.
+assertNoPublicIndexerSecrets();
 
 const nextConfig: NextConfig & { allowedDevOrigins?: string[] } = {
   reactStrictMode: true,
