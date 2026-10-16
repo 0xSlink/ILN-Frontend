@@ -2,14 +2,19 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.0.0",
   "engines": {
-    "node": ">=20.19.0 <21"
+    "node": ">=20.19.0 <21",
+    "pnpm": "9.0.0"
   },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "security:audit": "pnpm audit --audit-level=moderate",
+    "pm:drift-check": "node scripts/check-package-manager-drift.mjs",
     "knip": "knip",
     "docs:check-placeholders": "node scripts/check-placeholders.mjs",
     "docs:mock-inventory": "node scripts/generate-mock-inventory.mjs",
@@ -32,7 +37,7 @@
     "test": "vitest run --maxWorkers=1",
     "test:watch": "vitest",
     "coverage:trend": "node scripts/coverage-trend-report.mjs --summary ./coverage/coverage-summary.json --floor 80",
-    "verify": "pnpm run lint && pnpm run env:check && pnpm run env:drift-check && pnpm run i18n:check && pnpm run format:check && pnpm exec tsc --noEmit && pnpm test",
+    "verify": "pnpm run lint && pnpm run env:check && pnpm run env:drift-check && pnpm run i18n:check && pnpm run pm:drift-check && pnpm run format:check && pnpm run typecheck && pnpm test",
     "clean": "rm -rf .next .turbo storybook-static coverage test-results playwright-report .lighthouseci tsconfig.tsbuildinfo",
     "test:e2e": "playwright test",
     "test:mainnet-smoke": "playwright test e2e/mainnet-smoke.spec.ts",

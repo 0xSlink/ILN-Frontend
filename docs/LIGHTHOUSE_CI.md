@@ -28,12 +28,12 @@ Other tracked budgets:
 
 Even when all hard gates pass, `scripts/lighthouse-trend.mjs` compares the current run's medians against the **rolling median of the last 5 runs** (stored in `.lighthouseci-history/trend-history.json`). If a meaningful regression is detected, it emits a **soft-warning** that does not fail CI but is surfaced prominently:
 
-| Metric | Soft-warning threshold | Meaning |
-|---|---|---|
-| Performance score | drop > 5 points (0.05) vs baseline | overall regression |
-| LCP | +250ms vs baseline | content render slowed |
-| CLS | +0.02 vs baseline | layout shifted more |
-| TBT | +50ms vs baseline | more main-thread blocking |
+| Metric            | Soft-warning threshold             | Meaning                   |
+| ----------------- | ---------------------------------- | ------------------------- |
+| Performance score | drop > 5 points (0.05) vs baseline | overall regression        |
+| LCP               | +250ms vs baseline                 | content render slowed     |
+| CLS               | +0.02 vs baseline                  | layout shifted more       |
+| TBT               | +50ms vs baseline                  | more main-thread blocking |
 
 Thresholds are tunable via env (`LHCI_TREND_PERF_DELTA`, `LHCI_TREND_LCP_DELTA_MS`, `LHCI_TREND_CLS_DELTA`, `LHCI_TREND_TBT_DELTA_MS`, `LHCI_TREND_WINDOW`). To gate on them (future), run `node scripts/lighthouse-trend.mjs --strict`.
 
@@ -89,13 +89,13 @@ To run Lighthouse CI locally:
 
 ```bash
 # Build the app
-npm run build
+pnpm run build
 
 # Start the production server
-npm start
+pnpm start
 
 # In another terminal, run Lighthouse CI
-npx @lhci/cli autorun
+pnpm dlx @lhci/cli autorun
 
 # Check trend against local history (seeds history on first run)
 node scripts/lighthouse-trend.mjs

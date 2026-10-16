@@ -45,9 +45,6 @@ jobs:
 
       # ── License compliance ───────────────────────────────────────────────────
 
-      - name: Install license-checker
-        run: npm install -g license-checker@25.0.1
-
       - name: Run license compliance check
         id: license_check
         run: |
@@ -55,14 +52,14 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Generate the full license list for the summary
-          license-checker \
+          pnpm dlx license-checker@25.0.1 \
             --production \
             --json \
             --out /tmp/licenses.json \
             || true
 
           # Check against allowed-licenses list (fail on any disallowed license)
-          license-checker \
+          pnpm dlx license-checker@25.0.1 \
             --production \
             --onlyAllow \
               "MIT;MIT*;ISC;BSD-2-Clause;BSD-3-Clause;BSD-4-Clause;Apache-2.0;CC0-1.0;CC-BY-3.0;CC-BY-4.0;Unlicense;0BSD;Python-2.0;BlueOak-1.0.0;WTFPL" \
