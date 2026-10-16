@@ -13,6 +13,7 @@ Complete every item below before the first mainnet cutover deploy.
       `CI / lint`, `CI / tests`, `CI / build`, `End-to-End Tests / e2e`, `Lighthouse Performance Budget / lighthouse`,
       `Visual Regression Tests / chromatic`, `Accessibility Tests / accessibility`, `Contract Integration Tests / contract-tests`).
 - [ ] The smart contract mainnet deployment is complete and its production contract IDs are recorded.
+- [ ] Governance launch claims have maintainer sign-off under the [governance write-path readiness gate](governance-write-path-launch-readiness.md); see [mainnet launch notes](mainnet-launch-notes.md) for the current governance status.
 - [ ] A dry run has been performed against a Vercel preview deployment configured with mainnet-shaped (but not
       live) parameters - see [Section 4](#4-dry-run-procedure).
 - [ ] Feature flag defaults for launch have been reviewed and signed off - see [Section 5](#5-feature-flag-cutover-defaults).

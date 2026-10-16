@@ -29,6 +29,9 @@ vi.mock('@/hooks/useDocumentTitle', () => ({
 }));
 
 vi.mock('@/utils/governance', () => ({
+  GOVERNANCE_INTEGRATION_STATUS: {
+    getVotingPower: { status: 'Stubbed', label: 'Voting power lookup' },
+  },
   fetchProposals: vi.fn(() => Promise.resolve([])),
   getVotingPower: vi.fn(() => Promise.resolve(100)),
   timeRemaining: vi.fn(() => '2 days'),

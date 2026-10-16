@@ -28,12 +28,12 @@ Other tracked budgets:
 
 Even when all hard gates pass, `scripts/lighthouse-trend.mjs` compares the current run's medians against the **rolling median of the last 5 runs** (stored in `.lighthouseci-history/trend-history.json`). If a meaningful regression is detected, it emits a **soft-warning** that does not fail CI but is surfaced prominently:
 
-| Metric | Soft-warning threshold | Meaning |
-|---|---|---|
-| Performance score | drop > 5 points (0.05) vs baseline | overall regression |
-| LCP | +250ms vs baseline | content render slowed |
-| CLS | +0.02 vs baseline | layout shifted more |
-| TBT | +50ms vs baseline | more main-thread blocking |
+| Metric            | Soft-warning threshold             | Meaning                   |
+| ----------------- | ---------------------------------- | ------------------------- |
+| Performance score | drop > 5 points (0.05) vs baseline | overall regression        |
+| LCP               | +250ms vs baseline                 | content render slowed     |
+| CLS               | +0.02 vs baseline                  | layout shifted more       |
+| TBT               | +50ms vs baseline                  | more main-thread blocking |
 
 Thresholds are tunable via env (`LHCI_TREND_PERF_DELTA`, `LHCI_TREND_LCP_DELTA_MS`, `LHCI_TREND_CLS_DELTA`, `LHCI_TREND_TBT_DELTA_MS`, `LHCI_TREND_WINDOW`). To gate on them (future), run `node scripts/lighthouse-trend.mjs --strict`.
 
@@ -143,7 +143,7 @@ A soft warning means "still green, but meaningfully worse than recent history." 
 Lighthouse CI is configured in `.lighthouserc.json`:
 
 - `ci.collect.url`: Pages to audit
-- `ci.assert.assertions`: Budget thresholds and severity levels (`error` = hard-fail, `warn` = soft)
+- `ci.assert.assertMatrix`: Per-URL budget thresholds and severity levels, keyed by `matchingUrlPattern` (`error` = hard-fail, `warn` = soft). The `.*` entry holds the global performance budgets; each representative route has its own entry for the blocking accessibility budget. Lighthouse CI does not allow `assertMatrix` to be combined with a flat `ci.assert.assertions` block.
 - `ci.upload`: Report storage settings (filesystem by default; swap to `lhci` when using a server)
 - Trend detection: `scripts/lighthouse-trend.mjs` + `.lighthouseci-history/` (cache + artifacts)
 

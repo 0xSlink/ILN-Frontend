@@ -9,6 +9,16 @@ const mockResolveFederatedAddress = vi.fn();
 const mockExecute = vi.fn();
 
 vi.mock('@/utils/governance', () => ({
+  GOVERNANCE_INTEGRATION_STATUS: {
+    castVote: { status: 'Stubbed', label: 'Vote casting' },
+    delegateVotingPower: { status: 'Stubbed', label: 'Vote delegation' },
+    createProposal: { status: 'Stubbed', label: 'Proposal creation' },
+    executeProposal: { status: 'Stubbed', label: 'Proposal execution' },
+    vetoProposal: { status: 'Stubbed', label: 'Proposal veto' },
+    getGovTokenBalance: { status: 'Stubbed', label: 'Token balance lookup' },
+    getQuorumThreshold: { status: 'Stubbed', label: 'Quorum threshold lookup' },
+    getProposalHistory: { status: 'Stubbed', label: 'Proposal history lookup' },
+  },
   isValidStellarAddress: (...args: unknown[]) => mockIsValidStellarAddress(...args),
   getVotingPower: (...args: unknown[]) => mockGetVotingPower(...args),
 }));

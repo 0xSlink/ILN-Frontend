@@ -43,6 +43,16 @@ vi.mock('@/hooks/useBalances', () => ({
 
 // Mock governance utilities
 vi.mock('@/utils/governance', () => ({
+  GOVERNANCE_INTEGRATION_STATUS: {
+    castVote: { status: 'Stubbed', label: 'Vote casting' },
+    delegateVotingPower: { status: 'Stubbed', label: 'Vote delegation' },
+    createProposal: { status: 'Stubbed', label: 'Proposal creation' },
+    executeProposal: { status: 'Stubbed', label: 'Proposal execution' },
+    vetoProposal: { status: 'Stubbed', label: 'Proposal veto' },
+    getGovTokenBalance: { status: 'Stubbed', label: 'Token balance lookup' },
+    getQuorumThreshold: { status: 'Stubbed', label: 'Quorum threshold lookup' },
+    getProposalHistory: { status: 'Stubbed', label: 'Proposal history lookup' },
+  },
   fetchProtocolParameters: vi.fn().mockResolvedValue({
     feeRateBps: 50,
     maxDiscountRateBps: 500,
@@ -107,6 +117,7 @@ describe('NewGovernanceProposalPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Create New Governance Proposal/)).toBeDefined();
     });
+    expect(screen.getByText(/Not yet live/i)).toBeDefined();
     expect(screen.getByLabelText(/Action Type/)).toBeDefined();
     expect(screen.getByLabelText(/Title/)).toBeDefined();
     expect(screen.getByLabelText(/Description/)).toBeDefined();

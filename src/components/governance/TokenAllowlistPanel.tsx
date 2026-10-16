@@ -8,6 +8,7 @@ import { AcceptedToken, createProposal, fetchProtocolParameters } from '@/utils/
 import { formatAddress } from '@/utils/format';
 import { CONTRACT_ERROR_MAP, parseContractError } from '@/lib/contract/errors';
 import FieldTooltip from '@/components/FieldTooltip';
+import GovernanceMockStatusBanner from '@/components/governance/GovernanceMockStatusBanner';
 
 interface TokenRow extends AcceptedToken {
   decimals: number;
@@ -144,6 +145,8 @@ export default function TokenAllowlistPanel() {
 
   return (
     <section className="mt-10 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6">
+      <GovernanceMockStatusBanner action="createProposal" />
+
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-primary">

@@ -154,6 +154,63 @@ export interface Proposal {
   vetoHistory?: VetoRecord[];
 }
 
+// Keep this aligned with docs/contract-integration-status.md so the UI
+// automatically reflects the current live vs mock-backed governance status.
+type GovernanceActionName =
+  | 'castVote'
+  | 'delegateVotingPower'
+  | 'createProposal'
+  | 'executeProposal'
+  | 'vetoProposal'
+  | 'getVotingPower'
+  | 'getGovTokenBalance'
+  | 'getQuorumThreshold'
+  | 'getProposalHistory';
+
+export const GOVERNANCE_INTEGRATION_STATUS: Record<
+  GovernanceActionName,
+  { status: 'Real' | 'Stubbed'; label: string }
+> = {
+  castVote: {
+    status: 'Stubbed',
+    label: 'Vote casting',
+  },
+  delegateVotingPower: {
+    status: 'Stubbed',
+    label: 'Vote delegation',
+  },
+  createProposal: {
+    status: 'Stubbed',
+    label: 'Proposal creation',
+  },
+  executeProposal: {
+    status: 'Stubbed',
+    label: 'Proposal execution',
+  },
+  vetoProposal: {
+    status: 'Stubbed',
+    label: 'Proposal veto',
+  },
+  getVotingPower: {
+    status: 'Stubbed',
+    label: 'Voting power lookup',
+  },
+  getGovTokenBalance: {
+    status: 'Stubbed',
+    label: 'Token balance lookup',
+  },
+  getQuorumThreshold: {
+    status: 'Stubbed',
+    label: 'Quorum threshold lookup',
+  },
+  getProposalHistory: {
+    status: 'Stubbed',
+    label: 'Proposal history lookup',
+  },
+};
+
+export type GovernanceAction = keyof typeof GOVERNANCE_INTEGRATION_STATUS;
+
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
 const NOW = Math.floor(Date.now() / 1000);

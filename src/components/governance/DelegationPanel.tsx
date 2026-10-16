@@ -5,6 +5,7 @@ import { isValidStellarAddress } from '@/utils/governance';
 import { resolveFederatedAddress } from '@/utils/federation';
 import { useWallet } from '@/context/WalletContext';
 import { useTransaction } from '@/hooks/useTransaction';
+import GovernanceMockStatusBanner from '@/components/governance/GovernanceMockStatusBanner';
 import {
   Users,
   UserPlus,
