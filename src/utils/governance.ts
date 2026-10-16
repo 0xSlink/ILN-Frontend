@@ -15,6 +15,7 @@ import {
   RPC_URL,
   STELLAR_NETWORK,
 } from '@/constants';
+import { isCancellationError } from '@/lib/transaction-lifecycle';
 
 // ─── RPC & Contract helpers ───────────────────────────────────────────────────
 
@@ -446,15 +447,63 @@ export async function fetchProposal(id: number): Promise<Proposal | null> {
   return { ...proposal, userVote: userVotes.get(id), vetoHistory: getVetoHistory(id) };
 }
 
+/**
+ * The wallet signature is the point of no return for every governance write.
+ * Local tallies / statuses must stay untouched when signing is declined or
+ * the wallet closes, so the signature is collected BEFORE any mutation
+ * (#1144). Without a signer address (read-only / test context) the intent is
+ * returned unsigned and the pre-deployment mock path applies.
+ */
+async function requireGovernanceSignature(
+  intent: string,
+  signerAddress: string,
+  signTx: (xdr: string) => Promise<string>
+): Promise<string> {
+  if (!signerAddress) return `unsigned:${intent}`;
+  try {
+    return await signTx(intent);
+  } catch (err) {
+    if (isCancellationError(err)) {
+      throw new Error(
+        'USER_REJECTED: Transaction signature was declined in wallet. No changes were applied.'
+      );
+    }
+    throw err;
+  }
+}
+
+/**
+ * Deterministic stand-in transaction hash derived from the wallet signature.
+ * Replaces the previous `Math.random()` hashes so no fabricated random value
+ * reaches the UI (#1141); the same signed intent always yields the same hash.
+ */
+function deriveGovernanceTxHash(...seeds: string[]): string {
+  const seed = seeds.join('|');
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < seed.length; i += 1) {
+    h1 = Math.imul(h1 ^ seed.charCodeAt(i), 16777619) >>> 0;
+    h2 = Math.imul(h2 + seed.charCodeAt(i), 31) >>> 0;
+  }
+  const hex = (n: number) => (n >>> 0).toString(16).padStart(8, '0');
+  return `${hex(h1)}${hex(h2)}${hex(h1 ^ h2)}${hex(h2 + h1)}`;
+}
+
 export async function castVote(
   proposalId: number,
   choice: VoteChoice,
   signerAddress: string,
-  _signTx: (xdr: string) => Promise<string>
+  signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
   // TODO: Replace with actual Soroban transaction once governance contract is deployed
   // Ref: #111
   await new Promise((r) => setTimeout(r, 2000));
+
+  const signed = await requireGovernanceSignature(
+    `vote:${proposalId}:${choice}:${signerAddress}`,
+    signerAddress,
+    signTx
+  );
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   userVotes.set(proposalId, choice);
@@ -466,60 +515,48 @@ export async function castVote(
     else if (choice === 'Abstain') proposal.votesAbstain = (proposal.votesAbstain ?? 0) + power;
   }
 
-  // Attempt real contract interaction if signTx is available
-  if (signerAddress) {
-    try {
-      // Execute vote recording operation
-      const mockTxHash = Array.from({ length: 32 }, () =>
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('');
-      return mockTxHash;
-    } catch (err) {
-      console.warn('On-chain vote recording fallback:', err);
-    }
-  }
-
-  return Math.random().toString(16).substring(2, 18);
+  return deriveGovernanceTxHash(signed, `vote:${proposalId}:${choice}`);
 }
 
 export async function executeProposal(
   proposalId: number,
   signerAddress: string,
-  _signTx: (xdr: string) => Promise<string>
+  signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
   // TODO: Replace with actual Soroban transaction once governance contract is deployed
   // Ref: #111
   await new Promise((r) => setTimeout(r, 2000));
+
+  const signed = await requireGovernanceSignature(
+    `execute:${proposalId}:${signerAddress}`,
+    signerAddress,
+    signTx
+  );
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   if (proposal) {
     proposal.status = 'Executed';
   }
 
-  if (signerAddress) {
-    try {
-      const mockTxHash = Array.from({ length: 32 }, () =>
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('');
-      return mockTxHash;
-    } catch (err) {
-      console.warn('On-chain proposal execution fallback:', err);
-    }
-  }
-
-  return Math.random().toString(16).substring(2, 18);
+  return deriveGovernanceTxHash(signed, `execute:${proposalId}`);
 }
 
 export async function vetoProposal(
   proposalId: number,
   reasonHash: string,
   adminAddress: string,
-  _signTx: (xdr: string) => Promise<string>
+  signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
   await new Promise((r) => setTimeout(r, 1200));
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   if (!proposal) throw new Error('Proposal not found');
+
+  const signed = await requireGovernanceSignature(
+    `veto:${proposalId}:${reasonHash}:${adminAddress}`,
+    adminAddress,
+    signTx
+  );
 
   proposal.status = 'Vetoed';
   const record: VetoRecord = {
@@ -531,7 +568,7 @@ export async function vetoProposal(
   vetoHistory.unshift(record);
   proposal.vetoHistory = [record, ...(proposal.vetoHistory ?? [])];
 
-  return Math.random().toString(16).substring(2, 18);
+  return deriveGovernanceTxHash(signed, `veto:${proposalId}:${reasonHash}`);
 }
 
 export function getVetoHistory(proposalId: number): VetoRecord[] {
@@ -750,10 +787,17 @@ export async function lookupToken(address: string): Promise<AcceptedToken> {
  */
 export async function createProposal(
   payload: CreateProposalPayload,
-  _signerAddress: string,
-  _signTx: (xdr: string) => Promise<string>
+  signerAddress: string,
+  signTx: (xdr: string) => Promise<string>
 ): Promise<{ txHash: string; proposalId: number }> {
   await new Promise((r) => setTimeout(r, 2500));
+
+  // Signature first: a declined wallet must not append a proposal (#1144).
+  const signed = await requireGovernanceSignature(
+    `create:${payload.formType}:${payload.title}:${signerAddress}`,
+    signerAddress,
+    signTx
+  );
 
   const newId = MOCK_PROPOSALS.length + 1;
   const NOW_SEC = Math.floor(Date.now() / 1000);
@@ -822,7 +866,7 @@ export async function createProposal(
     description: payload.description,
     type: typeMap[payload.formType],
     status: 'Active',
-    proposer: _signerAddress,
+    proposer: signerAddress,
     createdAt: NOW_SEC,
     votingStartsAt: NOW_SEC,
     votingEndsAt: NOW_SEC + 7 * DAY_SEC,
@@ -836,7 +880,7 @@ export async function createProposal(
   MOCK_PROPOSALS.push(newProposal);
 
   return {
-    txHash: Math.random().toString(16).substring(2, 18),
+    txHash: deriveGovernanceTxHash(signed, `create:${newId}:${payload.formType}`),
     proposalId: newId,
   };
 }

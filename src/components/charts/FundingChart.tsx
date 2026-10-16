@@ -15,6 +15,7 @@ import { transformFundingData } from '@/utils/funding';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
 } from '@/components/IndexerUnavailableNotice';
+import DataSourceCaption from '@/components/DataSourceCaption';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -139,6 +140,7 @@ export default function FundingChart() {
     setUnavailable(false);
     try {
       const baseUrl = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
       const res = await fetch(
         `${baseUrl}/v1/analytics/funding?period=${selectedRange.toLowerCase()}`
       );
@@ -173,6 +175,7 @@ export default function FundingChart() {
         <div>
           <h3 className="font-headline text-xl font-bold text-on-surface">LP Funding History</h3>
           <p className="text-sm text-on-surface-variant">Daily volume across supported tokens</p>
+          <DataSourceCaption metric="funding-history" />
         </div>
 
         {/* Time Range Selector */}

@@ -20,6 +20,7 @@ import {
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
 } from '@/components/IndexerUnavailableNotice';
+import DataSourceCaption from '@/components/DataSourceCaption';
 
 const CHART_TICK_STYLE = {
   fill: 'var(--color-on-surface-variant, #94a3b8)',
@@ -128,6 +129,7 @@ export default function DefaultRateChart() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: initial chart load on mount/retry.
     void fetchData();
   }, [requestId, fetchData]);
 
@@ -163,6 +165,7 @@ export default function DefaultRateChart() {
         <div>
           <h3 className="font-headline text-xl font-bold text-on-surface">Default Rate Trend</h3>
           <p className="text-sm text-on-surface-variant">Protocol health indicator</p>
+          <DataSourceCaption metric="default-rate" />
         </div>
       </div>
 
