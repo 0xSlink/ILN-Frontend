@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Transaction } from '@stellar/stellar-sdk';
@@ -18,20 +18,23 @@ import { formatContractError } from '@/utils/contractErrorFormatter';
 import { TransactionErrorToast } from '@/components/transaction/TransactionErrorToast';
 import { useTransactionPreview } from './useTransactionPreview';
 import type { ExpectedTransactionAction } from '@/utils/transactionPattern';
+import { NETWORK_NAME } from '@/constants';
+import { normalizeWalletNetwork } from '@/utils/network';
 
 type SignTxFn = (txXdr: string, expectedAction?: ExpectedTransactionAction) => Promise<string>;
 
 type TransactionOperation<T> = (signTx: SignTxFn) => Promise<T>;
 
-interface ExecuteOptions {
+export interface ExecuteOptions {
   expectedAction?: ExpectedTransactionAction;
+  idempotencyKey?: string;
   title?: string;
   pendingMessage?: string;
   successTitle?: string;
   successMessage?: string;
 }
 
-interface UseTransactionResult {
+export interface UseTransactionResult {
   execute: <T = string>(
     txOrOperation: Transaction | TransactionOperation<T>,
     options?: string | ExecuteOptions
@@ -44,7 +47,7 @@ interface UseTransactionResult {
 }
 
 function isWalletRejection(message: string) {
-  return /reject|cancel|denied|user rejected/i.test(message);
+  return /reject|cancel|denied|declined|user rejected|user declined/i.test(message);
 }
 
 function getOptions(options?: string | ExecuteOptions): ExecuteOptions {
@@ -53,7 +56,7 @@ function getOptions(options?: string | ExecuteOptions): ExecuteOptions {
 }
 
 export function useTransaction(): UseTransactionResult {
-  const { signTx, isConnected, address } = useWallet();
+  const { signTx, isConnected, address, networkMismatch, walletNetwork } = useWallet();
   const { addToast, updateToast } = useToast();
   const queryClient = useQueryClient();
   const { previewModal, requestPreview } = useTransactionPreview();
@@ -62,6 +65,37 @@ export function useTransaction(): UseTransactionResult {
   const [isSigning, setIsSigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const activeToastIdRef = useRef<string | null>(null);
+  const inFlightKeysRef = useRef<Set<string>>(new Set());
+  const confirmedOperationsRef = useRef<Map<string, { result: any; timestamp: number }>>(new Map());
+  const executeRef = useRef<
+    | ((
+        txOrOperation: Transaction | TransactionOperation<any>,
+        options?: string | ExecuteOptions
+      ) => Promise<any>)
+    | null
+  >(null);
+
+  // Disconnect recovery: abort in-flight state safely if wallet disconnects while executing (#1147)
+  useEffect(() => {
+    if (!isConnected && (loading || isSigning)) {
+      setLoading(false);
+      setIsSigning(false);
+      const msg =
+        'Wallet disconnected during transaction. Please reconnect your wallet to continue.';
+      setError(msg);
+      if (activeToastIdRef.current) {
+        updateToast(activeToastIdRef.current, {
+          type: 'error',
+          title: 'Transaction Interrupted',
+          message: msg,
+        });
+        activeToastIdRef.current = null;
+      }
+      inFlightKeysRef.current.clear();
+    }
+  }, [isConnected, loading, isSigning, updateToast]);
 
   const signTxWithUi: SignTxFn = useCallback(
     async (txXdr: string, expectedAction?: ExpectedTransactionAction) => {
@@ -95,9 +129,22 @@ export function useTransaction(): UseTransactionResult {
     async <T = string,>(
       txOrOperation: Transaction | TransactionOperation<T>,
       options?: string | ExecuteOptions
-    ) => {
+    ): Promise<T | null> => {
       if (!isConnected || !address) {
         setError('Wallet not connected');
+        return null;
+      }
+
+      // Wrong-network protection: block signing and explain required network before any mutation (#1145)
+      if (networkMismatch) {
+        const currentNetwork = walletNetwork ? normalizeWalletNetwork(walletNetwork) : 'unknown';
+        const msg = `Wrong network detected (${currentNetwork}). Transactions require ${NETWORK_NAME}. Please switch your wallet network to ${NETWORK_NAME} before proceeding.`;
+        setError(msg);
+        addToast({
+          type: 'error',
+          title: 'Wrong Network Blocked',
+          message: msg,
+        });
         return null;
       }
 
@@ -107,6 +154,25 @@ export function useTransaction(): UseTransactionResult {
       const successTitle = resolvedOptions.successTitle ?? 'Transaction complete';
       const successMessage = resolvedOptions.successMessage ?? 'Your transaction was confirmed.';
 
+      // Transaction retry idempotency (#1146): deduplicate concurrent or recent duplicate operations
+      const opKey =
+        resolvedOptions.idempotencyKey ||
+        (resolvedOptions.expectedAction
+          ? `${resolvedOptions.expectedAction}:${resolvedOptions.title || ''}`
+          : resolvedOptions.title || 'generic-operation');
+
+      // If identical operation is already in flight, prevent duplicate signing/submission
+      if (inFlightKeysRef.current.has(opKey)) {
+        return null;
+      }
+
+      // If already confirmed within 5 minutes, return confirmed result idempotently
+      const cached = confirmedOperationsRef.current.get(opKey);
+      if (cached && Date.now() - cached.timestamp < 5 * 60 * 1000) {
+        return cached.result as T;
+      }
+
+      inFlightKeysRef.current.add(opKey);
       setLoading(true);
       setError(null);
       setSuccess(false);
@@ -116,6 +182,7 @@ export function useTransaction(): UseTransactionResult {
         title,
         message: pendingMessage,
       });
+      activeToastIdRef.current = toastId;
 
       const operation: TransactionOperation<T> =
         typeof txOrOperation === 'function'
@@ -126,26 +193,50 @@ export function useTransaction(): UseTransactionResult {
             };
 
       const retry = async () => {
-        // eslint-disable-next-line react-hooks/immutability
-        await execute(txOrOperation, options);
+        // Clear in-flight lock for idempotency key to allow clean retry (#1146)
+        inFlightKeysRef.current.delete(opKey);
+        if (executeRef.current) {
+          await executeRef.current(txOrOperation, options);
+        }
       };
 
       try {
         const signTxForOperation: SignTxFn = (txXdr) =>
           signTxWithUi(txXdr, resolvedOptions.expectedAction);
         const result = await operation(signTxForOperation);
+
+        // Record confirmed result in idempotency cache
+        confirmedOperationsRef.current.set(opKey, {
+          result,
+          timestamp: Date.now(),
+        });
+
+        // Surface transaction explorer links from confirmed IDs (#1148)
+        let txHash: string | undefined;
+        if (typeof result === 'string') {
+          txHash = result;
+        } else if (result && typeof result === 'object' && 'txHash' in result) {
+          const rawHash = (result as { txHash?: unknown }).txHash;
+          if (typeof rawHash === 'string') {
+            txHash = rawHash;
+          }
+        }
+
         setSuccess(true);
         recordSigningAttempt({
           flow: resolvedOptions.expectedAction ?? 'transaction',
           success: true,
         });
+
         updateToast(toastId, {
           type: 'success',
           title: successTitle,
           message: successMessage,
+          txHash,
         });
+
+        activeToastIdRef.current = null;
         queryClient.invalidateQueries();
-        // Let balance/state consumers (e.g. useBalances) refresh immediately on settlement.
         notifyTxSuccess();
         return result;
       } catch (err: any) {
@@ -203,14 +294,28 @@ export function useTransaction(): UseTransactionResult {
               },
         });
 
+        activeToastIdRef.current = null;
         return null;
       } finally {
+        inFlightKeysRef.current.delete(opKey);
         setLoading(false);
         setIsSigning(false);
       }
     },
-    [address, addToast, isConnected, queryClient, signTxWithUi, updateToast]
+    [
+      address,
+      addToast,
+      isConnected,
+      networkMismatch,
+      walletNetwork,
+      queryClient,
+      signTxWithUi,
+      updateToast,
+    ]
   );
+  useEffect(() => {
+    executeRef.current = execute;
+  }, [execute]);
 
   const signingModal = useMemo(() => {
     if (!isSigning) return null;
