@@ -81,9 +81,13 @@ describe('readIndexerServerConfig', () => {
   });
 
   it('refuses to run when a credential uses a NEXT_PUBLIC_ name', () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => readIndexerServerConfig({ ...ENV, NEXT_PUBLIC_INDEXER_API_KEY: SECRET })).toThrow(
-      /NEXT_PUBLIC_INDEXER_API_KEY/
+      expect.objectContaining({ code: 'not_configured' })
     );
+    const logged = log.mock.calls.flat().join(' ');
+    expect(logged).toContain('NEXT_PUBLIC_INDEXER_API_KEY');
+    expect(logged).not.toContain(SECRET);
   });
 });
 

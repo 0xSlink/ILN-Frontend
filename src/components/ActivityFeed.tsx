@@ -305,8 +305,9 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
       <section className="mt-8 rounded-3xl border border-outline-variant/15 bg-surface-container-lowest p-8 text-center text-on-surface-variant">
         <p className="text-xs font-bold uppercase tracking-widest text-primary">Event History</p>
         <p className="mt-4 text-sm">No activity yet for this invoice.</p>
-        <div className="mt-4 flex justify-center">
+        <div className="mt-4 flex flex-col items-center gap-2">
           <IndexerFreshnessBadge freshness={feed.meta.freshness} />
+          <IndexerPartialNotice dropped={feed.meta.droppedRecords} />
         </div>
       </section>
     );

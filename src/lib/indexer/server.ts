@@ -63,7 +63,13 @@ function parseVersionPolicy(raw: string | undefined): IndexerVersionPolicy {
 let warnedDeprecatedUrl = false;
 
 export function readIndexerServerConfig(source: EnvSource = process.env): IndexerServerConfig {
-  assertNoPublicIndexerSecrets(source);
+  try {
+    assertNoPublicIndexerSecrets(source);
+  } catch (err) {
+    // The message names the variables (never their values); keep it server-side.
+    console.error('[indexer]', (err as Error).message);
+    throw new IndexerError('not_configured');
+  }
 
   let rawUrl = source.INDEXER_URL?.trim();
   if (!rawUrl && source.NEXT_PUBLIC_INDEXER_API_URL?.trim()) {

@@ -1,5 +1,7 @@
 import { http, HttpResponse } from 'msw';
 import { contractReadFixtures } from './fixtures/contract';
+import { freshnessFixtures, proxySuccessEnvelope } from './fixtures/indexer';
+import type { IndexerResourceName } from '@/lib/indexer/types';
 
 const horizonAccount = {
   id: 'GTESTACCOUNT',
@@ -17,17 +19,9 @@ const horizonAccount = {
   ],
 };
 
-function indexerEnvelope(resource: string, data: unknown[]) {
-  return {
-    ok: true,
-    resource,
-    data,
-    meta: {
-      apiVersion: '1.0.0',
-      droppedRecords: 0,
-      freshness: { lastIndexedLedger: null, lastIndexedAt: null, staleAfterMs: 300_000 },
-    },
-  };
+function indexerEnvelope(resource: IndexerResourceName, data: unknown[]) {
+  // Mocked dev data has no real indexer behind it, so freshness is reported as unknown.
+  return proxySuccessEnvelope(resource, data, { freshness: freshnessFixtures.unknown });
 }
 
 function stellarRpcResponse(method: string) {
