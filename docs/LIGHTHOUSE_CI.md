@@ -89,13 +89,13 @@ To run Lighthouse CI locally:
 
 ```bash
 # Build the app
-npm run build
+pnpm run build
 
 # Start the production server
-npm start
+pnpm start
 
 # In another terminal, run Lighthouse CI
-npx @lhci/cli autorun
+pnpm dlx @lhci/cli autorun
 
 # Check trend against local history (seeds history on first run)
 node scripts/lighthouse-trend.mjs

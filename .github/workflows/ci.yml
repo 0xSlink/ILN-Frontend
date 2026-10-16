@@ -20,6 +20,35 @@ jobs:
       - name: Check file-size policy
         run: node scripts/check-file-sizes.mjs
 
+  package-manager-drift:
+    name: Package-manager drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check package-manager drift
+        run: pnpm run pm:drift-check
+
+      - name: Verify lockfile integrity
+        run: |
+          git diff --exit-code -- pnpm-lock.yaml pnpm-workspace.yaml package.json
+          echo "### Lockfile integrity" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Frozen install left tracked dependency declarations unmodified." >> "$GITHUB_STEP_SUMMARY"
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -40,8 +69,10 @@ jobs:
 
       - name: Verify lockfile integrity
         run: |
-          pnpm install --frozen-lockfile
-          git diff --exit-code pnpm-lock.yaml
+          git diff --exit-code -- pnpm-lock.yaml pnpm-workspace.yaml package.json
+          echo "### Lockfile integrity" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Frozen install left tracked dependency declarations unmodified." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run ESLint
         run: pnpm run lint
@@ -78,10 +109,10 @@ jobs:
         run: pnpm run format:check
 
       - name: Run TypeScript type check
-        run: pnpm exec tsc --noEmit
+        run: pnpm run typecheck
 
-      - name: Run npm audit for security vulnerabilities
-        run: npm audit --audit-level=moderate
+      - name: Run security audit for vulnerabilities
+        run: pnpm run security:audit
 
       - name: Check for postinstall script changes in dependencies
         run: |
