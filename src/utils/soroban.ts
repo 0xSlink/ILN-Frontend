@@ -17,9 +17,11 @@ import {
   RPC_URL,
   TESTNET_EURC_TOKEN_ID,
   TESTNET_USDC_TOKEN_ID,
+  TESTNET_XLM_TOKEN_ID,
 } from '@/constants';
 import { parseAmountToUnits, parseDiscountRateToBps, toUnixTimestamp } from './invoiceSubmission';
 import { fetchNativeXlmBalance } from '@/lib/horizonClient';
+import { recordPendingTransaction, removePendingTransaction } from '@/lib/pending-transactions';
 
 // ─── RPC & constants ──────────────────────────────────────────────────────────
 
@@ -43,6 +45,7 @@ export interface Invoice {
   funder?: string;
   funded_at?: bigint;
   token?: string;
+  whitelist?: string[];
 }
 
 export interface SubmittedInvoiceResult {
@@ -92,6 +95,17 @@ const KNOWN_TOKEN_METADATA: Record<string, Omit<TokenMetadata, 'contractId'>> = 
   [TESTNET_EURC_TOKEN_ID]: { name: 'Euro Coin', symbol: 'EURC', decimals: 7 },
 };
 
+/**
+ * Tokens the frontend can propose for the contract allowlist. The contract does
+ * not expose a `list_tokens` read; approval is derived per token by querying
+ * `get_token_decimals`.
+ */
+const APPROVED_TOKEN_CANDIDATES = [
+  TESTNET_USDC_TOKEN_ID,
+  TESTNET_EURC_TOKEN_ID,
+  TESTNET_XLM_TOKEN_ID,
+];
+
 function buildReadTransaction(contractId: string, method: string, params: xdr.ScVal[]) {
   return new TransactionBuilder(new Account(READ_ACCOUNT, '0'), {
     fee: BASE_FEE,
@@ -113,6 +127,26 @@ function parseStatus(status: unknown): string {
     return Object.keys(status as object)[0];
   }
   return String(status);
+}
+
+/**
+ * Encodes a referral code as a 32-byte value (contract `BytesN<32>`).
+ * Codes are ASCII and zero-padded to the fixed 32-byte length.
+ */
+function encodeReferralCodeBytes(code: string): xdr.ScVal {
+  const bytes = new Uint8Array(32);
+  const encoded = new TextEncoder().encode(code);
+  bytes.set(encoded.slice(0, 32), 0);
+  return xdr.ScVal.scvBytes(Buffer.from(bytes));
+}
+
+/**
+ * Encodes the contract's `ReferralCode` enum (None | Present(code)).
+ * `None` -> empty union (`scvVec(null)`), `Present` -> single-arm union.
+ */
+function encodeReferralCode(code?: string | null): xdr.ScVal {
+  if (!code) return xdr.ScVal.scvVec(null);
+  return xdr.ScVal.scvVec([encodeReferralCodeBytes(code)]);
 }
 
 function extractInvoiceIdFromTransaction(result: unknown): bigint | null {
@@ -226,15 +260,25 @@ function parseInvoiceFromNative(native: any): Invoice {
   };
 }
 
-export async function listInvoicesBySubmitter(submitterAddress: string): Promise<Invoice[]> {
+export async function listInvoicesBySubmitter(
+  submitterAddress: string,
+  page = 0,
+  pageSize = 50
+): Promise<Invoice[]> {
   try {
-    const params: xdr.ScVal[] = [Address.fromString(submitterAddress).toScVal()];
+    const addressScVal = Address.fromString(submitterAddress).toScVal();
+    const params: xdr.ScVal[] = [
+      addressScVal,
+      nativeToScVal(page, { type: 'u32' }),
+      nativeToScVal(pageSize, { type: 'u32' }),
+    ];
     let callResult = await server.simulateTransaction(
       buildReadTransaction(CONTRACT_ID, 'list_invoices_by_submitter', params)
     );
     if (!rpc.Api.isSimulationSuccess(callResult) || !callResult.result?.retval) {
+      // Older deployments exposed `list_invoices_by_freelancer(submitter)`.
       callResult = await server.simulateTransaction(
-        buildReadTransaction(CONTRACT_ID, 'list_invoices_by_freelancer', params)
+        buildReadTransaction(CONTRACT_ID, 'list_invoices_by_freelancer', [addressScVal])
       );
     }
     if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
@@ -267,9 +311,17 @@ export async function listInvoicesByPayer(payerAddress: string): Promise<Invoice
   }
 }
 
-export async function listInvoicesByLp(lpAddress: string): Promise<Invoice[]> {
+export async function listInvoicesByLp(
+  lpAddress: string,
+  page = 0,
+  pageSize = 50
+): Promise<Invoice[]> {
   try {
-    const params: xdr.ScVal[] = [Address.fromString(lpAddress).toScVal()];
+    const params: xdr.ScVal[] = [
+      Address.fromString(lpAddress).toScVal(),
+      nativeToScVal(page, { type: 'u32' }),
+      nativeToScVal(pageSize, { type: 'u32' }),
+    ];
     const callResult = await server.simulateTransaction(
       buildReadTransaction(CONTRACT_ID, 'list_invoices_by_lp', params)
     );
@@ -326,14 +378,32 @@ export async function getNativeXlmBalance(address: string): Promise<number> {
 }
 
 export async function getApprovedTokenIds(): Promise<string[]> {
-  const callResult = await server.simulateTransaction(
-    buildReadTransaction(CONTRACT_ID, 'list_tokens', [])
+  // The contract does not expose a `list_tokens` read. A token is considered
+  // approved when `get_token_decimals(Address)` returns a value (the contract
+  // stores decimals for every token added via `add_token`).
+  const tokenDecimalsReads = await Promise.allSettled(
+    APPROVED_TOKEN_CANDIDATES.map(async (tokenId) => {
+      const params: xdr.ScVal[] = [Address.fromString(tokenId).toScVal()];
+      const callResult = await server.simulateTransaction(
+        buildReadTransaction(CONTRACT_ID, 'get_token_decimals', params)
+      );
+      if (!rpc.Api.isSimulationSuccess(callResult) || !callResult.result?.retval) {
+        throw new Error(`Failed to fetch decimals for ${tokenId}`);
+      }
+      return scValToNative(callResult.result.retval);
+    })
   );
-  if (!rpc.Api.isSimulationSuccess(callResult) || !callResult.result?.retval) {
+
+  if (tokenDecimalsReads.every((result) => result.status === 'rejected')) {
     throw new Error('Failed to fetch approved tokens.');
   }
-  const native = scValToNative(callResult.result.retval);
-  return Array.isArray(native) ? native.map(String) : [];
+
+  return APPROVED_TOKEN_CANDIDATES.filter(
+    (_, index) =>
+      tokenDecimalsReads[index].status === 'fulfilled' &&
+      tokenDecimalsReads[index].value != null &&
+      Number.isFinite(Number(tokenDecimalsReads[index].value))
+  );
 }
 
 export async function getTokenMetadata(tokenId: string): Promise<TokenMetadata> {
@@ -655,13 +725,90 @@ export async function getTopLPs(limit = 50): Promise<TopLP[]> {
   }
 }
 
+// ─── Read: protocol status ───────────────────────────────────────────────────
+
+export interface ProtocolStatus {
+  paused: boolean;
+  paused_at?: number;
+  paused_by?: string;
+  reason?: string;
+}
+
+export async function getProtocolStatus(): Promise<ProtocolStatus> {
+  try {
+    const callResult = await server.simulateTransaction(
+      buildReadTransaction(CONTRACT_ID, 'get_protocol_status', [])
+    );
+    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
+      const native = scValToNative(callResult.result.retval);
+      return {
+        paused: Boolean(native?.paused ?? native?.is_paused ?? false),
+        paused_at: native?.paused_at ? Number(native.paused_at) : undefined,
+        paused_by: native?.paused_by ? String(native.paused_by) : undefined,
+        reason: native?.reason ? String(native.reason) : undefined,
+      };
+    }
+  } catch {
+    // Contract may not have get_protocol_status yet — fall back to unpaused.
+  }
+  return { paused: false };
+}
+
+// ─── Read: admin action history ──────────────────────────────────────────────
+
+export interface AdminAction {
+  id: string;
+  action_type: string;
+  actor: string;
+  timestamp: number;
+  details: string;
+  tx_hash?: string;
+}
+
+export async function getAdminActions(limit: number = 50): Promise<AdminAction[]> {
+  try {
+    const params: xdr.ScVal[] = [nativeToScVal(limit, { type: 'u32' })];
+    const callResult = await server.simulateTransaction(
+      buildReadTransaction(CONTRACT_ID, 'get_admin_actions', params)
+    );
+    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
+      const native = scValToNative(callResult.result.retval);
+      if (!Array.isArray(native)) return [];
+      return native.map((entry) => ({
+        id: String(entry.id ?? entry.action_id ?? ''),
+        action_type: String(entry.action_type ?? entry.type ?? 'unknown'),
+        actor: String(entry.actor ?? entry.admin ?? entry.address ?? ''),
+        timestamp: Number(entry.timestamp ?? entry.ts ?? 0),
+        details: String(entry.details ?? entry.description ?? ''),
+        tx_hash: entry.tx_hash ? String(entry.tx_hash) : undefined,
+      }));
+    }
+  } catch {
+    // Contract may not have get_admin_actions yet — fall back to empty list.
+  }
+  return [];
+}
+
 // ─── Write: fund invoice ──────────────────────────────────────────────────────
 
-export async function fundInvoice(funder: string, invoice_id: bigint) {
+/**
+ * Builds a `fund_invoice` transaction.
+ *
+ * The deployed contract signature is
+ * `fund_invoice(funder, invoice_id, fund_amount, require_oracle_verification: bool)`.
+ * When `requireOracleVerification` is enabled the contract rejects funding if
+ * the oracle feed is circuit-tripped from repeated staleness.
+ */
+export async function fundInvoice(
+  funder: string,
+  invoice_id: bigint,
+  options: { requireOracleVerification?: boolean } = {}
+) {
   const params: xdr.ScVal[] = [
     Address.fromString(funder).toScVal(),
     nativeToScVal(invoice_id, { type: 'u64' }),
     nativeToScVal(await getInvoiceRequiredFunding(invoice_id), { type: 'i128' }),
+    nativeToScVal(options.requireOracleVerification ?? false),
   ];
 
   const account = await server.getAccount(funder);
@@ -792,6 +939,17 @@ export async function disputeInvoice(payer: string, invoice_id: bigint, reason_h
 }
 
 /**
+ * Whether the deployed contract exposes an `update_lp_whitelist` entry point.
+ *
+ * The current contract ABI does not include this instruction (tracked in
+ * #783), so the feature is deferred: the LP whitelist UI should surface the
+ * governance-proposal notice instead of attempting on-chain modifications.
+ * Flip this to `true` (and replace the stub below) once the instruction
+ * lands on-chain.
+ */
+export const UPDATE_LP_WHITELIST_SUPPORTED: boolean = false;
+
+/**
  * Stub for updateLPWhitelist — some deployments may not support this
  * instruction; export a placeholder so consumers can safely call it
  * and bundlers don't fail on missing named exports.
@@ -848,6 +1006,10 @@ export interface SubmitInvoiceArgs {
   dueDate: number;
   /** Basis-points × 100 — e.g. 500 = 5.00% */
   discountRate: number;
+  /** Token contract address (defaults to the configured USDC token). */
+  token?: string;
+  /** Referral code, when the invoice is submitted through a referral campaign. */
+  referralCode?: string;
 }
 
 export async function submitInvoice(
@@ -859,6 +1021,8 @@ export async function submitInvoice(
     nativeToScVal(args.amount, { type: 'i128' }),
     nativeToScVal(BigInt(args.dueDate), { type: 'u64' }),
     nativeToScVal(args.discountRate, { type: 'u32' }),
+    Address.fromString(args.token ?? TESTNET_USDC_TOKEN_ID).toScVal(),
+    encodeReferralCode(args.referralCode),
   ];
 
   const account = await server.getAccount(args.freelancer);
@@ -883,7 +1047,7 @@ export async function submitInvoice(
 
   const sim = await server.simulateTransaction(tx);
   if (!rpc.Api.isSimulationSuccess(sim)) {
-    throw new Error(`Simulation failed: ${(sim as any).error}`);
+    throw new Error(`Simulation failed: ${'error' in sim ? sim.error : 'unknown error'}`);
   }
 
   // Extract the predicted invoice ID from simulation retval
@@ -892,18 +1056,18 @@ export async function submitInvoice(
     const raw = scValToNative(sim.result!.retval);
     // Contract returns Result<u64, Error> — unwrap Ok variant
     if (raw && typeof raw === 'object' && 'ok' in raw) {
-      invoiceId = BigInt((raw as any).ok);
+      invoiceId = BigInt((raw as Record<string, unknown>).ok as string | number | bigint);
     } else if (raw && typeof raw === 'object' && 'Ok' in raw) {
-      invoiceId = BigInt((raw as any).Ok);
+      invoiceId = BigInt((raw as Record<string, unknown>).Ok as string | number | bigint);
     } else {
-      invoiceId = BigInt(raw as any);
+      invoiceId = BigInt(raw as string | number | bigint);
     }
   } catch {
     // If we can't parse it, proceed without the ID — it'll be shown after poll
   }
 
   const finalTx = rpc.assembleTransaction(tx, sim).build();
-  return { tx: finalTx as any, invoiceId };
+  return { tx: finalTx, invoiceId };
 }
 
 export interface UpdateInvoiceArgs {
@@ -945,14 +1109,17 @@ export async function updateInvoice(args: UpdateInvoiceArgs): Promise<{ tx: Tran
 
   const sim = await server.simulateTransaction(tx);
   if (!rpc.Api.isSimulationSuccess(sim)) {
-    throw new Error(`Simulation failed: ${(sim as any).error}`);
+    throw new Error(`Simulation failed: ${'error' in sim ? sim.error : 'unknown error'}`);
   }
 
   const finalTx = rpc.assembleTransaction(tx, sim).build();
-  return { tx: finalTx as any };
+  return { tx: finalTx };
 }
 
-export async function cancelInvoice(freelancer: string, invoiceId: bigint): Promise<{ tx: any }> {
+export async function cancelInvoice(
+  freelancer: string,
+  invoiceId: bigint
+): Promise<{ tx: Transaction }> {
   // Use a default sequence number / account for preparing or real one if needed
   let account: Account;
   try {
@@ -973,11 +1140,11 @@ export async function cancelInvoice(freelancer: string, invoiceId: bigint): Prom
 
   const sim = await server.simulateTransaction(txUrl);
   if (!rpc.Api.isSimulationSuccess(sim)) {
-    throw new Error(`Simulation failed: ${(sim as any).error}`);
+    throw new Error(`Simulation failed: ${'error' in sim ? sim.error : 'unknown error'}`);
   }
 
   const finalTx = rpc.assembleTransaction(txUrl, sim).build();
-  return { tx: finalTx as any };
+  return { tx: finalTx };
 }
 
 export interface ReferralStats {
@@ -989,7 +1156,7 @@ export interface ReferralStats {
 
 export async function getReferralStats(code: string): Promise<ReferralStats> {
   try {
-    const params: xdr.ScVal[] = [nativeToScVal(code)];
+    const params: xdr.ScVal[] = [encodeReferralCodeBytes(code)];
     const callResult = await server.simulateTransaction(
       buildReadTransaction(CONTRACT_ID, 'get_referral_stats', params)
     );
@@ -997,10 +1164,21 @@ export async function getReferralStats(code: string): Promise<ReferralStats> {
       return { total_invoices: 0, total_volume: 0n };
     }
     const native = scValToNative(callResult.result.retval);
-    return {
-      total_invoices: Number(native.total_invoices ?? 0),
-      total_volume: BigInt(native.total_volume ?? 0),
-    };
+    if (
+      native &&
+      typeof native === 'object' &&
+      !Array.isArray(native) &&
+      ('total_invoices' in native || 'total_volume' in native)
+    ) {
+      const record = native as Record<string, unknown>;
+      return {
+        total_invoices: Number(record.total_invoices ?? 0),
+        total_volume: BigInt((record.total_volume as string | number | bigint) ?? 0),
+      };
+    }
+    // Some contract revisions return the raw referral invoice count (u64).
+    const rawCount = typeof native === 'bigint' || typeof native === 'number' ? Number(native) : 0;
+    return { total_invoices: rawCount, total_volume: 0n };
   } catch {
     return { total_invoices: 0, total_volume: 0n };
   }
@@ -1026,6 +1204,9 @@ export async function submitInvoiceTransaction({
   referralCode?: string;
 }): Promise<SubmittedInvoiceResult> {
   const sourceAccount = await server.getAccount(freelancer);
+  // submit_invoice is token-aware and always carries a `ReferralCode` — the
+  // union is emitted even when no referral code is supplied so the contract
+  // does not read an out-of-bounds trailing argument.
   const args = [
     Address.fromString(freelancer).toScVal(),
     Address.fromString(payer).toScVal(),
@@ -1033,11 +1214,8 @@ export async function submitInvoiceTransaction({
     nativeToScVal(dueDate, { type: 'u64' }),
     nativeToScVal(discountRate, { type: 'u32' }),
     Address.fromString(token).toScVal(),
+    encodeReferralCode(referralCode),
   ];
-
-  if (referralCode) {
-    args.push(nativeToScVal(referralCode));
-  }
 
   const tx = new TransactionBuilder(sourceAccount, {
     fee: BASE_FEE,
@@ -1073,10 +1251,20 @@ export async function submitInvoiceTransaction({
     throw new Error(`Transaction submission failed with status ${sent.status}.`);
   }
 
+  // Recorded before polling so a reload during confirmation can still be
+  // reconciled from network truth afterwards (#1143).
+  recordPendingTransaction({ hash: sent.hash, label: 'submit_invoice' });
+
   const finalResult = await server.pollTransaction(sent.hash, { attempts: POLL_ATTEMPTS });
   if (finalResult.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    // Explicit on-chain failure settles the entry; timeouts/unknown keep it
+    // for a later reconcile pass instead of assuming a verdict.
+    if (finalResult.status === rpc.Api.GetTransactionStatus.FAILED) {
+      removePendingTransaction(sent.hash);
+    }
     throw new Error(`Transaction failed with status ${String(finalResult.status)}.`);
   }
+  removePendingTransaction(sent.hash);
 
   return {
     invoiceId: extractInvoiceIdFromTransaction(finalResult) ?? simulatedInvoiceId,
@@ -1220,15 +1408,41 @@ export async function buildApproveUsdcTransaction(args: {
 
 // ─── Write: generic signed transaction dispatcher ─────────────────────────────
 
+/** Submission progress reported to lifecycle observers (#1142). */
+export type SubmissionProgress = 'signed' | 'submitted' | 'confirming';
+
+/**
+ * Read one transaction's settlement from RPC network truth (#1143).
+ * Never throws: unreachable RPC maps to `not_found` so callers keep the
+ * pending entry for a later reconcile pass instead of assuming a verdict.
+ */
+export async function getSorobanTransactionStatus(
+  hash: string
+): Promise<'confirmed' | 'failed' | 'confirming' | 'not_found'> {
+  try {
+    const res = await server.getTransaction(hash);
+    if (res.status === rpc.Api.GetTransactionStatus.SUCCESS) return 'confirmed';
+    if (res.status === rpc.Api.GetTransactionStatus.FAILED) return 'failed';
+    return 'not_found';
+  } catch {
+    return 'not_found';
+  }
+}
+
 export async function submitSignedTransaction({
   tx,
   signTx,
+  onStatus,
+  pendingLabel = 'transaction',
 }: {
   tx: Transaction;
   signTx: (txXdr: string) => Promise<string>;
+  onStatus?: (stage: SubmissionProgress) => void;
+  pendingLabel?: string;
 }): Promise<{ txHash: string }> {
   const prepared = await server.prepareTransaction(tx);
   const signedXdr = await signTx(prepared.toXDR());
+  onStatus?.('signed');
   const signedTx = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE) as Transaction;
   const sent = await server.sendTransaction(signedTx);
 
@@ -1239,10 +1453,22 @@ export async function submitSignedTransaction({
     throw new Error(`Transaction submission failed with status ${sent.status}.`);
   }
 
+  onStatus?.('submitted');
+  // Recorded before polling so a reload during confirmation can still be
+  // reconciled from network truth afterwards (#1143).
+  recordPendingTransaction({ hash: sent.hash, label: pendingLabel });
+  onStatus?.('confirming');
+
   const finalResult = await server.pollTransaction(sent.hash, { attempts: POLL_ATTEMPTS });
   if (finalResult.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    // Explicit on-chain failure settles the entry; timeouts/unknown keep it
+    // for a later reconcile pass instead of assuming a verdict.
+    if (finalResult.status === rpc.Api.GetTransactionStatus.FAILED) {
+      removePendingTransaction(sent.hash);
+    }
     throw new Error(`Transaction failed with status ${String(finalResult.status)}.`);
   }
+  removePendingTransaction(sent.hash);
   return { txHash: sent.hash };
 }
 
@@ -1394,14 +1620,19 @@ export async function claimInsurance(lpAddress: string, invoiceId: bigint) {
 // ─── Admin: token management ──────────────────────────────────────────────────
 
 /**
- * Builds a transaction that calls `add_token(token_id)` on the ILN contract.
- * Must be signed by the admin address and submitted via `signTx`.
+ * Builds a transaction that calls `add_token(token, decimals)` on the ILN
+ * contract. The contract requires the token's decimal precision to be stored.
  */
 export async function adminApproveToken(
   adminAddress: string,
-  tokenId: string
+  tokenId: string,
+  decimals?: number
 ): Promise<Transaction> {
-  const params: xdr.ScVal[] = [Address.fromString(tokenId).toScVal()];
+  const tokenDecimals = decimals ?? KNOWN_TOKEN_METADATA[tokenId]?.decimals ?? 7;
+  const params: xdr.ScVal[] = [
+    Address.fromString(tokenId).toScVal(),
+    nativeToScVal(tokenDecimals, { type: 'u32' }),
+  ];
   const account = await server.getAccount(adminAddress);
   const tx = new TransactionBuilder(account, {
     fee: '10000',

@@ -13,7 +13,7 @@ export function createThrowingComponent(
   message = 'RPC unavailable'
 ) {
   return class ThrowingSection extends React.Component {
-    render() {
+    override render() {
       if (gate.shouldThrow) {
         throw new Error(message);
       }

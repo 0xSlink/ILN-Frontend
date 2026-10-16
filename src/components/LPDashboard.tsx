@@ -11,7 +11,7 @@ import { TokenAmount } from './TokenSelector';
 import InvoiceFilterBar from './InvoiceFilterBar';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
 import { applyInvoiceFilters, useInvoiceFilters } from '@/hooks/useInvoiceFilters';
-import { useInvoices } from '@/hooks/useInvoices';
+import { useInvoices } from '@/hooks/queries';
 import SkeletonRow, { LP_DISCOVERY_COLUMNS } from './SkeletonRow';
 import LPRiskSummaryPanel from './LPRiskSummaryPanel';
 
@@ -853,7 +853,9 @@ export default function LPDashboard() {
                           key={invoice.id.toString()}
                           role="row"
                           tabIndex={0}
-                          className={`hover:bg-surface-variant/10 transition-colors ${selectedInvoiceIds.includes(invoice.id.toString()) ? 'bg-primary/5' : ''} ${isBelowThreshold ? 'opacity-50 grayscale-[0.5]' : ''}`}
+                          className={`hover:bg-surface-variant/10 transition-colors ${
+                            selectedInvoiceIds.includes(invoice.id.toString()) ? 'bg-primary/5' : ''
+                          } ${isBelowThreshold ? 'opacity-50 grayscale-[0.5]' : ''}`}
                           onClick={() => !isBelowThreshold && handleFund(invoice)}
                           onKeyDown={(event) => handleRowKeyDown(event, invoice, index)}
                         >

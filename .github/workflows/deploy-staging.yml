@@ -1,0 +1,89 @@
+name: Deploy Staging (Mainnet-Read Preview)
+
+# Automatically triggered on merges to develop.
+# Deploys to a Vercel staging preview environment configured with mainnet read-only contracts,
+# and automatically runs read-only smoke checks to validate release candidate health.
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Branch or commit to deploy to staging'
+        required: false
+        default: 'develop'
+
+concurrency:
+  group: staging-deployment
+  cancel-in-progress: true
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging Preview & Validate
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check configuration drift
+        run: pnpm run env:drift-check
+
+      - name: Build staging bundle
+        run: pnpm run build
+
+      - name: Deploy to Vercel Staging
+        id: vercel-deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "🚀 Deploying preview build to Vercel Staging..."
+            npx vercel pull --yes --environment=preview --token="$VERCEL_TOKEN"
+            STAGING_URL=$(npx vercel deploy --prebuilt --token="$VERCEL_TOKEN")
+            echo "staging_url=$STAGING_URL" >> "$GITHUB_OUTPUT"
+            echo "Deployed to Vercel preview: $STAGING_URL"
+          else
+            echo "ℹ️ VERCEL_TOKEN not configured; using default staging domain."
+            echo "staging_url=https://staging.iln.finance" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Read-Only Mainnet Smoke Test on Staging
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.vercel-deploy.outputs.staging_url || 'https://staging.iln.finance' }}
+          NEXT_PUBLIC_API_MOCKING: disabled
+        run: |
+          echo "🔍 Running read-only smoke checks against: ${{ steps.vercel-deploy.outputs.staging_url || 'https://staging.iln.finance' }}"
+          pnpm exec playwright test e2e/mainnet-smoke.spec.ts --project=mobile-375
+
+      - name: Post Staging Readiness Summary
+        if: always()
+        run: |
+          {
+            echo "## 🎯 Staging Deployment & Smoke Test Summary"
+            echo ""
+            echo "- **Commit**: \`${{ github.sha }}\`"
+            echo "- **Staging URL**: \`${{ steps.vercel-deploy.outputs.staging_url || 'https://staging.iln.finance' }}\`"
+            echo "- **Health Status**: ${{ job.status == 'success' && '✅ READY FOR PRODUCTION PROMOTION' || '❌ STAGING VALIDATION FAILED' }}"
+            echo ""
+            echo "> To promote this build to production, go to **Actions** → **Promote to Production Gate**."
+          } >> "$GITHUB_STEP_SUMMARY"

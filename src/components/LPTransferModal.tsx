@@ -8,6 +8,7 @@ import { useBalances } from '@/hooks/useBalances';
 import TokenSelector from './TokenSelector';
 import { formatTokenAmount } from '@/utils/format';
 import type { ApprovedToken } from '@/hooks/useApprovedTokens';
+import DestinationConfirmationInput from './DestinationConfirmationInput';
 import {
   TransactionBuilder,
   Operation,
@@ -88,7 +89,7 @@ async function buildTransferLPPositionTx(funder: string, invoiceId: bigint, newO
 
   const sim = await server.simulateTransaction(tx);
   if (!rpc.Api.isSimulationSuccess(sim)) {
-    throw new Error(`Simulation failed: ${(sim as any).error}`);
+    throw new Error(`Simulation failed: ${'error' in sim ? sim.error : 'unknown error'}`);
   }
   return rpc.assembleTransaction(tx, sim).build();
 }
@@ -98,6 +99,7 @@ export default function LPTransferModal({ invoice, onClose, onSuccess }: LPTrans
   const { execute, loading, error: txError } = useTransaction();
   const initialTokenId = invoice.token ?? TESTNET_USDC_TOKEN_ID;
   const [recipient, setRecipient] = useState('');
+  const [isDestinationConfirmed, setIsDestinationConfirmed] = useState(false);
   const [selectedTokenId, setSelectedTokenId] = useState(initialTokenId);
   const [validationError, setValidationError] = useState<string | null>(null);
   const { balances, unavailable, isLoading: balancesLoading } = useBalances(TRANSFER_TOKENS);
@@ -118,10 +120,15 @@ export default function LPTransferModal({ invoice, onClose, onSuccess }: LPTrans
       return 'Enter a valid Stellar G-address (56 characters starting with G).';
     if (value.trim() === address) return 'You cannot transfer a position to yourself.';
     if (!tokenMatchesInvoice) {
-      return `Select the invoice token before transferring. Invoice #${invoice.id.toString()} is denominated in ${selectedTokenLabel(invoiceTokenId)}.`;
+      return `Select the invoice token before transferring. Invoice #${invoice.id.toString()} is denominated in ${selectedTokenLabel(
+        invoiceTokenId
+      )}.`;
     }
     if (invoice.amount < minimumAmount) {
-      return `${selectedToken.symbol} transfers require at least ${formatTokenAmount(minimumAmount, selectedToken)}.`;
+      return `${selectedToken.symbol} transfers require at least ${formatTokenAmount(
+        minimumAmount,
+        selectedToken
+      )}.`;
     }
     if (balancesLoading) {
       return `${selectedToken.symbol} balance is still loading. Please try again in a moment.`;
@@ -147,7 +154,7 @@ export default function LPTransferModal({ invoice, onClose, onSuccess }: LPTrans
     try {
       const tx = await buildTransferLPPositionTx(address!, invoice.id, recipient.trim());
       const txHash = await execute(
-        tx as any,
+        tx,
         `Transfer ${formatTokenAmount(invoice.amount, selectedToken)} LP position #${invoice.id}`
       );
       if (txHash) {
@@ -239,6 +246,11 @@ export default function LPTransferModal({ invoice, onClose, onSuccess }: LPTrans
             />
           </div>
 
+          <DestinationConfirmationInput
+            destinationAddress={recipient}
+            onConfirmationChange={setIsDestinationConfirmed}
+          />
+
           <div className="rounded-2xl border border-primary/15 bg-primary-container/20 px-4 py-3 text-xs text-on-surface-variant">
             Confirm transfer of{' '}
             <span className="font-bold text-on-surface">
@@ -256,7 +268,7 @@ export default function LPTransferModal({ invoice, onClose, onSuccess }: LPTrans
           <div className="flex gap-3 pt-1">
             <button
               type="submit"
-              disabled={loading || balancesLoading}
+              disabled={loading || balancesLoading || !isDestinationConfirmed || !recipient.trim()}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-surface-container-lowest transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
             >
               {loading && (

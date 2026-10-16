@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   fetchParameterUpdates,
   fetchProposals,
+  fetchSignerRotations,
   fetchVotesForAddress,
   type ParameterUpdateEvent,
   type Proposal,
+  type SignerRotatedEvent,
   type VoteCastEvent,
 } from '@/utils/governance';
 import { formatDate } from '@/utils/format';
@@ -14,12 +16,13 @@ import Skeleton from '@/components/ui/Skeleton';
 
 const PAGE_SIZE = 10;
 
-type ActivityType = 'all' | 'votes' | 'proposals' | 'parameters';
+type ActivityType = 'all' | 'votes' | 'proposals' | 'parameters' | 'signers';
 
 type FeedItem =
   | { kind: 'vote'; timestamp: number; data: VoteCastEvent }
   | { kind: 'proposal'; timestamp: number; data: Proposal }
-  | { kind: 'parameter'; timestamp: number; data: ParameterUpdateEvent };
+  | { kind: 'parameter'; timestamp: number; data: ParameterUpdateEvent }
+  | { kind: 'signer_rotation'; timestamp: number; data: SignerRotatedEvent };
 
 interface GovernanceActivityProps {
   address: string;
@@ -30,6 +33,7 @@ const FILTERS: Array<{ value: ActivityType; label: string }> = [
   { value: 'votes', label: 'Votes' },
   { value: 'proposals', label: 'Proposals' },
   { value: 'parameters', label: 'Parameters' },
+  { value: 'signers', label: 'Signer Rotations' },
 ];
 
 function getActivityLabel(item: FeedItem) {
@@ -39,6 +43,13 @@ function getActivityLabel(item: FeedItem) {
   if (item.kind === 'proposal') {
     return `Proposal created: ${item.data.title}`;
   }
+  if (item.kind === 'signer_rotation') {
+    const oldAbbr = item.data.oldSigner
+      ? `${item.data.oldSigner.slice(0, 6)}...${item.data.oldSigner.slice(-4)}`
+      : 'Initial';
+    const newAbbr = `${item.data.newSigner.slice(0, 6)}...${item.data.newSigner.slice(-4)}`;
+    return `Multisig Signer Rotated: ${oldAbbr} → ${newAbbr}`;
+  }
   return `Parameter update: ${item.data.label}`;
 }
 
@@ -46,6 +57,7 @@ export default function GovernanceActivity({ address }: GovernanceActivityProps)
   const [votes, setVotes] = useState<VoteCastEvent[]>([]);
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [parameterUpdates, setParameterUpdates] = useState<ParameterUpdateEvent[]>([]);
+  const [signerRotations, setSignerRotations] = useState<SignerRotatedEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<ActivityType>('all');
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
@@ -55,14 +67,16 @@ export default function GovernanceActivity({ address }: GovernanceActivityProps)
     async function loadActivity() {
       setLoading(true);
       try {
-        const [voteData, proposalData, parameterData] = await Promise.all([
-          fetchVotesForAddress(address),
-          fetchProposals(),
-          fetchParameterUpdates(),
+        const [voteData, proposalData, parameterData, signerData] = await Promise.all([
+          fetchVotesForAddress(address).catch(() => []),
+          fetchProposals().catch(() => []),
+          fetchParameterUpdates().catch(() => []),
+          fetchSignerRotations().catch(() => []),
         ]);
         setVotes(voteData);
         setProposals(proposalData);
         setParameterUpdates(parameterData);
+        setSignerRotations(signerData);
       } catch (err) {
         console.error('Failed to fetch governance activity:', err);
       } finally {
@@ -85,13 +99,20 @@ export default function GovernanceActivity({ address }: GovernanceActivityProps)
         timestamp: update.updatedAt,
         data: update,
       })),
+      ...signerRotations.map((sr) => ({
+        kind: 'signer_rotation' as const,
+        timestamp: sr.rotatedAt,
+        data: sr,
+      })),
     ];
 
     return items.sort((a, b) => b.timestamp - a.timestamp);
-  }, [parameterUpdates, proposals, votes]);
+  }, [parameterUpdates, proposals, signerRotations, votes]);
 
   const filteredItems = useMemo(() => {
     if (activeFilter === 'all') return feedItems;
+    if (activeFilter === 'signers')
+      return feedItems.filter((item) => item.kind === 'signer_rotation');
     return feedItems.filter((item) => item.kind === activeFilter.slice(0, -1));
   }, [activeFilter, feedItems]);
 
@@ -166,28 +187,50 @@ export default function GovernanceActivity({ address }: GovernanceActivityProps)
         {pageItems.map((item) => {
           const isExpanded = Boolean(expandedIds[`${item.kind}-${item.timestamp}`]);
           const detailsId = `${item.kind}-${item.timestamp}`;
+          const isSignerRotation = item.kind === 'signer_rotation';
 
           return (
             <li
               key={detailsId}
-              className="rounded-2xl border border-outline-variant/10 bg-surface-container/30 p-4"
+              className={`rounded-2xl border p-4 transition-all ${
+                isSignerRotation
+                  ? 'border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10'
+                  : 'border-outline-variant/10 bg-surface-container/30'
+              }`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-on-surface">{getActivityLabel(item)}</p>
+                  <div className="flex items-center gap-2">
+                    {isSignerRotation ? (
+                      <span
+                        className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-lg"
+                        aria-hidden="true"
+                      >
+                        shield
+                      </span>
+                    ) : null}
+                    <p className="text-sm font-semibold text-on-surface">
+                      {getActivityLabel(item)}
+                    </p>
+                  </div>
                   <p className="mt-1 text-xs text-on-surface-variant">
-                    {' '}
                     {formatDate(BigInt(item.timestamp))}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-surface-container-high px-2.5 py-1 text-xs font-medium text-on-surface-variant">
-                    {item.kind === 'vote'
-                      ? 'Vote'
-                      : item.kind === 'proposal'
-                        ? 'Proposal'
-                        : 'Parameter'}
-                  </span>
+                  {isSignerRotation ? (
+                    <span className="rounded-full bg-amber-500/20 px-2.5 py-1 text-xs font-bold text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                      Security Critical
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-surface-container-high px-2.5 py-1 text-xs font-medium text-on-surface-variant">
+                      {item.kind === 'vote'
+                        ? 'Vote'
+                        : item.kind === 'proposal'
+                          ? 'Proposal'
+                          : 'Parameter'}
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() =>
@@ -203,6 +246,33 @@ export default function GovernanceActivity({ address }: GovernanceActivityProps)
                   </button>
                 </div>
               </div>
+
+              {isExpanded && isSignerRotation ? (
+                <div className="mt-3 rounded-xl border border-amber-500/20 bg-surface p-3 text-xs text-on-surface-variant space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+                    <span className="font-medium text-on-surface">Previous Signer:</span>
+                    <span className="font-mono text-on-surface break-all">
+                      {item.data.oldSigner || 'None (initial)'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+                    <span className="font-medium text-on-surface">New Signer:</span>
+                    <span className="font-mono text-on-surface break-all">
+                      {item.data.newSigner}
+                    </span>
+                  </div>
+                  {item.data.reason ? (
+                    <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+                      <span className="font-medium text-on-surface">Reason:</span>
+                      <span className="text-on-surface">{item.data.reason}</span>
+                    </div>
+                  ) : null}
+                  <div className="pt-1 text-[11px] text-amber-700 dark:text-amber-300 font-medium">
+                    ⚠️ Security Notice: Signer rotation modifies protocol multisig authorization
+                    keys without requiring a contract redeployment.
+                  </div>
+                </div>
+              ) : null}
             </li>
           );
         })}

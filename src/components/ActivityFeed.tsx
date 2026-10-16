@@ -3,6 +3,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { formatAddress, formatRelativeTime, formatUSDC } from '@/utils/format';
+import IndexerUnavailableNotice, {
+  shouldUseDevMockFallback,
+} from '@/components/IndexerUnavailableNotice';
+import DataSourceCaption from '@/components/DataSourceCaption';
 
 type InvoiceEventType =
   | 'submitted'
@@ -274,12 +278,13 @@ function formatEventTypeLabel(type: InvoiceEventType) {
 export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
   const [events, setEvents] = useState<InvoiceEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [_error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [expandedEvents, setExpandedEvents] = useState<Record<number, boolean>>({});
 
   const fetchEvents = useCallback(async () => {
     try {
       setLoading(true);
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
       const res = await fetch(`${INDEXER_API_BASE}/invoice/${invoiceId}/events`, {
         cache: 'no-store',
       });
@@ -288,10 +293,13 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
       setEvents(rawEvents.map(parseInvoiceEvent));
     } catch (err) {
       console.error(err);
+      setEvents([]);
       setError('Unable to load activity feed.');
 
-      // MOCK DATA for demonstration if the API is not reachable
-      if (process.env.NODE_ENV === 'development' || true) {
+      // Only substitute demonstration data in development. In every other
+      // environment (including production) show the honest "temporarily
+      // unavailable" state rather than fabricating an audit trail.
+      if (shouldUseDevMockFallback()) {
         setEvents([
           {
             type: 'submitted',
@@ -351,6 +359,24 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
     );
   }
 
+  if (error) {
+    return (
+      <section className="mt-8">
+        <p className="mb-2 text-xs font-bold uppercase tracking-widest text-primary">
+          Event History
+        </p>
+        <IndexerUnavailableNotice
+          dataSource="The invoice activity feed"
+          onRetry={() => {
+            setError(null);
+            setEvents([]);
+            void fetchEvents();
+          }}
+        />
+      </section>
+    );
+  }
+
   if (events.length === 0) {
     return (
       <section className="mt-8 rounded-3xl border border-outline-variant/15 bg-surface-container-lowest p-8 text-center text-on-surface-variant">
@@ -365,6 +391,7 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
       <div className="mb-6">
         <p className="text-xs font-bold uppercase tracking-widest text-primary">Event History</p>
         <h2 className="mt-2 text-xl font-semibold text-on-surface">Invoice audit trail</h2>
+        <DataSourceCaption metric="invoice-activity" className="mt-1" />
       </div>
 
       <div className="space-y-4 relative">

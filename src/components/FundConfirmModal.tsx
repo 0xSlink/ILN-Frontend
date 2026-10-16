@@ -15,6 +15,7 @@ import { formatTokenAmount, calculateYield } from '@/utils/format';
 import { PayerScoreResult } from '@/utils/soroban';
 import { fetchProtocolParameters } from '@/utils/governance';
 import FieldTooltip from './FieldTooltip';
+import { trackFunnelStep } from '@/lib/funnel-tracking';
 
 type FundingStep = 'approve' | 'fund';
 
@@ -99,6 +100,10 @@ export default function FundConfirmModal({
 
   useEffect(() => {
     if (!invoice || !address) return;
+    trackFunnelStep('lp_funding', 'started', {
+      token: selectedToken?.symbol ?? 'USDC',
+      invoiceId: invoice.id.toString(),
+    });
     const inv = invoice;
     const walletAddress = address;
 
@@ -107,7 +112,7 @@ export default function FundConfirmModal({
     }
 
     void fetchAllowance();
-  }, [address, refreshAllowance, invoice]);
+  }, [address, refreshAllowance, invoice, selectedToken?.symbol]);
 
   if (!invoice) return null;
 
@@ -119,6 +124,9 @@ export default function FundConfirmModal({
   const approveToken = async () => {
     if (!address || !selectedInvoiceToken) return;
     setFundingError(null);
+    trackFunnelStep('lp_funding', 'allowance_requested', {
+      token: selectedToken?.symbol || 'token',
+    });
 
     const result = await execute(
       async (signTx) => {
@@ -130,24 +138,39 @@ export default function FundConfirmModal({
         return submitSignedTransaction({ tx, signTx });
       },
       {
+        expectedAction: 'approve',
         title: `Approving ${selectedToken?.symbol || 'token'}...`,
         pendingMessage: 'Waiting for wallet signature...',
         successTitle: `${selectedToken?.symbol || 'Token'} approved`,
-        successMessage: `Allowance updated for ${formatTokenAmount(invoice.amount, selectedToken || selectedInvoiceToken!)}.`,
+        successMessage: `Allowance updated for ${formatTokenAmount(
+          invoice.amount,
+          selectedToken || selectedInvoiceToken!
+        )}.`,
       }
     );
 
     if (!result) {
+      trackFunnelStep('lp_funding', 'failed', {
+        step: 'approve',
+        reason: txError ?? 'Approval failed.',
+      });
       setFundingError(txError ?? 'Approval failed.');
       return;
     }
 
+    trackFunnelStep('lp_funding', 'allowance_approved', {
+      token: selectedToken?.symbol || 'token',
+    });
     setAllowance(invoice.amount);
   };
 
   const confirmFunding = async () => {
     if (!address) return;
     setFundingError(null);
+    trackFunnelStep('lp_funding', 'deposit_sign_requested', {
+      token: selectedToken?.symbol || 'token',
+      invoiceId: invoice.id.toString(),
+    });
 
     const result = await execute(
       async (signTx) => {
@@ -155,6 +178,7 @@ export default function FundConfirmModal({
         return submitSignedTransaction({ tx, signTx });
       },
       {
+        expectedAction: 'fund_invoice',
         title: 'Funding invoice...',
         pendingMessage: 'Waiting for wallet signature...',
         successTitle: 'Invoice funded successfully!',
@@ -163,8 +187,16 @@ export default function FundConfirmModal({
     );
 
     if (result) {
+      trackFunnelStep('lp_funding', 'completed', {
+        token: selectedToken?.symbol || 'token',
+        invoiceId: invoice.id.toString(),
+      });
       onSuccess();
     } else {
+      trackFunnelStep('lp_funding', 'failed', {
+        step: 'fund',
+        reason: txError ?? 'Funding failed.',
+      });
       setFundingError(txError ?? 'An unknown error occurred');
     }
   };
@@ -189,10 +221,16 @@ export default function FundConfirmModal({
         {needsApproval && (
           <div className="flex items-center gap-4">
             <div
-              className={`flex items-center gap-2 ${currentStep === 'approve' ? 'text-primary' : 'text-on-surface-variant line-through'}`}
+              className={`flex items-center gap-2 ${
+                currentStep === 'approve' ? 'text-primary' : 'text-on-surface-variant line-through'
+              }`}
             >
               <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${currentStep === 'approve' ? 'bg-primary text-surface-container-lowest' : 'bg-surface-variant text-on-surface-variant'}`}
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                  currentStep === 'approve'
+                    ? 'bg-primary text-surface-container-lowest'
+                    : 'bg-surface-variant text-on-surface-variant'
+                }`}
               >
                 1
               </div>
@@ -200,10 +238,16 @@ export default function FundConfirmModal({
             </div>
             <div className="w-12 h-px bg-surface-variant"></div>
             <div
-              className={`flex items-center gap-2 ${currentStep === 'fund' ? 'text-primary' : 'text-on-surface-variant opacity-50'}`}
+              className={`flex items-center gap-2 ${
+                currentStep === 'fund' ? 'text-primary' : 'text-on-surface-variant opacity-50'
+              }`}
             >
               <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${currentStep === 'fund' ? 'bg-primary text-surface-container-lowest' : 'bg-surface-variant text-on-surface-variant'}`}
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                  currentStep === 'fund'
+                    ? 'bg-primary text-surface-container-lowest'
+                    : 'bg-surface-variant text-on-surface-variant'
+                }`}
               >
                 2
               </div>
@@ -276,7 +320,11 @@ export default function FundConfirmModal({
                 <p className="text-lg text-on-surface-variant">
                   {isCheckingAllowance
                     ? 'Checking current allowance...'
-                    : `You're authorising ILN to spend ${selectedToken ? formatTokenAmount(invoice.amount, selectedToken) : `${invoice.amount.toString()} ${tokenSymbol}`} from your wallet. This is a one-time approval.`}
+                    : `You're authorising ILN to spend ${
+                        selectedToken
+                          ? formatTokenAmount(invoice.amount, selectedToken)
+                          : `${invoice.amount.toString()} ${tokenSymbol}`
+                      } from your wallet. This is a one-time approval.`}
                 </p>
               </div>
 

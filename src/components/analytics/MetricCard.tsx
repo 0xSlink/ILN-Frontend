@@ -59,7 +59,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
         </div>
       </div>
       <p
-        className={`font-headline text-2xl font-bold ${accent ? 'text-primary' : 'text-on-surface'}`}
+        className={`font-headline text-2xl font-bold ${
+          accent ? 'text-primary' : 'text-on-surface'
+        }`}
       >
         {value}
       </p>

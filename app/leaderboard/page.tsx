@@ -224,7 +224,9 @@ export default function LeaderboardPage() {
       <tr
         key={item.address}
         data-testid={isUser ? 'leaderboard-user-row' : undefined}
-        className={`border-t border-outline-variant/20 transition-colors ${isUser ? 'bg-primary/10' : 'bg-transparent hover:bg-surface-container-low'}`}
+        className={`border-t border-outline-variant/20 transition-colors ${
+          isUser ? 'bg-primary/10' : 'bg-transparent hover:bg-surface-container-low'
+        }`}
       >
         <td className="px-5 py-4 font-semibold text-on-surface-variant">
           <div className="flex items-center gap-2">
@@ -292,7 +294,7 @@ export default function LeaderboardPage() {
   };
 
   return (
-    <div className="p-6">
+    <main className="p-6">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.24em] text-on-surface-variant mb-2">
@@ -403,6 +405,6 @@ export default function LeaderboardPage() {
           </button>
         </div>
       )}
-    </div>
+    </main>
   );
 }

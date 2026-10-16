@@ -44,8 +44,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const data = await getLeaderboard(type, period);
-    return NextResponse.json(data);
+    const result = await getLeaderboard(type, period);
+    if (result.unavailable) {
+      return NextResponse.json(
+        { error: 'Indexer temporarily unavailable' },
+        { status: 503, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+    return NextResponse.json(result.data, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Error fetching leaderboard:', error);
     return NextResponse.json({ error: 'Failed to fetch leaderboard' }, { status: 500 });

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import {
   AreaChart,
   Area,
@@ -12,6 +12,10 @@ import {
   type TooltipProps,
 } from 'recharts';
 import { transformFundingData } from '@/utils/funding';
+import IndexerUnavailableNotice, {
+  shouldUseDevMockFallback,
+} from '@/components/IndexerUnavailableNotice';
+import DataSourceCaption from '@/components/DataSourceCaption';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -128,31 +132,42 @@ export default function FundingChart() {
   const [range, setRange] = useState<TimeRange>('30D');
   const [data, setData] = useState<DailyFundingBucket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [requestId, setRequestId] = useState(0);
+
+  const fetchData = useCallback(async (selectedRange: TimeRange) => {
+    setLoading(true);
+    setUnavailable(false);
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
+      const res = await fetch(
+        `${baseUrl}/v1/analytics/funding?period=${selectedRange.toLowerCase()}`
+      );
+      if (!res.ok) throw new Error('Failed to fetch');
+      const json = await res.json();
+      setData(json.daily);
+    } catch {
+      // Only substitute demo data in development; otherwise show an honest
+      // "temporarily unavailable" state instead of fabricating volume.
+      if (shouldUseDevMockFallback()) {
+        setData(generateMockFunding(selectedRange));
+      } else {
+        setData([]);
+        setUnavailable(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const baseUrl = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
-        const res = await fetch(`${baseUrl}/v1/analytics/funding?period=${range.toLowerCase()}`);
-        if (!res.ok) throw new Error('Failed to fetch');
-        const json = await res.json();
-        setData(json.daily);
-      } catch {
-        // Fallback to mock data in development
-        const mockData = generateMockFunding(range);
-        setData(mockData);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [range]);
+    void fetchData(range);
+  }, [range, requestId, fetchData]);
 
   const transformedData = useMemo(() => transformFundingData(data), [data]);
 
-  const isEmpty = !loading && data.length === 0;
+  const isEmpty = !loading && data.length === 0 && !unavailable;
 
   return (
     <div className="flex flex-col gap-6 rounded-[24px] border border-outline-variant/15 bg-surface-container-lowest p-6 shadow-sm">
@@ -160,6 +175,7 @@ export default function FundingChart() {
         <div>
           <h3 className="font-headline text-xl font-bold text-on-surface">LP Funding History</h3>
           <p className="text-sm text-on-surface-variant">Daily volume across supported tokens</p>
+          <DataSourceCaption metric="funding-history" />
         </div>
 
         {/* Time Range Selector */}
@@ -187,7 +203,14 @@ export default function FundingChart() {
           </div>
         )}
 
-        {isEmpty ? (
+        {unavailable ? (
+          <div className="flex h-full items-center">
+            <IndexerUnavailableNotice
+              dataSource="Funding history"
+              onRetry={() => setRequestId((id) => id + 1)}
+            />
+          </div>
+        ) : isEmpty ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 border-2 border-dashed border-outline-variant/20 rounded-2xl">
             <span className="material-symbols-outlined text-outline-variant/40 text-4xl">
               bar_chart

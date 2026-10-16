@@ -6,14 +6,18 @@ import { ToastProvider } from '@/context/ToastContext';
 import { WalletProvider } from '@/context/WalletContext';
 import { NotificationProvider } from '@/context/NotificationContext';
 import { KeyboardShortcutsProvider } from '@/context/KeyboardShortcutsContext';
+import { SubscriptionProvider } from '@/context/SubscriptionContext';
 import OnboardingFlow from '@/components/onboarding/OnboardingFlow';
 import FABProvider from '@/components/FABProvider';
 import FeedbackWidget from '@/components/FeedbackWidget';
 import CommandPalette from '@/components/CommandPalette';
 import OfflineBanner from '@/components/OfflineBanner';
 import NetworkMismatchBanner from '@/components/NetworkMismatchBanner';
+import MaintenanceModeBanner from '@/components/MaintenanceModeBanner';
+import MainnetLaunchBanner from '@/components/MainnetLaunchBanner';
 import ContractEventSync from '@/components/ContractEventSync';
 import WhatsNewModal from '@/components/modals/WhatsNewModal';
+import RealUserMonitoring from '@/components/RealUserMonitoring';
 import Providers from './Providers';
 
 export const metadata: Metadata = {
@@ -32,8 +36,10 @@ export default function RootLayout({
         <link
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+          crossOrigin="anonymous"
         />
         <link rel="manifest" href="/manifest.json" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
         <meta name="theme-color" content="#3d627f" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -69,13 +75,17 @@ export default function RootLayout({
       <body className="antialiased bg-background text-foreground transition-colors duration-300 selection:bg-primary-container selection:text-on-primary-container">
         <I18nProvider>
           <Providers>
+            <RealUserMonitoring />
             <ToastProvider>
               <ContractEventSync />
               <WalletProvider>
                 <NotificationProvider>
+                  <SubscriptionProvider>
                   <KeyboardShortcutsProvider>
                     <OfflineBanner />
                     <NetworkMismatchBanner />
+                    <MaintenanceModeBanner />
+                    <MainnetLaunchBanner />
                     <FABProvider />
                     <div className="min-h-screen flex flex-col">
                       <div className="flex-1">
@@ -93,6 +103,7 @@ export default function RootLayout({
                     </Suspense>
                     <FeedbackWidget />
                   </KeyboardShortcutsProvider>
+                  </SubscriptionProvider>
                 </NotificationProvider>
               </WalletProvider>
             </ToastProvider>

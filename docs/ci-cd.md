@@ -79,7 +79,7 @@ runs-on: ubuntu-latest
 
 The following workflows are configured to use `namespace-profile-nursca` under normal operation. **As of 2026-08-10 they are temporarily pinned to `ubuntu-latest`** — see the notice above.
 
-- `ci.yml` - Lint, unit tests, coverage, build (4 jobs)
+- `ci.yml` - Lint, unit tests, coverage, build, and mainnet/testnet configuration drift check (5 jobs)
 - `e2e-tests.yml` - End-to-end Playwright tests
 - `visual-regression.yml` - Chromatic visual regression tests (the `chromatic` job only; `check-secret` and `chromatic-skip-notice` already run on `ubuntu-latest`)
 - `lighthouse.yml` - Lighthouse performance budget tests
@@ -88,7 +88,7 @@ The following workflows are configured to use `namespace-profile-nursca` under n
 - `bundle-size.yml` - Bundle size regression tracking
 - `feature-flag-audit.yml` - Informational feature flag report (PR-triggered only)
 
-Note: `workflow-lint.yml`, `mutation-testing.yml`, `flaky-test-detection.yml`, `nightly-testnet-e2e.yml`, `pr-issue-link-check.yml`, `pr-size-label.yml`, and `wave-points-summary.yml` already use `ubuntu-latest` and are unaffected.
+Note: `workflow-lint.yml`, `mutation-testing.yml`, `flaky-test-detection.yml`, `nightly-testnet-e2e.yml`, `mainnet-post-deploy-smoke.yml`, `deploy-staging.yml`, `production-promotion-gate.yml`, `pr-issue-link-check.yml`, `pr-size-label.yml`, and `wave-points-summary.yml` already use `ubuntu-latest` and are unaffected.
 
 ## Branch Protection Rules
 
@@ -103,11 +103,12 @@ Before merging to `main`, all of the following CI checks must pass:
 1. **CI / lint** - ESLint validation
 2. **CI / tests** - Unit test suite (Vitest)
 3. **CI / build** - Production build verification
-4. **End-to-End Tests / e2e** - Playwright E2E test suite
-5. **Lighthouse Performance Budget / lighthouse** - Performance budget validation
-6. **Visual Regression Tests / chromatic** - Chromatic visual regression checks
-7. **Accessibility Tests / accessibility** - jest-axe accessibility validation
-8. **Contract Integration Tests / contract-tests** - Stellar SDK contract tests with 90% coverage enforcement
+4. **CI / config-drift** - Mainnet vs. testnet configuration drift detection
+5. **End-to-End Tests / e2e** - Playwright E2E test suite
+6. **Lighthouse Performance Budget / lighthouse** - Performance budget validation
+7. **Visual Regression Tests / chromatic** - Chromatic visual regression checks
+8. **Accessibility Tests / accessibility** - jest-axe accessibility validation
+9. **Contract Integration Tests / contract-tests** - Stellar SDK contract tests with 90% coverage enforcement
 
 #### Additional Rules
 
@@ -127,10 +128,11 @@ Before merging to `develop`, all of the following CI checks must pass:
 1. **CI / lint** - ESLint validation
 2. **CI / tests** - Unit test suite (Vitest)
 3. **CI / build** - Production build verification
-4. **Lighthouse Performance Budget / lighthouse** - Performance budget validation
-5. **Visual Regression Tests / chromatic** - Chromatic visual regression checks
-6. **Accessibility Tests / accessibility** - jest-axe accessibility validation
-7. **Contract Integration Tests / contract-tests** - Stellar SDK contract tests with 90% coverage enforcement
+4. **CI / config-drift** - Mainnet vs. testnet configuration drift detection
+5. **Lighthouse Performance Budget / lighthouse** - Performance budget validation
+6. **Visual Regression Tests / chromatic** - Chromatic visual regression checks
+7. **Accessibility Tests / accessibility** - jest-axe accessibility validation
+8. **Contract Integration Tests / contract-tests** - Stellar SDK contract tests with 90% coverage enforcement
 
 Note: E2E tests (`End-to-End Tests / e2e`) are **not required** for `develop` branch merges.
 
@@ -140,6 +142,23 @@ Note: E2E tests (`End-to-End Tests / e2e`) are **not required** for `develop` br
 - **Require status checks to pass before merging**: Yes
 - **Require branches to be up to date before merging**: Yes
 - **Do not allow bypassing the above settings**: No (admins can bypass)
+
+## Staged Canary Deployment & Manual Promotion Gate (Issue 688)
+
+To mitigate financial risks associated with instant 100% production deployments, ILN Frontend uses a staged release architecture:
+
+### 1. Staging Deployment Workflow (`deploy-staging.yml`)
+- **Trigger**: Automatic on merge to `develop` or manual `workflow_dispatch`.
+- **Target**: Staging preview environment (`staging.iln.finance`).
+- **Configuration**: Mainnet read-only Soroban RPC and smart contracts.
+- **Verification**: Automatically runs `pnpm run test:mainnet-smoke` and configuration drift checks against the preview deployment.
+
+### 2. Production Promotion Gate (`production-promotion-gate.yml`)
+- **Trigger**: Manual `workflow_dispatch` with required confirmation (`PROCEED`).
+- **Target**: Live Production (`app.iln.finance`).
+- **Environment Protection**: Bound to GitHub Environment `production` (requiring designated reviewer approvals).
+- **Pre-Promotion Verification**: Validates CI status, executes configuration drift check, and runs smoke checks against staging before triggering production deployment.
+- **Post-Promotion Verification**: Automatically runs read-only smoke checks against `https://app.iln.finance` immediately post-deploy, providing instant `vercel rollback` instructions upon failure.
 
 ## Workflow Triggers
 
@@ -156,7 +175,7 @@ Jobs:
 - `tests` - Unit tests + accessibility tests
 - `coverage` - Full-src coverage report (informational; uploaded as an artifact)
 - `build` - Production build verification
-- `toolchain-smoke` - Clean-runner smoke: a locked install, a lockfile-drift check, lint, type check, unit tests, and a single-run Lighthouse start, with the `.lighthouseci/` output retained as the `toolchain-smoke-evidence` artifact
+- `config-drift` - Mainnet vs. testnet configuration drift detection
 
 ### End-to-End Tests (e2e-tests.yml)
 
@@ -334,6 +353,157 @@ This section documents the environment variables that each workflow sets or impl
 | Job      | Variable | Source | Value / Note                                                        |
 | -------- | -------- | ------ | ------------------------------------------------------------------- |
 | _(none)_ | —        | —      | Uses `ubuntu-latest`. Only validates YAML syntax with `actionlint`. |
+
+---
+
+## Production Secret Rotation and Access Review
+
+### Current Production Secrets
+
+The following secrets are configured in the Vercel Production environment:
+
+#### Client-Side Secrets (NEXT_PUBLIC_*)
+- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anonymous key (public-safe, scoped to client operations)
+
+#### Server-Side Secrets
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (full admin access to Supabase)
+- `RESEND_API_KEY` - Resend API key for email notifications
+- `CRON_SECRET` - Secret for securing cron job endpoints
+- `GITHUB_TOKEN` - GitHub token for feedback-to-issue forwarding
+- `GITHUB_OWNER` - GitHub repository owner
+- `GITHUB_REPO` - GitHub repository name
+
+#### Network and Contract Configuration (Environment-Specific)
+- `NEXT_PUBLIC_STELLAR_NETWORK` - Network identifier (testnet/public)
+- `NEXT_PUBLIC_RPC_URL` - Soroban RPC endpoint
+- `NEXT_PUBLIC_CONTRACT_ID` - Mainnet invoice factoring contract ID
+- `NEXT_PUBLIC_GOVERNANCE_CONTRACT_ID` - Mainnet governance contract ID
+- `NEXT_PUBLIC_NFT_CONTRACT_ID` - Mainnet NFT contract ID (if NFT display enabled)
+- `NEXT_PUBLIC_TESTNET_USDC_TOKEN_ID` - USDC token contract ID
+- `NEXT_PUBLIC_TESTNET_EURC_TOKEN_ID` - EURC token contract ID
+- `NEXT_PUBLIC_INDEXER_API_URL` - Indexer API endpoint
+- `NEXT_PUBLIC_INDEXER_WS_URL` - Indexer websocket endpoint
+
+### Access Audit
+
+#### Vercel Team Access
+- **Current status**: Audit required - verify who has admin/deploy access to the Vercel project
+- **Recommended access model**:
+  - Admin access: Core maintainers only (2-3 individuals)
+  - Deploy access: Frontend leads + designated release managers
+  - Read-only access: All other contributors
+
+#### Environment Variable Protection
+- **Production environment**: All secrets should be protected with Vercel's environment variable protection
+- **Preview/Development environments**: Must NOT have access to production secrets
+  - Preview deployments should use testnet-shaped values only
+  - No production Supabase service role keys in preview
+  - No production Resend API keys in preview
+  - No production contract IDs in preview
+
+### Secret Rotation Schedule
+
+#### Rotation Cadence
+
+| Secret Type | Rotation Frequency | Rotation Procedure |
+|-------------|-------------------|-------------------|
+| **Supabase Service Role Key** | Quarterly (every 90 days) | Regenerate in Supabase dashboard → Update in Vercel Production → Redeploy |
+| **Supabase Anon Key** | Annually or if compromised | Regenerate in Supabase dashboard → Update in Vercel Production → Redeploy |
+| **RESEND_API_KEY** | Annually or if compromised | Regenerate in Resend dashboard → Update in Vercel Production → Redeploy |
+| **CRON_SECRET** | Annually or if compromised | Generate new random string → Update in Vercel Production → Redeploy |
+| **GitHub Token** | When GitHub account security changes | Revoke old token → Generate new token → Update in Vercel Production → Redeploy |
+
+#### Rotation Procedure Template
+
+For each secret rotation:
+
+1. **Pre-rotation checklist**
+   - [ ] Schedule rotation during low-traffic window
+   - [ ] Notify team of upcoming rotation
+   - [ ] Confirm current deployment is stable
+   - [ ] Have rollback plan ready (previous secret value)
+
+2. **Rotation steps**
+   - [ ] Generate new secret value in the provider's dashboard
+   - [ ] Update the secret in Vercel Production environment
+   - [ ] Trigger a production deployment: `vercel --prod`
+   - [ ] Verify deployment succeeds and app functions correctly
+   - [ ] Run smoke tests against production
+
+3. **Post-rotation verification**
+   - [ ] Confirm all API calls succeed with new secret
+   - [ ] Verify cron jobs execute successfully
+   - [ ] Check logs for authentication errors
+   - [ ] Document rotation date and new secret hash (not the value itself)
+
+4. **Cleanup**
+   - [ ] Revoke old secret in provider's dashboard (after 24-48 hours of stable operation)
+   - [ ] Update this documentation with rotation date
+
+### Preview/Production Isolation Verification
+
+#### Required Isolation Rules
+
+Preview deployments (created from external contributor PRs) must never have access to:
+
+- [ ] Production Supabase service role key
+- [ ] Production Resend API key
+- [ ] Production contract IDs (mainnet)
+- [ ] Production RPC URLs (mainnet)
+
+#### Verification Steps
+
+Run this verification after any Vercel configuration change:
+
+```bash
+# List all environment variables across environments
+vercel env ls
+
+# Verify Production-only secrets are not in Preview/Development
+# Expected: SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY should only appear under "Production"
+```
+
+#### Preview Deployment Default Configuration
+
+Preview deployments should use these defaults (set in Vercel Project Settings → Environment Variables):
+
+| Variable | Preview Value | Production Value |
+|----------|---------------|------------------|
+| `NEXT_PUBLIC_STELLAR_NETWORK` | `testnet` | `public` |
+| `NEXT_PUBLIC_RPC_URL` | Testnet RPC | Mainnet RPC |
+| `NEXT_PUBLIC_CONTRACT_ID` | Testnet contract ID | Mainnet contract ID |
+| `SUPABASE_SERVICE_ROLE_KEY` | Not set (or testnet-only) | Production key |
+| `RESEND_API_KEY` | Not set (or test sandbox) | Production key |
+
+### Emergency Secret Revocation
+
+If a secret is suspected to be compromised:
+
+1. **Immediate action**
+   - Revoke the compromised secret in the provider's dashboard
+   - Rotate the secret immediately using the rotation procedure above
+   - If the secret was used for authentication, invalidate all active sessions
+
+2. **Incident response**
+   - Follow the incident response procedure in [docs/incident-response.md](incident-response.md)
+   - Determine the blast radius (what could an attacker access with this secret?)
+   - Audit logs for suspicious activity during the compromise window
+
+3. **Post-incident**
+   - Review access controls and reduce permissions where possible
+   - Update this documentation with lessons learned
+   - Consider shortening the rotation cadence for similar secrets
+
+### Maintainer Action Required
+
+Please verify and complete the following:
+
+- [ ] Audit current Vercel team access and document who has admin/deploy permissions
+- [ ] Confirm all production secrets are protected with Vercel environment variable protection
+- [ ] Verify preview deployments do not have access to production secrets
+- [ ] Schedule first quarterly rotation for Supabase service role key
+- [ ] Document the rotation dates for each secret type in this section
 
 ---
 

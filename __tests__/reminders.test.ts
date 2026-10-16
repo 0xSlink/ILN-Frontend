@@ -40,6 +40,12 @@ vi.mock('@/utils/soroban', () => ({
   getTokenMetadata: vi.fn(),
 }));
 
+// Mock notifications service status helper
+vi.mock('@/lib/notifications', () => ({
+  getNotificationsServiceStatus: vi.fn(async () => ({ status: 'ok' })),
+}));
+import { getNotificationsServiceStatus } from '@/lib/notifications';
+
 describe('/api/reminders API route', () => {
   let mockSupabase: any;
   const VALID_ADDRESS = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
@@ -88,6 +94,7 @@ describe('/api/reminders API route', () => {
 
       expect(response.status).toBe(200);
       expect(body.success).toBe(true);
+      expect(body.delivery).toBe('ok');
 
       expect(mockSupabase.from).toHaveBeenCalledWith('reminder_preferences');
       expect(mockSupabase.upsert).toHaveBeenCalledWith(
@@ -97,6 +104,41 @@ describe('/api/reminders API route', () => {
         }),
         { onConflict: 'address' }
       );
+    });
+
+    it('reports delivery as degraded (with retry-after) when the notifications service health is degraded', async () => {
+      mockSupabase.upsert.mockResolvedValue({ error: null });
+      (getNotificationsServiceStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+        status: 'degraded',
+        retryAfterSeconds: 90,
+      });
+
+      const response = await POST(
+        makePostRequest({ address: VALID_ADDRESS, email: 'test@example.com', enabled: true })
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(body.saved).toBe(true);
+      expect(body.delivery).toBe('degraded');
+      expect(body.retryAfterSeconds).toBe(90);
+    });
+
+    it('still saves the preference (reports success+degraded) even when the delivery channel is unavailable', async () => {
+      mockSupabase.upsert.mockResolvedValue({ error: null });
+      (getNotificationsServiceStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+        status: 'unavailable',
+      });
+
+      const response = await POST(
+        makePostRequest({ address: VALID_ADDRESS, email: 'test@example.com', enabled: true })
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body.saved).toBe(true);
+      expect(body.delivery).toBe('degraded');
     });
 
     it('should return 400 if address or email is missing', async () => {

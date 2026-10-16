@@ -83,6 +83,11 @@ optional, user-provided PII (e.g. "Alice's Savings").
 - Scoped per wallet address; cleared on disconnect via `clearWalletStorage()`.
 - Nicknames are voluntarily entered — the user accepts that they are stored locally.
 
+[AddressBook implementation](../src/hooks/useAddressBook.ts) – ensures proper handling of duplicate entries and max‑size enforcement.
+Inline edits from the settings screen (`src/screens/settings/AddressBook.tsx`) go through
+`updateAddress()` and are written to this same per-wallet key; no additional storage key is
+introduced (#860).
+
 **Accepted risk:** Nicknames are convenience labels, not credentials. Exposure via
 XSS is a privacy concern but not a security one. The CSP remains the primary
 defense.

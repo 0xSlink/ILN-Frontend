@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Contract integration tests for src/utils/soroban.ts
  * Mocks @stellar/stellar-sdk to avoid real blockchain dependency.
@@ -25,6 +24,8 @@ const { mockServer, mockTx, mockAssembledTx } = vi.hoisted(() => {
     ),
     sendTransaction: vi.fn(() => Promise.resolve({ status: 'PENDING', hash: 'txhash123' })),
     getTransaction: vi.fn(() => Promise.resolve({ status: 'SUCCESS' })),
+    prepareTransaction: vi.fn(() => Promise.resolve({ toXDR: vi.fn(() => 'preparedXDR') } as any)),
+    pollTransaction: vi.fn(() => Promise.resolve({ status: 'SUCCESS' } as any)),
   };
   return { mockServer, mockTx, mockAssembledTx };
 });
@@ -44,6 +45,7 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
       Server: MockRpcServer,
       Api: {
         isSimulationSuccess: vi.fn((result: any) => !!result?.result),
+        GetTransactionStatus: { SUCCESS: 'SUCCESS' },
       },
       assembleTransaction: vi.fn(() => mockAssembledTx),
     },
@@ -55,11 +57,14 @@ vi.mock('@stellar/stellar-sdk', async (importOriginal) => {
         toScAddress: vi.fn(() => ({})),
       })),
     },
-    TransactionBuilder: vi.fn(function (this: any) {
-      this.addOperation = vi.fn().mockReturnThis();
-      this.setTimeout = vi.fn().mockReturnThis();
-      this.build = vi.fn(() => mockTx);
-    }),
+    TransactionBuilder: Object.assign(
+      vi.fn(function (this: any) {
+        this.addOperation = vi.fn().mockReturnThis();
+        this.setTimeout = vi.fn().mockReturnThis();
+        this.build = vi.fn(() => mockTx);
+      }),
+      { fromXDR: vi.fn(() => mockTx) }
+    ),
     Operation: {
       invokeHostFunction: vi.fn(() => ({})),
       invokeContractFunction: vi.fn(() => ({})),
@@ -105,6 +110,7 @@ import {
   getTokenBalance,
   getTokenMetadata,
   getApprovedTokenIds,
+  submitInvoiceTransaction,
   type SubmitInvoiceArgs,
 } from '@/utils/soroban';
 
@@ -197,6 +203,38 @@ describe('soroban – get_invoice_count', () => {
   it('throws when RPC is unhealthy', async () => {
     mockServer.getHealth.mockResolvedValueOnce({ status: 'unhealthy' });
     await expect(getInvoiceCount()).rejects.toThrow('RPC server is not healthy');
+  });
+});
+
+describe('soroban – submitInvoiceTransaction', () => {
+  it('returns the invoice id from transaction returnValue metadata when available', async () => {
+    const signTx = vi.fn(async () => 'signedXDR');
+    const _returnValue = (await import('@stellar/stellar-sdk')).xdr.ScVal.scvU64(42n);
+
+    (rpc.Api.isSimulationSuccess as any).mockReturnValue(true);
+    (scValToNative as any).mockReturnValue(42n);
+    mockServer.getAccount.mockResolvedValue(mockAccount());
+    mockServer.prepareTransaction.mockResolvedValue({ toXDR: vi.fn(() => 'preparedXDR') } as any);
+    mockServer.sendTransaction.mockResolvedValue({ status: 'PENDING', hash: 'sentHash123' } as any);
+    mockServer.pollTransaction.mockResolvedValue({
+      status: 'SUCCESS',
+      result: { retval: {} },
+    } as any);
+    (rpc.Api.GetTransactionStatus as any) = { SUCCESS: 'SUCCESS' };
+
+    const result = await submitInvoiceTransaction({
+      freelancer: FREELANCER,
+      payer: PAYER,
+      amount: 100_000n,
+      dueDate: 1735689600,
+      discountRate: 250,
+      signTx,
+      token: USDC,
+    });
+
+    expect(result.invoiceId).toBe(42n);
+    expect(result.txHash).toBe('sentHash123');
+    expect(signTx).toHaveBeenCalledWith('preparedXDR');
   });
 });
 

@@ -1,0 +1,50 @@
+name: Smart Contract Health Check
+
+on:
+  schedule:
+    - cron: '10,25,40,55 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  health-check:
+    name: Run Smart Contract Health Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run smart contract health check
+        env:
+          NEXT_PUBLIC_RPC_URL: ${{ vars.NEXT_PUBLIC_RPC_URL || 'https://soroban-testnet.stellar.org' }}
+          NEXT_PUBLIC_CONTRACT_ID: ${{ vars.NEXT_PUBLIC_CONTRACT_ID }}
+          NEXT_PUBLIC_STELLAR_NETWORK: ${{ vars.NEXT_PUBLIC_STELLAR_NETWORK || 'TESTNET' }}
+          INSTATUS_API_KEY: ${{ secrets.INSTATUS_API_KEY }}
+          INSTATUS_PAGE_ID: ${{ secrets.INSTATUS_PAGE_ID }}
+          INSTATUS_SMARTCONTRACTS_COMPONENT_ID: ${{ secrets.INSTATUS_SMARTCONTRACTS_COMPONENT_ID }}
+          INSTATUS_OPEN_SMART_CONTRACT_INCIDENT_ID: ${{ vars.INSTATUS_OPEN_SMART_CONTRACT_INCIDENT_ID }}
+          ALERT_ROUTING_WEBHOOK_URL: ${{ secrets.ALERT_ROUTING_WEBHOOK_URL }}
+          ALERT_ROUTING_SECRET: ${{ secrets.ALERT_ROUTING_SECRET }}
+          SMART_CONTRACT_MANUAL_OVERRIDE: ${{ vars.SMART_CONTRACT_MANUAL_OVERRIDE }}
+        run: npx tsx scripts/check-contract-health.ts

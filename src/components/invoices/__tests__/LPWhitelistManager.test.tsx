@@ -33,6 +33,9 @@ describe('LPWhitelistManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     (soroban.getReputation as any).mockResolvedValue({ score: 90 });
+    // Feature is behind UPDATE_LP_WHITELIST_SUPPORTED in production; enable it
+    // for the interactive flows below.
+    (soroban as any).UPDATE_LP_WHITELIST_SUPPORTED = true;
     // Reset the `updateLPWhitelist` mock to be present and callable
     (soroban as any).updateLPWhitelist = vi.fn().mockResolvedValue(undefined);
   });
@@ -83,6 +86,21 @@ describe('LPWhitelistManager', () => {
   it('shows governance fallback if contract support is missing', async () => {
     // Delete the mock to simulate Scenario B
     delete (soroban as any).updateLPWhitelist;
+    (soroban as any).UPDATE_LP_WHITELIST_SUPPORTED = false;
+
+    render(<LPWhitelistManager {...defaultProps} />);
+
+    expect(
+      screen.getByText('Whitelist modification is not currently supported by the protocol.')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Request Governance Proposal/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add LP' })).not.toBeInTheDocument();
+  });
+
+  it('shows governance notice while update_lp_whitelist is not deployed', async () => {
+    // The current contract ABI has no update_lp_whitelist entry point (see
+    // #783), so the feature flag is false even though the stub export exists.
+    (soroban as any).UPDATE_LP_WHITELIST_SUPPORTED = false;
 
     render(<LPWhitelistManager {...defaultProps} />);
 

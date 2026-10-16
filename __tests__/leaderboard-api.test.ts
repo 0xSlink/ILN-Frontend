@@ -21,7 +21,10 @@ describe('/api/leaderboard API route', () => {
   });
 
   it('returns leaderboard data for valid query params', async () => {
-    vi.mocked(getLeaderboard).mockResolvedValue([{ address: 'GABC', score: 10 }]);
+    vi.mocked(getLeaderboard).mockResolvedValue({
+      data: [{ address: 'GABC', score: 10 }],
+      unavailable: false,
+    });
 
     const response = await GET(makeRequest('?type=lp&period=30d&limit=10'));
     const body = await response.json();
@@ -31,8 +34,18 @@ describe('/api/leaderboard API route', () => {
     expect(getLeaderboard).toHaveBeenCalledWith('lp', '30d');
   });
 
+  it('returns 503 (indexer unavailable) distinct from a generic error', async () => {
+    vi.mocked(getLeaderboard).mockResolvedValue({ data: [], unavailable: true });
+
+    const response = await GET(makeRequest('?type=lp&period=30d'));
+    const body = await response.json();
+
+    expect(response.status).toBe(503);
+    expect(body).toEqual({ error: 'Indexer temporarily unavailable' });
+  });
+
   it('defaults type and period when omitted', async () => {
-    vi.mocked(getLeaderboard).mockResolvedValue([]);
+    vi.mocked(getLeaderboard).mockResolvedValue({ data: [], unavailable: false });
 
     const response = await GET(makeRequest(''));
 
@@ -84,7 +97,7 @@ describe('/api/leaderboard API route', () => {
 
   describe('rate limiting', () => {
     it('returns 429 after exceeding the per-IP request limit', async () => {
-      vi.mocked(getLeaderboard).mockResolvedValue([]);
+      vi.mocked(getLeaderboard).mockResolvedValue({ data: [], unavailable: false });
       const ip = '203.0.113.40';
 
       for (let i = 0; i < 30; i += 1) {

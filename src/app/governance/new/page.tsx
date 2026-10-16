@@ -145,14 +145,22 @@ export default function NewGovernanceProposalPage() {
     if (!params) return '';
     switch (form.formType) {
       case 'FeeRate':
-        return `This proposal will change [FeeRate] from ${params.feeRateBps} (${params.feeRateBps / 100}%) to ${form.newValueBps ?? '?'} (${(form.newValueBps ?? 0) / 100}%).`;
+        return `This proposal will change [FeeRate] from ${params.feeRateBps} (${
+          params.feeRateBps / 100
+        }%) to ${form.newValueBps ?? '?'} (${(form.newValueBps ?? 0) / 100}%).`;
       case 'MaxDiscountRate':
-        return `This proposal will change [MaxDiscountRate] from ${params.maxDiscountRateBps} (${params.maxDiscountRateBps / 100}%) to ${form.newValueBps ?? '?'} (${(form.newValueBps ?? 0) / 100}%).`;
+        return `This proposal will change [MaxDiscountRate] from ${params.maxDiscountRateBps} (${
+          params.maxDiscountRateBps / 100
+        }%) to ${form.newValueBps ?? '?'} (${(form.newValueBps ?? 0) / 100}%).`;
       case 'AddToken':
-        return `This proposal will add ${form.tokenName ?? 'a new token'} (${form.tokenAddress ?? 'address'}) to the protocol's accepted currencies.`;
+        return `This proposal will add ${form.tokenName ?? 'a new token'} (${
+          form.tokenAddress ?? 'address'
+        }) to the protocol's accepted currencies.`;
       case 'RemoveToken':
         const token = params.acceptedTokens.find((t) => t.address === form.removeTokenAddress);
-        return `This proposal will remove ${token?.symbol ?? 'the selected token'} from the protocol's accepted currencies.`;
+        return `This proposal will remove ${
+          token?.symbol ?? 'the selected token'
+        } from the protocol's accepted currencies.`;
       default:
         return '';
     }

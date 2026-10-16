@@ -1,0 +1,94 @@
+name: License and Dependency Compliance
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/license-compliance.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compliance:
+    name: License and security compliance
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Security audit ───────────────────────────────────────────────────────
+
+      - name: Security audit (pnpm audit)
+        # pnpm audit exits non-zero on any vulnerability at or above the threshold.
+        # 'moderate' catches the bulk of real issues without false-positives from
+        # low-severity informational advisories.
+        run: pnpm audit --audit-level=moderate
+
+      # ── License compliance ───────────────────────────────────────────────────
+
+      - name: Install license-checker
+        run: npm install -g license-checker@25.0.1
+
+      - name: Run license compliance check
+        id: license_check
+        run: |
+          echo "### License Compliance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Generate the full license list for the summary
+          license-checker \
+            --production \
+            --json \
+            --out /tmp/licenses.json \
+            || true
+
+          # Check against allowed-licenses list (fail on any disallowed license)
+          license-checker \
+            --production \
+            --onlyAllow \
+              "MIT;MIT*;ISC;BSD-2-Clause;BSD-3-Clause;BSD-4-Clause;Apache-2.0;CC0-1.0;CC-BY-3.0;CC-BY-4.0;Unlicense;0BSD;Python-2.0;BlueOak-1.0.0;WTFPL" \
+            --excludePackages "frontend" \
+            --out /tmp/allowed-licenses.json \
+            2>&1 | tee /tmp/license-output.txt
+
+          EXIT_CODE=${PIPESTATUS[0]}
+
+          # Write result to step summary
+          {
+            echo '```'
+            cat /tmp/license-output.txt
+            echo '```'
+            echo ""
+            echo "**Allowed licenses:** MIT, ISC, BSD-2/3/4-Clause, Apache-2.0, CC0-1.0, CC-BY-3.0/4.0, Unlicense, 0BSD"
+            echo ""
+            echo "> See \`CONTRIBUTING.md § License Compliance Policy\` for the rationale."
+          } >> $GITHUB_STEP_SUMMARY
+
+          exit $EXIT_CODE
+
+      - name: Upload license report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-compliance-report
+          path: /tmp/licenses.json
+          retention-days: 30

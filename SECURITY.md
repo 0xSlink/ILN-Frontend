@@ -9,6 +9,7 @@ This document covers the **ILN-Frontend** web application — the React/Next.js 
 - Invoice data rendering that could be a vector for XSS
 - Client-side session handling and authentication via Supabase
 - Dependency vulnerabilities that affect the frontend bundle
+- Subresource Integrity (SRI) and Content Security Policy (CSP) enforcement (see [docs/security.md](docs/security.md))
 
 Issues with the **smart contracts** (on-chain logic, asset security, protocol math) belong in the [`ILN-Smart-Contract`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) repository's security policy.
 

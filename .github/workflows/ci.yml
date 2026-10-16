@@ -11,6 +11,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  file-size:
+    name: Check tracked file sizes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check file-size policy
+        run: node scripts/check-file-sizes.mjs
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -24,7 +33,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -37,8 +46,33 @@ jobs:
       - name: Run ESLint
         run: pnpm run lint
 
+      - name: Flag snapshot changes for review
+        if: github.event_name == 'pull_request'
+        run: |
+          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.snap' '__tests__/__snapshots__/*')
+          if [ -n "$changed" ]; then
+            echo "## ⚠️ Snapshot files changed" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "The following snapshot files were modified in this PR:" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$changed" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Per testing guidelines, snapshot diffs must be explained in the PR description." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Check env example sync
         run: pnpm run env:check
+
+      - name: Check for unfilled placeholders in docs
+        run: pnpm run docs:check-placeholders
+
+      - name: Check configuration drift
+        run: pnpm run env:drift-check
+
+      - name: Check locale key parity
+        run: pnpm run i18n:check
 
       - name: Check formatting with Prettier
         run: pnpm run format:check
@@ -68,7 +102,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -89,7 +123,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -142,7 +176,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -150,8 +184,8 @@ jobs:
       - name: Build
         run: pnpm run build
 
-  toolchain-smoke:
-    name: Clean-runner toolchain smoke
+  config-drift:
+    name: Check configuration drift
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -166,39 +200,9 @@ jobs:
           node-version-file: '.nvmrc'
           cache: "pnpm"
 
-      - name: Install dependencies (locked)
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify lockfile integrity (drift is blocking)
-        run: git diff --exit-code pnpm-lock.yaml
+      - name: Check mainnet vs testnet configuration drift
+        run: pnpm run env:drift-check
 
-      - name: Run ESLint
-        run: pnpm run lint
-
-      - name: Run TypeScript type check
-        run: pnpm exec tsc --noEmit
-
-      - name: Run tests
-        run: pnpm test
-
-      - name: Build for the Lighthouse smoke
-        run: pnpm run build
-        env:
-          CI: true
-          NEXT_PUBLIC_STELLAR_NETWORK: testnet
-
-      - name: Lighthouse start smoke (single run, home page)
-        run: >-
-          pnpm dlx @lhci/cli collect
-          --collect.numberOfRuns=1
-          --collect.url=http://localhost:3000/
-        env:
-          CI: true
-
-      - name: Upload toolchain smoke evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: toolchain-smoke-evidence
-          path: .lighthouseci/
-          retention-days: 14
