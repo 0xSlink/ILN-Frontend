@@ -18,6 +18,26 @@ The following budgets are enforced as **errors**. If the median of 3 runs exceed
 - **Time to Interactive**: < 3.8s
 - **Total Byte Weight**: < 200KB gzipped
 - **Performance Score**: > 70
+- **Accessibility Score**: > 90 (per route — see [Route-level accessibility budgets](#route-level-accessibility-budgets))
+
+### Route-level accessibility budgets
+
+Accessibility is a **hard gate** on every audited route. Each representative
+route has its own explicit blocking budget so a regression on one page fails CI
+and names that page in the report, rather than being averaged away or downgraded
+to a warning:
+
+| Route          | Assertion                                 | Level   |
+| -------------- | ----------------------------------------- | ------- |
+| `/`            | `categories:accessibility` `minScore` 0.9 | `error` |
+| `/marketplace` | `categories:accessibility` `minScore` 0.9 | `error` |
+| `/lp`          | `categories:accessibility` `minScore` 0.9 | `error` |
+| `/governance`  | `categories:accessibility` `minScore` 0.9 | `error` |
+
+Because these are `error`-level assertions, a route whose accessibility score
+drops below 0.9 makes `lhci assert` exit non-zero, which fails the Lighthouse
+workflow and blocks the PR. The triggering route is identified by its URL in the
+assertion output and in the per-URL trend report uploaded as an artifact.
 
 ### Soft-warning budgets (informational)
 
@@ -25,7 +45,6 @@ Additional metrics are tracked as **warnings** (CI will not fail but will annota
 
 - First Contentful Paint: < 1.8s
 - Performance Score components / resource hints (`uses-text-compression`, `render-blocking-resources`, `unused-javascript`)
-- Accessibility Score: > 90
 - Best Practices Score: > 80
 - SEO Score: > 80
 
@@ -33,12 +52,12 @@ Additional metrics are tracked as **warnings** (CI will not fail but will annota
 
 Even when all hard gates pass, `scripts/lighthouse-trend.mjs` compares the current run's medians against the **rolling median of the last 5 runs** (stored in `.lighthouseci-history/trend-history.json`). If a meaningful regression is detected, it emits a **soft-warning** that does not fail CI but is surfaced prominently:
 
-| Metric | Soft-warning threshold | Meaning |
-|---|---|---|
-| Performance score | drop > 5 points (0.05) vs baseline | overall regression |
-| LCP | +250ms vs baseline | content render slowed |
-| CLS | +0.02 vs baseline | layout shifted more |
-| TBT | +50ms vs baseline | more main-thread blocking |
+| Metric            | Soft-warning threshold             | Meaning                   |
+| ----------------- | ---------------------------------- | ------------------------- |
+| Performance score | drop > 5 points (0.05) vs baseline | overall regression        |
+| LCP               | +250ms vs baseline                 | content render slowed     |
+| CLS               | +0.02 vs baseline                  | layout shifted more       |
+| TBT               | +50ms vs baseline                  | more main-thread blocking |
 
 Thresholds are tunable via env (`LHCI_TREND_PERF_DELTA`, `LHCI_TREND_LCP_DELTA_MS`, `LHCI_TREND_CLS_DELTA`, `LHCI_TREND_TBT_DELTA_MS`, `LHCI_TREND_WINDOW`). To gate on them (future), run `node scripts/lighthouse-trend.mjs --strict`.
 
@@ -148,7 +167,7 @@ A soft warning means "still green, but meaningfully worse than recent history." 
 Lighthouse CI is configured in `.lighthouserc.json`:
 
 - `ci.collect.url`: Pages to audit
-- `ci.assert.assertions`: Budget thresholds and severity levels (`error` = hard-fail, `warn` = soft)
+- `ci.assert.assertMatrix`: Per-URL budget thresholds and severity levels, keyed by `matchingUrlPattern` (`error` = hard-fail, `warn` = soft). The `.*` entry holds the global performance budgets; each representative route has its own entry for the blocking accessibility budget. Lighthouse CI does not allow `assertMatrix` to be combined with a flat `ci.assert.assertions` block.
 - `ci.upload`: Report storage settings (filesystem by default; swap to `lhci` when using a server)
 - Trend detection: `scripts/lighthouse-trend.mjs` + `.lighthouseci-history/` (cache + artifacts)
 

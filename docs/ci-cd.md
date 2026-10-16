@@ -2,6 +2,33 @@
 
 This document describes the CI/CD pipeline configuration, branch protection rules, and custom runner requirements for the ILN Frontend repository.
 
+## Quality-Gate Toolchain (supported versions & ownership)
+
+This section records the toolchain the CI quality gate is built on, so a contributor can reproduce a clean-runner run locally. Versions are pinned in the repository (not duplicated per workflow) so there is one source of truth.
+
+| Tool          | Supported / pinned version                            | Source of truth                                                |
+| ------------- | ----------------------------------------------------- | -------------------------------------------------------------- |
+| Node.js       | 20.20.2 (Node 20 LTS); `engines.node` `>=20.19.0 <21` | `.nvmrc`, `package.json`                                       |
+| pnpm          | 9.0.0                                                 | `pnpm/action-setup@v4` `version: '9.0.0'` in every workflow    |
+| Lockfile      | `pnpm-lock.yaml` (authoritative)                      | committed at the repository root                               |
+| Lighthouse CI | `@lhci/cli`, run through `pnpm dlx`                   | `.github/workflows/lighthouse.yml`, `.github/workflows/ci.yml` |
+
+Rules the gate relies on:
+
+- **Clean-runner execution uses locked dependencies.** Every workflow installs with `pnpm install --frozen-lockfile`; there is no `npm install`/`yarn` path.
+- **Drift is a blocking failure.** `ci.yml` re-runs the frozen install and fails on `git diff --exit-code pnpm-lock.yaml`, so a `package.json` edit without a matching lockfile update cannot merge.
+- **Node version drift is a blocking failure.** Workflows read `node-version-file: '.nvmrc'` rather than a hard-coded major, so a mismatch between local development and CI surfaces as a failing run.
+
+### Workflow ownership
+
+`.github/CODEOWNERS` is the ownership source of truth. The entry covering the quality gate is:
+
+```
+.github/workflows/ @Immex171
+```
+
+That pattern makes the owner above a required reviewer for any change to the workflow files that define the gate, so version or threshold changes cannot land without owner review.
+
 ## Custom Runner: namespace-profile-nursca
 
 > **Temporarily disabled (2026-08-10):** `namespace-profile-nursca` stopped picking up jobs — `gh api repos/.../actions/runners` returns zero registered runners, and every workflow that targeted it had been stuck in `queued` for 8+ hours across multiple pushes. All workflows below were switched to `runs-on: ubuntu-latest` as a temporary mitigation so CI keeps running. This is a runner/infrastructure issue (likely on the Namespace.so side — expired registration, billing, or a broken webhook), not a code issue. Once the runner is confirmed healthy again, revert these `runs-on` lines back to `namespace-profile-nursca` (see the "Fork Contributors" example below for the exact line to change, in reverse).
@@ -127,7 +154,9 @@ Jobs:
 
 - `lint` - ESLint validation
 - `tests` - Unit tests + accessibility tests
+- `coverage` - Full-src coverage report (informational; uploaded as an artifact)
 - `build` - Production build verification
+- `toolchain-smoke` - Clean-runner smoke: a locked install, a lockfile-drift check, lint, type check, unit tests, and a single-run Lighthouse start, with the `.lighthouseci/` output retained as the `toolchain-smoke-evidence` artifact
 
 ### End-to-End Tests (e2e-tests.yml)
 

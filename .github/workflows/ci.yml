@@ -149,3 +149,56 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+  toolchain-smoke:
+    name: Clean-runner toolchain smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: "pnpm"
+
+      - name: Install dependencies (locked)
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify lockfile integrity (drift is blocking)
+        run: git diff --exit-code pnpm-lock.yaml
+
+      - name: Run ESLint
+        run: pnpm run lint
+
+      - name: Run TypeScript type check
+        run: pnpm exec tsc --noEmit
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build for the Lighthouse smoke
+        run: pnpm run build
+        env:
+          CI: true
+          NEXT_PUBLIC_STELLAR_NETWORK: testnet
+
+      - name: Lighthouse start smoke (single run, home page)
+        run: >-
+          pnpm dlx @lhci/cli collect
+          --collect.numberOfRuns=1
+          --collect.url=http://localhost:3000/
+        env:
+          CI: true
+
+      - name: Upload toolchain smoke evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-smoke-evidence
+          path: .lighthouseci/
+          retention-days: 14

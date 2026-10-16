@@ -4,9 +4,11 @@ Thank you for your interest in contributing to the Invoice Liquidity Network (IL
 
 ## Prerequisites
 
-- **Node.js**: Version 20 LTS (`.nvmrc` specified: `20.20.2`)
-- **pnpm**: Version 9 or higher
+- **Node.js**: Version 20 LTS (`.nvmrc` specified: `20.20.2`; `engines.node` is `>=20.19.0 <21`)
+- **pnpm**: Version 9 (the quality gate pins `9.0.0`)
 - **Git**: For version control
+
+The supported Node/pnpm versions and the ownership of the CI quality-gate workflows are recorded in [docs/ci-cd.md § Quality-Gate Toolchain](docs/ci-cd.md#quality-gate-toolchain-supported-versions--ownership).
 
 ## Issue Leveling and Label Curation
 
@@ -924,6 +926,7 @@ To maintain effective Wave throughput and ensure issues don't get claimed and ab
 The stale assignment bot runs daily and monitors assigned issues:
 
 1. **Warning Stage (7 days of inactivity)**
+
    - If an issue has been assigned for 7+ days with no linked PR activity, a warning comment is added
    - The issue is labeled with `stale-assignment-warning`
    - The assignee is notified with instructions to either:
@@ -939,6 +942,7 @@ The stale assignment bot runs daily and monitors assigned issues:
 ### Configuration
 
 The timeout periods are configurable in `.github/workflows/stale-assignments.yml`:
+
 - `WARNING_DAYS`: Days before warning comment (default: 7)
 - `RECLAIM_DAYS`: Days before unassignment (default: 14)
 
