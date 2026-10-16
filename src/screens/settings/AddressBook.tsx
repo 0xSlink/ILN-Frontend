@@ -23,14 +23,15 @@ export default function AddressBookPage() {
 
   // ── Add ──────────────────────────────────────────────────────────────────────
 
-  const handleAddAddress = () => {
-    const result = addAddress(newAddress, newNickname);
+  const handleAddAddress = async () => {
+    const result = await addAddress(newAddress, newNickname);
     if (!result.ok) {
       const errorKey: Record<typeof result.error, string> = {
         MISSING_FIELDS: 'addressBook.errors.missingFields',
         INVALID_ADDRESS: 'addressBook.errors.invalidAddress',
         DUPLICATE_ADDRESS: 'addressBook.errors.duplicateAddress',
         PERSIST_FAILED: 'addressBook.errors.saveFailed',
+        CRYPTO_FAILED: 'addressBook.errors.saveFailed',
       };
       addToast({ type: 'error', title: t(errorKey[result.error]) });
       return;
@@ -56,14 +57,15 @@ export default function AddressBookPage() {
     setEditNickname('');
   };
 
-  const handleUpdateAddress = (id: string) => {
-    const result = updateAddress(id, { address: editAddress, nickname: editNickname });
+  const handleUpdateAddress = async (id: string) => {
+    const result = await updateAddress(id, { address: editAddress, nickname: editNickname });
     if (!result.ok) {
       const errorKey: Record<typeof result.error, string> = {
         MISSING_FIELDS: 'addressBook.errors.missingFields',
         INVALID_ADDRESS: 'addressBook.errors.invalidAddress',
         DUPLICATE_ADDRESS: 'addressBook.errors.duplicateAddress',
         PERSIST_FAILED: 'addressBook.errors.saveFailed',
+        CRYPTO_FAILED: 'addressBook.errors.saveFailed',
       };
       addToast({ type: 'error', title: t(errorKey[result.error]) });
       // Keep the edit form open so the user can correct the input or retry.
@@ -75,8 +77,8 @@ export default function AddressBookPage() {
 
   // ── Delete ───────────────────────────────────────────────────────────────────
 
-  const handleDeleteAddress = (id: string) => {
-    deleteAddress(id);
+  const handleDeleteAddress = async (id: string) => {
+    await deleteAddress(id);
     addToast({ type: 'success', title: t('addressBook.success.deleted') });
   };
 

@@ -12,6 +12,7 @@ import {
   type TooltipProps,
 } from 'recharts';
 import { transformFundingData } from '@/utils/funding';
+import { fetchFunding } from '@/lib/indexer';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
 } from '@/components/IndexerUnavailableNotice';
@@ -139,14 +140,11 @@ export default function FundingChart() {
     setLoading(true);
     setUnavailable(false);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
-      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
-      const res = await fetch(
-        `${baseUrl}/v1/analytics/funding?period=${selectedRange.toLowerCase()}`
-      );
-      if (!res.ok) throw new Error('Failed to fetch');
-      const json = await res.json();
-      setData(json.daily);
+      const result = await fetchFunding(selectedRange);
+      if (result.unavailable || result.error || !result.data) {
+        throw new Error('Failed to fetch funding');
+      }
+      setData(result.data.daily);
     } catch {
       // Only substitute demo data in development; otherwise show an honest
       // "temporarily unavailable" state instead of fabricating volume.

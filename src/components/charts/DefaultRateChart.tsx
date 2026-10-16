@@ -17,6 +17,7 @@ import {
   MonthlyDefaultBucket,
   MonthlyDefaultWithMA,
 } from '@/utils/defaultRate';
+import { fetchDefaultRate } from '@/lib/indexer';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
 } from '@/components/IndexerUnavailableNotice';
@@ -105,11 +106,11 @@ export default function DefaultRateChart() {
     setLoading(true);
     setUnavailable(false);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
-      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
-      const res = await fetch(`${baseUrl}/analytics/defaults?period=12m`);
-      if (!res.ok) throw new Error('Failed to fetch');
-      const json = await res.json();
+      const result = await fetchDefaultRate('12m');
+      if (result.unavailable || result.error || !result.data) {
+        throw new Error('Failed to fetch default rate');
+      }
+      const json = result.data;
       const withMA = calculateMovingAverage(json.monthly || json, 1);
       setChartData(withMA);
     } catch {

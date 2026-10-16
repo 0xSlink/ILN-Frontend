@@ -1,11 +1,17 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { isValidStellarAddress } from '@/utils/governance';
+import { clearWalletStorage, WALLET_DISCONNECT_STORAGE_KEY } from '@/utils/walletStorage';
+import { encryptValue, decryptValue } from '@/utils/walletCrypto';
 
 export interface AddressBookEntry {
   id: string;
   address: string;
   nickname: string;
+  /** When the entry was first created (ms epoch). */
+  createdAt: number;
+  /** When the entry expires and should be dropped (ms epoch). */
+  retentionAt: number;
 }
 
 /** Reason a mutating operation failed, returned to the caller for UI feedback. */
@@ -13,12 +19,17 @@ export type AddressBookError =
   | 'INVALID_ADDRESS'
   | 'DUPLICATE_ADDRESS'
   | 'MISSING_FIELDS'
-  | 'PERSIST_FAILED';
+  | 'PERSIST_FAILED'
+  | 'CRYPTO_FAILED';
 
 /** Discriminated result from operations that can fail. */
 export type AddressBookResult = { ok: true } | { ok: false; error: AddressBookError };
 
 const STORAGE_KEY_PREFIX = 'iln-address-book-';
+/** Key recording whether the user opted out of address-book persistence (#1099). */
+const PERSIST_OPT_OUT_KEY = 'iln_address_book_persist_optout';
+/** Default retention window for remembered address-book entries: 30 days. */
+const DEFAULT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Date.now() alone collides for entries created within the same millisecond,
 // which made deleteAddress() remove every entry added in the same tick.
@@ -27,18 +38,61 @@ function createEntryId(): string {
 }
 
 /**
- * Attempt to persist the address book to localStorage.
- * Returns true on success, false if the write throws (e.g. storage full,
- * private-browsing quota, or a test-injected failure).
+ * Attempt to persist the (encrypted) address book to localStorage.
+ * Returns true on success, false if the write throws or encryption fails.
  */
-function tryPersist(key: string, entries: AddressBookEntry[]): boolean {
+async function tryPersist(key: string, entries: AddressBookEntry[]): Promise<boolean> {
   try {
-    localStorage.setItem(key, JSON.stringify(entries));
+    const serializable = entries.map((entry) => ({
+      ...entry,
+      address: await encryptValue(entry.address),
+    }));
+    localStorage.setItem(key, JSON.stringify(serializable));
     return true;
   } catch (e) {
     console.error('Failed to persist address book to localStorage', e);
     return false;
   }
+}
+
+/** Read and decrypt the address book from localStorage, dropping expired entries. */
+async function loadPersisted(key: string): Promise<AddressBookEntry[]> {
+  const stored = localStorage.getItem(key);
+  if (!stored) return [];
+  let raw: unknown;
+  try {
+    raw = JSON.parse(stored);
+  } catch (e) {
+    console.error('Failed to parse address book from localStorage', e);
+    return [];
+  }
+  if (!Array.isArray(raw)) return [];
+
+  const now = Date.now();
+  const entries: AddressBookEntry[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as AddressBookEntry & { address?: unknown };
+    // Drop entries past their retention window (#1100).
+    if (typeof entry.retentionAt === 'number' && entry.retentionAt < now) continue;
+    if (typeof entry.createdAt !== 'number') entry.createdAt = now;
+    if (typeof entry.retentionAt !== 'number') entry.retentionAt = now + DEFAULT_RETENTION_MS;
+    if (typeof entry.address === 'string') {
+      const decrypted = await decryptValue(entry.address);
+      if (decrypted === null) continue; // undecryptable outside this session
+      entry.address = decrypted;
+    }
+    if (typeof entry.address === 'string' && typeof entry.nickname === 'string' && entry.id) {
+      entries.push({
+        id: entry.id,
+        address: entry.address,
+        nickname: entry.nickname,
+        createdAt: entry.createdAt,
+        retentionAt: entry.retentionAt,
+      });
+    }
+  }
+  return entries;
 }
 
 export default function useAddressBook() {
@@ -47,6 +101,8 @@ export default function useAddressBook() {
   // Skips the save that runs immediately after a (re)load, so the freshly
   // mounted empty state never overwrites what is already in localStorage.
   const skipNextSaveRef = useRef(true);
+  // Whether the user has opted out of persisting the address book (#1099).
+  const [persistEnabled, setPersistEnabled] = useState<boolean>(true);
 
   useEffect(() => {
     skipNextSaveRef.current = true;
@@ -55,18 +111,31 @@ export default function useAddressBook() {
       setAddressBook([]);
       return;
     }
-    const stored = localStorage.getItem(`${STORAGE_KEY_PREFIX}${walletAddress}`);
-    if (stored) {
-      try {
-        setAddressBook(JSON.parse(stored));
-      } catch (e) {
-        console.error('Failed to parse address book from localStorage', e);
-        setAddressBook([]);
-      }
-    } else {
-      setAddressBook([]);
-    }
+    void loadPersisted(`${STORAGE_KEY_PREFIX}${walletAddress}`).then((entries) => {
+      setAddressBook(entries);
+    });
+
+    // Respect the persisted opt-out flag on mount (#1099).
+    const optOut = localStorage.getItem(PERSIST_OPT_OUT_KEY);
+    setPersistEnabled(optOut !== 'true');
   }, [walletAddress]);
+
+  /**
+   * Cross-tab disconnect privacy (#1098).
+   * When another tab clears its wallet session it broadcasts a storage event
+   * on WALLET_DISCONNECT_STORAGE_KEY. This tab must not retain or display the
+   * previous session's address-book data after logout.
+   */
+  useEffect(() => {
+    const handleDisconnectBroadcast = (event: StorageEvent) => {
+      if (event.key === WALLET_DISCONNECT_STORAGE_KEY) {
+        setAddressBook([]);
+        clearWalletStorage();
+      }
+    };
+    window.addEventListener('storage', handleDisconnectBroadcast);
+    return () => window.removeEventListener('storage', handleDisconnectBroadcast);
+  }, []);
 
   useEffect(() => {
     if (skipNextSaveRef.current) {
@@ -78,36 +147,72 @@ export default function useAddressBook() {
   }, [addressBook, walletAddress]);
 
   /**
+   * Explicitly clear the remembered address-book data (#1099).
+   */
+  const clearAddressBook = useCallback(async (): Promise<AddressBookResult> => {
+    const storageKey = `${STORAGE_KEY_PREFIX}${walletAddress}`;
+    if (walletAddress) {
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+        return { ok: false, error: 'PERSIST_FAILED' };
+      }
+    }
+    setAddressBook([]);
+    return { ok: true };
+  }, [walletAddress]);
+
+  /**
+   * Opt-out control for local address-book persistence (#1099).
+   * When disabled, existing stored data is cleared and no further writes occur.
+   */
+  const setPersistPreference = useCallback(
+    (enabled: boolean): void => {
+      localStorage.setItem(PERSIST_OPT_OUT_KEY, enabled ? 'null' : 'true');
+      setPersistEnabled(enabled);
+      if (!enabled) {
+        void clearAddressBook();
+      }
+    },
+    [clearAddressBook]
+  );
+
+  /**
    * Add a new entry.
    * Validates format and detects duplicates before touching state.
    * Returns a result object so callers can surface the right error message.
    */
   const addAddress = useCallback(
-    (address: string, nickname: string): AddressBookResult => {
+    async (address: string, nickname: string): Promise<AddressBookResult> => {
       if (!address || !nickname) return { ok: false, error: 'MISSING_FIELDS' };
 
       if (!isValidStellarAddress(address)) return { ok: false, error: 'INVALID_ADDRESS' };
 
-      // Duplicate: exact address match — surface an explicit error instead of
-      // silently updating the nickname, which was invisible to the user.
       if (addressBook.some((entry) => entry.address === address)) {
         return { ok: false, error: 'DUPLICATE_ADDRESS' };
       }
 
-      const newEntry: AddressBookEntry = { id: createEntryId(), address, nickname };
+      const now = Date.now();
+      const newEntry: AddressBookEntry = {
+        id: createEntryId(),
+        address,
+        nickname,
+        createdAt: now,
+        retentionAt: now + DEFAULT_RETENTION_MS,
+      };
       // Enforce max 50 entries by evicting the oldest (first) when at capacity.
       const next =
         addressBook.length >= 50 ? [...addressBook.slice(1), newEntry] : [...addressBook, newEntry];
 
       const storageKey = `${STORAGE_KEY_PREFIX}${walletAddress}`;
-      if (walletAddress && !tryPersist(storageKey, next)) {
+      if (walletAddress && persistEnabled && !(await tryPersist(storageKey, next))) {
         return { ok: false, error: 'PERSIST_FAILED' };
       }
 
       setAddressBook(next);
       return { ok: true };
     },
-    [addressBook, walletAddress]
+    [addressBook, walletAddress, persistEnabled]
   );
 
   /**
@@ -116,7 +221,10 @@ export default function useAddressBook() {
    * Rolls back state on persistence failure.
    */
   const updateAddress = useCallback(
-    (id: string, updates: Partial<Omit<AddressBookEntry, 'id'>>): AddressBookResult => {
+    async (
+      id: string,
+      updates: Partial<Omit<AddressBookEntry, 'id'>>
+    ): Promise<AddressBookResult> => {
       if (updates.address !== undefined) {
         if (!isValidStellarAddress(updates.address)) {
           return { ok: false, error: 'INVALID_ADDRESS' };
@@ -130,7 +238,7 @@ export default function useAddressBook() {
       const next = addressBook.map((entry) => (entry.id === id ? { ...entry, ...updates } : entry));
 
       const storageKey = `${STORAGE_KEY_PREFIX}${walletAddress}`;
-      if (walletAddress && !tryPersist(storageKey, next)) {
+      if (walletAddress && persistEnabled && !(await tryPersist(storageKey, next))) {
         // Do NOT update React state — UI stays consistent with what is on disk.
         return { ok: false, error: 'PERSIST_FAILED' };
       }
@@ -138,20 +246,21 @@ export default function useAddressBook() {
       setAddressBook(next);
       return { ok: true };
     },
-    [addressBook, walletAddress]
+    [addressBook, walletAddress, persistEnabled]
   );
 
   const deleteAddress = useCallback(
-    (id: string) => {
+    async (id: string): Promise<AddressBookResult> => {
       setAddressBook((prev) => {
         const next = prev.filter((entry) => entry.id !== id);
-        if (walletAddress) {
-          tryPersist(`${STORAGE_KEY_PREFIX}${walletAddress}`, next);
+        if (walletAddress && persistEnabled) {
+          void tryPersist(`${STORAGE_KEY_PREFIX}${walletAddress}`, next);
         }
         return next;
       });
+      return { ok: true };
     },
-    [walletAddress]
+    [walletAddress, persistEnabled]
   );
 
   const searchAddresses = useCallback(
@@ -172,6 +281,9 @@ export default function useAddressBook() {
     addAddress,
     updateAddress,
     deleteAddress,
+    clearAddressBook,
     searchAddresses,
+    persistEnabled,
+    setPersistPreference,
   };
 }

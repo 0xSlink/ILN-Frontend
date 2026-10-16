@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { formatAddress, formatRelativeTime, formatUSDC } from '@/utils/format';
+import { fetchInvoiceEvents } from '@/lib/indexer';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
 } from '@/components/IndexerUnavailableNotice';
@@ -38,8 +39,6 @@ interface InvoiceEvent {
 interface ActivityFeedProps {
   invoiceId: bigint;
 }
-
-const INDEXER_API_BASE = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
 
 const EVENT_TYPE_MAP: Record<string, InvoiceEventType> = {
   submitted: 'submitted',
@@ -284,13 +283,45 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
   const fetchEvents = useCallback(async () => {
     try {
       setLoading(true);
-      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
-      const res = await fetch(`${INDEXER_API_BASE}/invoice/${invoiceId}/events`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) throw new Error('Failed to fetch activity feed');
-      const rawEvents = (await res.json()) as RawInvoiceEvent[];
-      setEvents(rawEvents.map(parseInvoiceEvent));
+      const result = await fetchInvoiceEvents(invoiceId);
+      if (result.unavailable || result.error || !result.data) {
+        setEvents([]);
+        setError('Unable to load activity feed.');
+
+        // Only substitute demonstration data in development. In every other
+        // environment (including production) show the honest "temporarily
+        // unavailable" state rather than fabricating an audit trail.
+        if (shouldUseDevMockFallback()) {
+          setEvents([
+            {
+              type: 'submitted',
+              timestamp: Date.now() - 86400000 * 2,
+              actor: 'GABC12345678901234567890123456789012345678901234567890123456',
+              raw: {
+                type: 'submitted',
+                timestamp: Date.now() - 86400000 * 2,
+                actor: 'GABC12345678901234567890123456789012345678901234567890123456',
+              },
+            },
+            {
+              type: 'funded',
+              timestamp: Date.now() - 86400000,
+              actor: 'GDEF5678901234567890123456789012345678901234567890123456',
+              data: { amount: '1000000000' },
+              raw: {
+                type: 'funded',
+                timestamp: Date.now() - 86400000,
+                actor: 'GDEF5678901234567890123456789012345678901234567890123456',
+                data: { amount: '1000000000' },
+              },
+            },
+          ]);
+          setError(null);
+        }
+        return;
+      }
+      setEvents(result.data.map(parseInvoiceEvent));
+      setError(null);
     } catch (err) {
       console.error(err);
       setEvents([]);
