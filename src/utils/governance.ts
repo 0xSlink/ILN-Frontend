@@ -334,6 +334,20 @@ export function formatVotingPower(power: number): string {
 
 const userVotes: Map<number, VoteChoice> = new Map();
 const vetoHistory: VetoRecord[] = [];
+const proposalTxHashes: Map<string, string> = new Map();
+const proposalCreationCache: Map<
+  string,
+  { txHash: string; proposalId: number; timestamp: number }
+> = new Map();
+
+export function clearGovernanceIdempotencyCache(): void {
+  proposalTxHashes.clear();
+  proposalCreationCache.clear();
+}
+
+function generateConfirmedTxHash(_prefix?: string): string {
+  return Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
 
 export function getUserVote(proposalId: number): VoteChoice | undefined {
   return userVotes.get(proposalId);
@@ -457,34 +471,44 @@ export async function castVote(
   await new Promise((r) => setTimeout(r, 2000));
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
+  const cacheKey = `${signerAddress || 'anon'}:vote:${proposalId}`;
+  const previousVote = userVotes.get(proposalId);
+
+  // Idempotency: if user already voted with this exact choice, return confirmed hash without duplicate counting (#1146)
+  if (previousVote === choice) {
+    const existingHash = proposalTxHashes.get(cacheKey);
+    if (existingHash) return existingHash;
+  }
+
+  // If user changed their vote, adjust previous choice count
+  if (proposal && previousVote && previousVote !== choice) {
+    const power = 1250;
+    if (previousVote === 'For') {
+      proposal.votesFor = Math.max(0, proposal.votesFor - power);
+    } else if (previousVote === 'Against') {
+      proposal.votesAgainst = Math.max(0, proposal.votesAgainst - power);
+    } else if (previousVote === 'Abstain') {
+      proposal.votesAbstain = Math.max(0, (proposal.votesAbstain ?? 0) - power);
+    }
+  }
+
   userVotes.set(proposalId, choice);
 
-  if (proposal) {
+  if (proposal && previousVote !== choice) {
     const power = 1250;
     if (choice === 'For') proposal.votesFor += power;
     else if (choice === 'Against') proposal.votesAgainst += power;
     else if (choice === 'Abstain') proposal.votesAbstain = (proposal.votesAbstain ?? 0) + power;
   }
 
-  // Attempt real contract interaction if signTx is available
-  if (signerAddress) {
-    try {
-      // Execute vote recording operation
-      const mockTxHash = Array.from({ length: 32 }, () =>
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('');
-      return mockTxHash;
-    } catch (err) {
-      console.warn('On-chain vote recording fallback:', err);
-    }
-  }
-
-  return Math.random().toString(16).substring(2, 18);
+  const txHash = generateConfirmedTxHash('vote');
+  proposalTxHashes.set(cacheKey, txHash);
+  return txHash;
 }
 
 export async function executeProposal(
   proposalId: number,
-  signerAddress: string,
+  _signerAddress: string,
   _signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
   // TODO: Replace with actual Soroban transaction once governance contract is deployed
@@ -492,22 +516,18 @@ export async function executeProposal(
   await new Promise((r) => setTimeout(r, 2000));
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
-  if (proposal) {
-    proposal.status = 'Executed';
+  if (!proposal) throw new Error('Proposal not found');
+
+  const cacheKey = `execute:${proposalId}`;
+  if (proposal.status === 'Executed') {
+    const existing = proposalTxHashes.get(cacheKey);
+    if (existing) return existing;
   }
 
-  if (signerAddress) {
-    try {
-      const mockTxHash = Array.from({ length: 32 }, () =>
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('');
-      return mockTxHash;
-    } catch (err) {
-      console.warn('On-chain proposal execution fallback:', err);
-    }
-  }
-
-  return Math.random().toString(16).substring(2, 18);
+  proposal.status = 'Executed';
+  const txHash = generateConfirmedTxHash('execute');
+  proposalTxHashes.set(cacheKey, txHash);
+  return txHash;
 }
 
 export async function vetoProposal(
@@ -521,6 +541,15 @@ export async function vetoProposal(
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   if (!proposal) throw new Error('Proposal not found');
 
+  const cacheKey = `veto:${proposalId}:${reasonHash}`;
+  const existingVeto = vetoHistory.find(
+    (record) => record.proposalId === proposalId && record.reasonHash === reasonHash
+  );
+  if (existingVeto && proposal.status === 'Vetoed') {
+    const existing = proposalTxHashes.get(cacheKey);
+    if (existing) return existing;
+  }
+
   proposal.status = 'Vetoed';
   const record: VetoRecord = {
     proposalId,
@@ -531,7 +560,9 @@ export async function vetoProposal(
   vetoHistory.unshift(record);
   proposal.vetoHistory = [record, ...(proposal.vetoHistory ?? [])];
 
-  return Math.random().toString(16).substring(2, 18);
+  const txHash = generateConfirmedTxHash('veto');
+  proposalTxHashes.set(cacheKey, txHash);
+  return txHash;
 }
 
 export function getVetoHistory(proposalId: number): VetoRecord[] {
@@ -755,6 +786,18 @@ export async function createProposal(
 ): Promise<{ txHash: string; proposalId: number }> {
   await new Promise((r) => setTimeout(r, 2500));
 
+  // Idempotency check: deduplicate rapid duplicate submissions (#1146)
+  const idempotencyKey = `${_signerAddress}:${payload.title}:${payload.formType}:${
+    payload.newValueBps ?? payload.tokenAddress ?? payload.removeTokenAddress ?? ''
+  }`;
+  const cached = proposalCreationCache.get(idempotencyKey);
+  if (cached && Date.now() - cached.timestamp < 30_000) {
+    return {
+      txHash: cached.txHash,
+      proposalId: cached.proposalId,
+    };
+  }
+
   const newId = MOCK_PROPOSALS.length + 1;
   const NOW_SEC = Math.floor(Date.now() / 1000);
   const DAY_SEC = 86400;
@@ -835,8 +878,15 @@ export async function createProposal(
 
   MOCK_PROPOSALS.push(newProposal);
 
+  const txHash = generateConfirmedTxHash('proposal');
+  proposalCreationCache.set(idempotencyKey, {
+    txHash,
+    proposalId: newId,
+    timestamp: Date.now(),
+  });
+
   return {
-    txHash: Math.random().toString(16).substring(2, 18),
+    txHash,
     proposalId: newId,
   };
 }

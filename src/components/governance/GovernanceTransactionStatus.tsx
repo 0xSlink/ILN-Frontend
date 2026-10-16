@@ -1,4 +1,5 @@
 import React from 'react';
+import { getExplorerTxUrl } from '@/utils/explorer';
 
 /**
  * Lifecycle of a governance transaction (#1154).
@@ -41,28 +42,43 @@ interface GovernanceTransactionStatusProps {
   state: GovernanceTxState;
   txHash?: string;
   onRetry?: () => void;
+  network?: string;
 }
 
 export default function GovernanceTransactionStatus({
   state,
   txHash,
   onRetry,
+  network,
 }: GovernanceTransactionStatusProps) {
   const copy = STATE_COPY[state];
   const showRetry = Boolean(onRetry) && (state === 'failure' || state === 'timeout');
+  const explorerUrl = state === 'success' ? getExplorerTxUrl(txHash, network) : null;
 
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      data-testid="governance-tx-status"
-      data-state={state}
-    >
+    <div role="status" aria-live="polite" data-testid="governance-tx-status" data-state={state}>
       <p>
         <strong>{copy.label}</strong>
       </p>
       <p>{copy.description}</p>
-      {txHash ? <p>Transaction: {txHash}</p> : null}
+      {txHash ? (
+        <p>
+          Transaction:{' '}
+          {explorerUrl ? (
+            <a
+              href={explorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="governance-tx-explorer-link"
+              className="underline hover:text-primary"
+            >
+              {txHash}
+            </a>
+          ) : (
+            txHash
+          )}
+        </p>
+      ) : null}
       {showRetry ? (
         <button type="button" onClick={onRetry}>
           Retry
