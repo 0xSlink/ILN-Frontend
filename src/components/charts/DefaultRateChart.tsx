@@ -13,8 +13,11 @@ import {
   type TooltipProps,
 } from 'recharts';
 import {
+  fetchDefaultRateData,
+  type MonthlyDefaultBucket,
+} from '@/lib/indexerClient';
+import {
   calculateMovingAverage,
-  MonthlyDefaultBucket,
   MonthlyDefaultWithMA,
 } from '@/utils/defaultRate';
 import IndexerUnavailableNotice, {
@@ -112,6 +115,13 @@ export default function DefaultRateChart() {
     setLoading(true);
     setUnavailable(false);
     try {
+      // Use centralized indexer client - single authoritative boundary
+      // with explicit schema validation and typed response
+      const monthlyData = await fetchDefaultRateData();
+      const withMA = calculateMovingAverage(monthlyData, 1);
+      setChartData(withMA);
+    } catch (error) {
+      console.error('[DefaultRateChart] Failed to fetch data:', error);
       const withMA = await fetchDefaultAnalytics('12m', { signal });
       setChartData(withMA);
     } catch (err) {

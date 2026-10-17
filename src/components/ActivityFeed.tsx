@@ -8,6 +8,9 @@ import IndexerUnavailableNotice, {
   type IndexerNoticeStatus,
 } from '@/components/IndexerUnavailableNotice';
 import DataSourceCaption from '@/components/DataSourceCaption';
+import { 
+  type RawInvoiceEvent as IndexerRawInvoiceEvent 
+} from '@/lib/indexerClient';
 import {
   fetchInvoiceEvents,
   classifyIndexerClientError,
@@ -25,6 +28,12 @@ type InvoiceEventType =
   | 'dispute_raised'
   | 'dispute_resolved'
   | 'unknown';
+
+interface ActivityFeedProps {
+  invoiceId: bigint;
+}
+
+type RawInvoiceEvent = IndexerRawInvoiceEvent;
 
 interface InvoiceEvent {
   type: InvoiceEventType;
@@ -282,10 +291,15 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
   const fetchEvents = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoading(true);
+      // Use centralized indexer client - single authoritative boundary
+      // with explicit schema validation and timeout handling
+      const rawEvents = await fetchInvoiceEvents(invoiceId);
       setError(null);
       const rawEvents = await fetchInvoiceEvents(invoiceId, { signal });
       setEvents(rawEvents.map(parseInvoiceEvent));
+      setError(null);
     } catch (err) {
+      console.error('[ActivityFeed] Failed to fetch events:', err);
       if (isAbortError(err)) {
         return;
       }
