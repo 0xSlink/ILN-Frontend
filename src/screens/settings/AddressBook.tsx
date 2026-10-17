@@ -7,18 +7,16 @@ import useAddressBook from '@/hooks/useAddressBook';
 
 export default function AddressBookPage() {
   const { t } = useTranslation();
-  const { addToast, updateToast } = useToast();
+  const { addToast } = useToast();
   const {
     addressBook,
+    status,
+    recovery,
+    dismissRecovery,
     addAddress,
+    updateAddress,
     deleteAddress,
     searchAddresses,
-    isLoading: _isLoading = false,
-    isDegraded = false,
-    error = null,
-    validationIssues = null,
-    retryHydration,
-    clearCorruptedState,
   } = useAddressBook();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,21 +31,17 @@ export default function AddressBookPage() {
 
   // ── Add ──────────────────────────────────────────────────────────────────────
 
-  const handleAddAddress = () => {
-    const result = addAddress(newAddress, newNickname);
+  const handleAddAddress = async () => {
+    const result = await addAddress(newAddress, newNickname);
     if (!result.ok) {
       const errorKey: Record<typeof result.error, string> = {
         MISSING_FIELDS: 'addressBook.errors.missingFields',
         INVALID_ADDRESS: 'addressBook.errors.invalidAddress',
         DUPLICATE_ADDRESS: 'addressBook.errors.duplicateAddress',
         PERSIST_FAILED: 'addressBook.errors.saveFailed',
+        CRYPTO_FAILED: 'addressBook.errors.saveFailed',
       };
       addToast({ type: 'error', title: t(errorKey[result.error]) });
-      return;
-    }
-    const added = addAddress(newAddress, newNickname);
-    if (!added) {
-      addToast({ type: 'error', title: 'Invalid address or format rejected' });
       return;
     }
     setNewAddress('');
@@ -71,14 +65,15 @@ export default function AddressBookPage() {
     setEditNickname('');
   };
 
-  const handleUpdateAddress = (id: string) => {
-    const result = updateAddress(id, { address: editAddress, nickname: editNickname });
+  const handleUpdateAddress = async (id: string) => {
+    const result = await updateAddress(id, { address: editAddress, nickname: editNickname });
     if (!result.ok) {
       const errorKey: Record<typeof result.error, string> = {
         MISSING_FIELDS: 'addressBook.errors.missingFields',
         INVALID_ADDRESS: 'addressBook.errors.invalidAddress',
         DUPLICATE_ADDRESS: 'addressBook.errors.duplicateAddress',
         PERSIST_FAILED: 'addressBook.errors.saveFailed',
+        CRYPTO_FAILED: 'addressBook.errors.saveFailed',
       };
       addToast({ type: 'error', title: t(errorKey[result.error]) });
       // Keep the edit form open so the user can correct the input or retry.
@@ -90,8 +85,8 @@ export default function AddressBookPage() {
 
   // ── Delete ───────────────────────────────────────────────────────────────────
 
-  const handleDeleteAddress = (id: string) => {
-    deleteAddress(id);
+  const handleDeleteAddress = async (id: string) => {
+    await deleteAddress(id);
     addToast({ type: 'success', title: t('addressBook.success.deleted') });
   };
 
@@ -103,57 +98,32 @@ export default function AddressBookPage() {
 
   return (
     <div className="space-y-6">
-      {isDegraded && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-xs text-warning flex items-center justify-between"
-        >
-          <span>
-            Storage is operating in safe degraded mode (private browsing or quota limit reached).
-            Changes persist for this session only.
-          </span>
-        </div>
-      )}
-
-      {error && (
+      {recovery && (
         <div
           role="alert"
-          className="rounded-xl border border-error/40 bg-error/10 p-4 text-xs text-error flex items-center justify-between gap-4"
+          className="flex items-start justify-between gap-3 rounded-xl border border-error/30 bg-error-container/40 p-4 text-sm"
         >
-          <span>{error}</span>
-          <div className="flex gap-2 shrink-0">
-            {retryHydration && (
-              <button
-                onClick={retryHydration}
-                className="rounded-lg bg-surface-container-high px-3 py-1 font-medium hover:bg-surface-variant transition-colors"
-              >
-                Retry
-              </button>
-            )}
-            {clearCorruptedState && (
-              <button
-                onClick={clearCorruptedState}
-                className="rounded-lg bg-error/20 px-3 py-1 font-medium text-error hover:bg-error/30 transition-colors"
-              >
-                Reset
-              </button>
-            )}
+          <div>
+            <p className="font-medium">{t('addressBook.recovery.title')}</p>
+            <p className="text-on-surface-variant">{t(`addressBook.recovery.${recovery}`)}</p>
           </div>
+          <button
+            type="button"
+            onClick={dismissRecovery}
+            className="shrink-0 rounded-lg px-3 py-1 font-medium hover:bg-surface-container-high"
+          >
+            {t('addressBook.recovery.dismiss')}
+          </button>
         </div>
       )}
-
-      {validationIssues && validationIssues.rejectedCount > 0 && (
+      {status === 'unavailable' && (
         <div
-          role="status"
-          className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning flex items-center justify-between"
+          role="alert"
+          className="rounded-xl border border-error/30 bg-error-container/40 p-4 text-sm"
         >
-          <span>
-            {validationIssues.rejectedCount} malformed record(s) excluded during validation.
-          </span>
+          {t('addressBook.errors.storageUnavailable')}
         </div>
       )}
-
       <div className="border border-surface-dim rounded-xl overflow-hidden">
         <div className="flex items-center justify-between p-4 bg-surface-container-low">
           <h3 className="text-lg font-medium">{t('addressBook.title')}</h3>
