@@ -24,7 +24,7 @@ import {
   clearWalletStorage,
   getStoredWalletProvider,
   setStoredWalletProvider,
-  WALLET_ADDRESS_STORAGE_KEY,
+  setStoredWalletAddress,
   type WalletProviderType,
 } from '@/utils/walletStorage';
 import { purgeExpiredWalletRecords } from '@/utils/walletRecordStore';
@@ -83,8 +83,6 @@ interface WalletContextType {
 }
 
 export const WalletContext = createContext<WalletContextType | undefined>(undefined);
-
-const STORAGE_KEY = WALLET_ADDRESS_STORAGE_KEY;
 
 function extractConnectionState(result: unknown): boolean {
   if (typeof result === 'boolean') {
@@ -205,7 +203,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
         const { address } = await getAddress();
         if (address) {
           setAddress(address);
-          localStorage.setItem(STORAGE_KEY, address);
+          setStoredWalletAddress(address);
           await checkNetwork();
           // Background refresh: must not block connection setup.
           void reconcileStaleTransactions();
@@ -259,7 +257,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
       }
 
       setAddress(address);
-      localStorage.setItem(STORAGE_KEY, address);
+      setStoredWalletAddress(address);
       await checkNetwork();
       // Background refresh: must not block reconnect timing.
       void reconcileStaleTransactions();
@@ -482,7 +480,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
 
         if (address) {
           setAddress(address);
-          localStorage.setItem(STORAGE_KEY, address);
+          setStoredWalletAddress(address);
           setSelectedProvider('freighter');
           setStoredWalletProvider('freighter');
           // Authorization now succeeds — close any earlier denial window (#1160).
@@ -526,7 +524,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
       const session = await connectWalletConnect({ address: customAddress });
       if (session?.address) {
         setAddress(session.address);
-        localStorage.setItem(STORAGE_KEY, session.address);
+        setStoredWalletAddress(session.address);
         setSelectedProvider('walletconnect');
         setStoredWalletProvider('walletconnect');
         updateToast(toastId, {
