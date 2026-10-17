@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { Invoice } from '@/utils/soroban';
-import { fetchThreeMonthTBillRatePct } from '@/lib/treasury-rates';
+import { fetchThreeMonthTBillRatePct, THREE_MONTH_TBILL_SOURCE } from '@/lib/treasury-rates';
 import { buildTokenYieldComparison, formatPremiumBps } from '@/utils/lp-yield-comparison';
 import { buildYieldTimeSeries, type YieldRange } from '@/utils/yield-timeseries';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
@@ -93,7 +93,9 @@ function exportToCSV(
   const header = 'Date,USDC Yield,EURC Yield,XLM Yield,Total\n';
   const rows = data.map((row) => {
     const total = (row.USDC + row.EURC + row.XLM).toFixed(6);
-    return `${row.isoDate},${row.USDC.toFixed(6)},${row.EURC.toFixed(6)},${row.XLM.toFixed(6)},${total}`;
+    return `${row.isoDate},${row.USDC.toFixed(6)},${row.EURC.toFixed(6)},${row.XLM.toFixed(
+      6
+    )},${total}`;
   });
   const csv = header + rows.join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -111,6 +113,10 @@ export default function LPYieldComparison({
   isLoading = false,
 }: LPYieldComparisonProps) {
   const [tBillYieldPct, setTBillYieldPct] = useState<number | null>(null);
+  // Distinguishes "still loading" from "authoritative source unavailable" so we
+  // never render a fabricated benchmark when the T-bill fetch fails.
+  const [tBillUnavailable, setTBillUnavailable] = useState(false);
+  const [tBillFetchedAt, setTBillFetchedAt] = useState<number | null>(null);
   const [selectedToken, setSelectedToken] = useState<ComparisonToken>('USDC');
   const [selectedRange, setSelectedRange] = useState<YieldRange>(90);
 
@@ -120,7 +126,13 @@ export default function LPYieldComparison({
   useEffect(() => {
     let cancelled = false;
     void fetchThreeMonthTBillRatePct().then((rate) => {
-      if (!cancelled) setTBillYieldPct(rate);
+      if (cancelled) return;
+      if (rate === null) {
+        setTBillUnavailable(true);
+      } else {
+        setTBillYieldPct(rate);
+        setTBillFetchedAt(Date.now());
+      }
     });
     return () => {
       cancelled = true;
@@ -159,7 +171,7 @@ export default function LPYieldComparison({
     ? formatTokenAmount(rawBalance, selectedTokenMetadata)
     : '0.00';
 
-  const isFullyLoading = isLoading || tBillYieldPct === null;
+  const isFullyLoading = isLoading || (tBillYieldPct === null && !tBillUnavailable);
 
   if (isFullyLoading) {
     return (
@@ -210,10 +222,12 @@ export default function LPYieldComparison({
             Your Avg {selectedToken} Yield
           </p>
           <p className="text-2xl font-bold text-on-surface">
-            {selectedRow?.lpYieldPct.toFixed(2)}%
+            {selectedRow ? `${selectedRow.lpYieldPct.toFixed(2)}%` : '—'}
           </p>
           <p className="mt-1 text-xs font-medium text-green-600 dark:text-green-400">
-            {formatPremiumBps(selectedRow?.premiumBps ?? 0)}
+            {selectedRow
+              ? formatPremiumBps(selectedRow.premiumBps)
+              : 'Risk-free rate unavailable — premium hidden'}
           </p>
         </div>
 
@@ -348,9 +362,19 @@ export default function LPYieldComparison({
       )}
 
       <p className="mt-6 text-xs leading-relaxed text-on-surface-variant">
-        T-bill rates ({tBillYieldPct?.toFixed(2)}%) are fetched from U.S. Treasury public data for
-        illustration only and do not represent investment advice. On-chain invoice yields carry
-        additional smart-contract and counterparty risk.
+        {tBillUnavailable || tBillYieldPct === null ? (
+          <>
+            Risk-free benchmark unavailable: {THREE_MONTH_TBILL_SOURCE} could not be read, so
+            premiums over the risk-free rate are hidden rather than estimated.
+          </>
+        ) : (
+          <>
+            Risk-free benchmark {tBillYieldPct.toFixed(2)}% from {THREE_MONTH_TBILL_SOURCE}
+            {tBillFetchedAt ? ` · fetched ${new Date(tBillFetchedAt).toLocaleTimeString()}` : ''}.
+            For illustration only and not investment advice. On-chain invoice yields carry
+            additional smart-contract and counterparty risk.
+          </>
+        )}
       </p>
     </section>
   );

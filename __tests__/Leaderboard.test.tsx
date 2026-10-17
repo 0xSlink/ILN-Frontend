@@ -91,6 +91,16 @@ describe('Leaderboard page', () => {
     expect(within(highlightedRow).getByText('120 USDC')).toBeInTheDocument();
   });
 
+  it('renders its content inside a <main> landmark', async () => {
+    render(<LeaderboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Top Payers' })).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole('main')).toBeInTheDocument();
+  });
+
   it('copies the leaderboard URL when the share button is clicked', async () => {
     render(<LeaderboardPage />);
 

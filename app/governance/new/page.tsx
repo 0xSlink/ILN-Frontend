@@ -494,9 +494,7 @@ IPFS Hash: ${ipfsHash}`,
         )}
 
         {formData.formType && formData.title && (
-          <div
-            className={`border p-4 rounded-lg ${simulationResult?.isContractVerified ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950' : 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950'}`}
-          >
+          <div className={`border p-4 rounded-lg ${simulationResult?.isContractVerified ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950' : 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950'}`}>
             <div className="flex items-start justify-between mb-2">
               <h3
                 className={`font-semibold ${simulationResult?.isContractVerified ? 'text-green-800 dark:text-green-200' : 'text-blue-800 dark:text-blue-200'}`}
@@ -516,9 +514,7 @@ IPFS Hash: ${ipfsHash}`,
                 {!simulationResult.isContractVerified && (
                   <div className="mt-2 p-2 bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded">
                     <p className="text-xs text-yellow-800 dark:text-yellow-200">
-                      ⚠️ <span className="font-semibold">Estimated preview</span> — Not
-                      contract-verified. Actual on-chain effect may differ due to protocol updates
-                      between proposal creation and execution.
+                      ⚠️ <span className="font-semibold">Estimated preview</span> — Not contract-verified. Actual on-chain effect may differ due to protocol updates between proposal creation and execution.
                     </p>
                   </div>
                 )}

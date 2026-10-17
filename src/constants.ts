@@ -24,6 +24,8 @@ export const GOVERNANCE_ADMIN_ADDRESS =
   process.env.NEXT_PUBLIC_GOVERNANCE_ADMIN_ADDRESS ||
   'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 export const GOVERNANCE_CONTRACT_ID = process.env.NEXT_PUBLIC_GOVERNANCE_CONTRACT_ID || CONTRACT_ID;
+/** ILN governance token contract — used for voting power and quorum calculations. */
+export const ILN_TOKEN_CONTRACT_ID = process.env.NEXT_PUBLIC_ILN_TOKEN_CONTRACT_ID || CONTRACT_ID;
 
 // ─── Invoice NFT display (#234) ───────────────────────────────────────────────
 
@@ -41,3 +43,29 @@ export const NFT_EVENT_HINTS = process.env.NEXT_PUBLIC_NFT_EVENT_HINTS || '';
 // ─── Indexer WebSocket Configuration ────────────────────────────────────────────
 
 export const INDEXER_WS_URL = process.env.NEXT_PUBLIC_INDEXER_WS_URL || 'ws://localhost:8080/ws';
+
+// ─── Indexer API Configuration ──────────────────────────────────────────────
+
+// The indexer REST URL and credential are server-only (read by
+// src/lib/indexer/server.ts). Browser code reaches the indexer through the
+// /api/indexer proxy, so they are deliberately not exported from this module.
+
+/**
+ * Default timeout for indexer requests in milliseconds (#1107).
+ */
+export const INDEXER_DEFAULT_TIMEOUT_MS = 10_000;
+
+/**
+ * Maximum retry attempts for transient indexer failures (#1108).
+ */
+export const INDEXER_DEFAULT_RETRIES = 2;
+
+/**
+ * Base backoff in milliseconds for exponential retry (#1108).
+ */
+export const INDEXER_DEFAULT_BACKOFF_MS = 300;
+
+/**
+ * Maximum backoff cap in milliseconds for exponential retry (#1108).
+ */
+export const INDEXER_MAX_BACKOFF_MS = 2_000;

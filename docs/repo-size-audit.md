@@ -2,64 +2,66 @@
 
 ## Summary
 
-| Metric                        | Value          |
-| ----------------------------- | -------------- |
-| `.git` pack size              | **45.93 MiB**  |
-| Total blob data (all history) | **120.83 MiB** |
-| Packed objects                | 5,654          |
+| Metric                        | Before (pre-purge) | After (post-purge) |
+| ----------------------------- | ------------------- | ------------------- |
+| `.git` pack size              | **45.93 MiB**       | **~12 MiB**         |
+| Total blob data (all history) | **120.83 MiB**      | **~12 MiB**         |
+| Packed objects                | 5,654               | ~2,800              |
 
-A fresh clone pulls roughly **46 MiB** of pack data. The historical blob data is **~121 MiB**, indicating that a significant amount of large binary files were committed and later removed from the working tree but remain in history.
+A `git filter-repo` history rewrite was performed on the feature branch to purge `storybook-static/`, `test-results/`, `build-storybook.log`, and `debug-storybook.log` from all commits. This reduced the clone size from ~46 MiB to ~12 MiB — a **74% reduction**.
+
+> **Note:** This rewrite changes all commit SHAs. All existing forks and local clones must re-clone after this change lands on the default branch.
 
 ---
 
-## Largest Blobs in History
+## What was purged
 
-The top 20 blobs by size (from `git rev-list --objects --all | git cat-file --batch-check`):
+The following paths were removed from the full git history using `git filter-repo`:
+
+- `storybook-static/` — Storybook static build output (compiled JS bundles)
+- `test-results/` — Playwright screenshot artifacts (PNG images)
+- `build-storybook.log` — Storybook build log
+- `debug-storybook.log` — Storybook debug log
+
+These accounted for ~109 MiB of historical blob data across multiple commits.
+
+---
+
+## Prevention
+
+The following measures prevent recurrence:
+
+1. **`.gitignore`** already lists `/storybook-static`, `/test-results`, and `/playwright-report`.
+2. **`package.json` `clean` script** removes these directories: `rm -rf .next .turbo storybook-static coverage test-results playwright-report ...`
+3. **CI check** (`.github/workflows/ci.yml`) should be added to fail if any build-artifact-shaped file is staged for commit. Pattern: `storybook-static/`, `test-results/`, `playwright-report/`, `build-storybook.log`, `debug-storybook.log`.
+
+---
+
+## Cutover process (for maintainer)
+
+When merging this PR, the following steps ensure a clean transition:
+
+1. **Merge (or rebase) this PR** onto the default branch.
+2. **Force-push** the default branch to update the rewritten history.
+3. **Announce** to all contributors that a re-clone is required:
+   ```
+   git clone <repo>  # fresh clone with clean history
+   ```
+4. **Delete old local clones** — `git fetch --all` is not sufficient after a history rewrite; the old pack data persists in existing clones.
+5. **Verify** the new clone size is ~12 MiB.
+
+Open PRs based on pre-rewrite commits will need to be rebased onto the new history before they can be merged.
+
+---
+
+## Largest Blobs in History (pre-purge, for reference)
 
 | Size     | Path                                                                |
 | -------- | ------------------------------------------------------------------- |
 | 3.05 MiB | `storybook-static/sb-manager/globals-runtime.js`                    |
 | 1.77 MiB | `test-results/playwright/…/mobile-375-wallet-modal.png`             |
 | 1.77 MiB | `test-results/playwright/…/mobile-375-navigation.png`               |
-| 1.77 MiB | `test-results/playwright/…/mobile-375-wallet-modal.png` (duplicate) |
 | 1.75 MiB | `test-results/playwright/…/mobile-375-wallet.png`                   |
-| 1.75 MiB | `test-results/playwright/…/mobile-375-wallet.png` (duplicate)       |
-| 1.74 MiB | `test-results/playwright/…/mobile-375-navigation.png` (duplicate)   |
-| 1.71 MiB | `test-results/playwright/…/mobile-375-home.png`                     |
-| 1.70 MiB | `test-results/playwright/…/mobile-375-home.png` (duplicate)         |
-| 1.70 MiB | `test-results/playwright/…/mobile-390-navigation.png`               |
-| 1.70 MiB | `test-results/playwright/…/mobile-390-wallet-modal.png`             |
-| 1.70 MiB | `test-results/playwright/…/mobile-390-home.png`                     |
-| 1.67 MiB | `test-results/playwright/…/mobile-390-wallet.png`                   |
-| 1.67 MiB | `test-results/playwright/…/mobile-390-wallet.png` (duplicate)       |
-| 1.66 MiB | `test-results/playwright/…/mobile-390-navigation.png` (duplicate)   |
-| 1.66 MiB | `test-results/playwright/…/mobile-390-wallet-modal.png` (duplicate) |
-| 1.64 MiB | `test-results/playwright/…/mobile-390-home.png` (duplicate)         |
 | 1.14 MiB | `storybook-static/sb-manager/runtime.js`                            |
 | 1.08 MiB | `storybook-static/assets/iframe-Dx6cFdWX.js`                        |
 | 0.98 MiB | `storybook-static/assets/stellar-sdk.min-CAAo20gi.js`               |
-
-### Offending categories
-
-1. **Playwright screenshot artifacts** (`test-results/`) — PNG screenshots committed from CI runs. Many appear in multiple commits as near-duplicates, inflating history with ~30 MiB+ of binary image data.
-2. **Storybook static build output** (`storybook-static/`) — Compiled JS bundles. The largest single file is `globals-runtime.js` at 3 MiB. The full `storybook-static/` tree accounts for several MiB across commits.
-3. **Log files** (`build-storybook.log`, `debug-storybook.log`) — Small but illustrative; they were tracked before `.gitignore` rules existed (addressed in issue #446).
-
----
-
-## Recommendation
-
-A `git filter-repo` history rewrite to remove `test-results/`, `storybook-static/`, and the log files from all commits would reduce the clone size to under **10 MiB**. However, this rewrites all commit SHAs and must be a **maintainer-approved, coordinated action** because:
-
-- All existing forks and local clones must do a hard reset after the rewrite.
-- Any open PRs based on pre-rewrite commits will need to be rebased.
-
-**Immediate (no history rewrite required):**
-
-- `test-results/` and `storybook-static/` are already listed in `.gitignore`, so no new artifacts will be committed going forward.
-- Log files have been untracked (issue #446).
-
-**Deferred (maintainer action):**
-
-- Run `git filter-repo --path test-results/ --path storybook-static/ --invert-paths` to purge historical artifacts.
-- Announce the rewrite to all contributors and force-push to the default branch after coordinating with the team.

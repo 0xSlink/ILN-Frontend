@@ -4,7 +4,7 @@ import React from 'react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { useContractStats } from '@/hooks/useContractStats';
-import { useInvoices } from '@/hooks/useInvoices';
+import { useInvoices } from '@/hooks/queries';
 import StatsMetricCards from '@/components/stats/StatsMetricCards';
 import StatsDisputeRateCard from '@/components/stats/StatsDisputeRateCard';
 import StatsVolumeChart from '@/components/stats/StatsVolumeChart';

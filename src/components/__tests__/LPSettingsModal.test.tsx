@@ -8,7 +8,7 @@ const updateNotificationPreferencesMock = vi.fn();
 const settingsState = {
   minReputation: 20,
   notificationPreferences: {
-    categories: { invoice: true, lp: false, governance: true, reputation: false },
+    categories: { invoice: true, lp: false, governance: true, reputation: false, admin: true },
     inAppEnabled: true,
     emailEnabled: false,
     email: '',
@@ -52,7 +52,7 @@ describe('LPSettingsModal', () => {
     render(<LPSettingsModal isOpen onClose={vi.fn()} />);
     fireEvent.click(screen.getByText('lp events').closest('label')!.querySelector('input')!);
     expect(updateNotificationPreferencesMock).toHaveBeenCalledWith({
-      categories: { invoice: true, lp: true, governance: true, reputation: false },
+      categories: { invoice: true, lp: true, governance: true, reputation: false, admin: true },
     });
   });
 

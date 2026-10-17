@@ -292,7 +292,9 @@ export default function InvoiceTimeline({
                     <div className="flex items-center gap-2">
                       <InvoiceStatusBadge status={invoice.status} />
                       <span
-                        className={`material-symbols-outlined text-sm text-on-surface-variant transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        className={`material-symbols-outlined text-sm text-on-surface-variant transition-transform ${
+                          isExpanded ? 'rotate-180' : ''
+                        }`}
                         aria-hidden="true"
                       >
                         expand_more

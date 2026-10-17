@@ -1,8 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import type { DecodedTransaction } from '@/utils/decodeTransaction';
+import {
+  findTransactionPatternMismatches,
+  type ExpectedTransactionAction,
+} from '@/utils/transactionPattern';
 
 interface TransactionPreviewModalProps {
   decoded: DecodedTransaction | null;
+  expectedAction?: ExpectedTransactionAction;
   rawXdr: string;
   onConfirm: () => void;
   onCancel: () => void;
@@ -20,6 +25,7 @@ function truncateValue(val: string): string {
 
 export default function TransactionPreviewModal({
   decoded,
+  expectedAction,
   rawXdr,
   onConfirm,
   onCancel,
@@ -41,6 +47,8 @@ export default function TransactionPreviewModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onCancel]);
 
+  const patternMismatches = findTransactionPatternMismatches(decoded, expectedAction);
+
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-200"
@@ -53,7 +61,10 @@ export default function TransactionPreviewModal({
         className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-2xl"
       >
         <div className="sticky top-0 flex items-center justify-between border-b border-outline-variant/10 bg-surface-container-lowest px-6 py-4 z-10">
-          <h3 id="tx-preview-title" className="flex items-center gap-2 text-lg font-bold">
+          <h3
+            id="tx-preview-title"
+            className="flex items-center gap-2 text-lg font-bold"
+          >
             <span className="material-symbols-outlined text-amber-500">visibility</span>
             Transaction Preview
           </h3>
@@ -67,14 +78,36 @@ export default function TransactionPreviewModal({
         </div>
 
         <div className="px-6 py-5 space-y-5">
+          {patternMismatches.length > 0 && (
+            <div
+              className="rounded-xl border-2 border-error/50 bg-error-container/70 px-4 py-3 flex items-start gap-3"
+              role="alert"
+            >
+              <span className="material-symbols-outlined text-error mt-0.5">warning</span>
+              <div>
+                <p className="text-sm font-bold text-on-error-container">
+                  Suspicious transaction pattern detected
+                </p>
+                <p className="text-xs text-on-error-container mt-1">
+                  This payload does not match the expected {expectedAction} action. Do not sign
+                  unless you understand every difference.
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-on-error-container">
+                  {patternMismatches.map((mismatch) => (
+                    <li key={mismatch}>{mismatch}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
           {!decoded && (
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 flex items-start gap-3">
               <span className="material-symbols-outlined text-amber-600 mt-0.5">warning</span>
               <div>
                 <p className="text-sm font-semibold text-amber-800">Unable to decode transaction</p>
                 <p className="text-xs text-amber-700 mt-1">
-                  The transaction payload could not be decoded. This may indicate an unexpected
-                  transaction format. Review carefully before signing.
+                  The transaction payload could not be decoded. This may indicate an
+                  unexpected transaction format. Review carefully before signing.
                 </p>
               </div>
             </div>
@@ -91,7 +124,9 @@ export default function TransactionPreviewModal({
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-on-surface-variant">Transaction Fee:</span>
-                  <span className="font-mono text-xs text-on-surface">{decoded.fee} stroops</span>
+                  <span className="font-mono text-xs text-on-surface">
+                    {decoded.fee} stroops
+                  </span>
                 </div>
               </div>
 
@@ -110,13 +145,18 @@ export default function TransactionPreviewModal({
                         <span className="bg-primary/10 text-primary px-2 py-0.5 rounded text-xs font-bold">
                           #{i + 1}
                         </span>
-                        <span className="font-bold text-sm text-on-surface">{op.functionName}</span>
+                        <span className="font-bold text-sm text-on-surface">
+                          {op.functionName}
+                        </span>
                       </div>
 
                       {op.contract && (
                         <div className="flex items-start gap-2 text-xs">
                           <span className="text-on-surface-variant shrink-0">Contract:</span>
-                          <span className="font-mono text-on-surface break-all" title={op.contract}>
+                          <span
+                            className="font-mono text-on-surface break-all"
+                            title={op.contract}
+                          >
                             {truncateAddress(op.contract)}
                           </span>
                         </div>
@@ -128,7 +168,10 @@ export default function TransactionPreviewModal({
                             Arguments:
                           </span>
                           {op.args.map((arg, j) => (
-                            <div key={j} className="flex items-start gap-2 pl-2 text-xs">
+                            <div
+                              key={j}
+                              className="flex items-start gap-2 pl-2 text-xs"
+                            >
                               <span className="text-on-surface-variant shrink-0 min-w-[40px]">
                                 {arg.name}:
                               </span>

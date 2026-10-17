@@ -52,6 +52,7 @@ export default function TestnetFaucetButton() {
     const toastId = addToast({ type: 'pending', title: 'Requesting testnet XLM...' });
 
     try {
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
       const response = await fetch(
         `https://friendbot.stellar.org?addr=${encodeURIComponent(address)}`
       );
@@ -67,7 +68,9 @@ export default function TestnetFaucetButton() {
       updateToast(toastId, {
         type: 'success',
         title: 'Testnet XLM received',
-        message: `Funded ${fundedAmount.toFixed(2)} XLM. Current balance: ${nextBalance.toFixed(2)} XLM.`,
+        message: `Funded ${fundedAmount.toFixed(2)} XLM. Current balance: ${nextBalance.toFixed(
+          2
+        )} XLM.`,
       });
     } catch (error) {
       updateToast(toastId, {

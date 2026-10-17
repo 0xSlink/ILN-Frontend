@@ -12,7 +12,7 @@ const STATUS_STYLES: Record<string, string> = {
   PartiallyFunded: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-200',
   Paid: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-200',
   Defaulted: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-200',
-  Cancelled: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-200',
+  Cancelled: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-200',
 };
 
 export default function InvoiceStatusBadge({ status }: InvoiceStatusBadgeProps) {

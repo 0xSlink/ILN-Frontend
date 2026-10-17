@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo } from 'react';
 import {
   AreaChart,
   Area,
@@ -12,12 +12,19 @@ import {
   type TooltipProps,
 } from 'recharts';
 import { transformFundingData } from '@/utils/funding';
-import { useIndexerResource } from '@/hooks/useIndexerResource';
+import IndexerUnavailableNotice, {
+  shouldUseDevMockFallback,
+  type IndexerNoticeStatus,
+} from '@/components/IndexerUnavailableNotice';
+import DataSourceCaption from '@/components/DataSourceCaption';
+import { IndexerFreshnessBadge, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
+import type { IndexerResponseMeta } from '@/lib/indexer/types';
 import {
-  IndexerErrorState,
-  IndexerFreshnessBadge,
-  IndexerPartialNotice,
-} from '@/components/indexer/IndexerStatus';
+  fetchFundingAnalytics,
+  classifyIndexerClientError,
+  indexerErrorDetail,
+  isAbortError,
+} from '@/lib/indexer-client';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -26,7 +33,7 @@ export type TimeRange = '7D' | '30D' | '90D' | 'All';
 export interface TokenFunding {
   symbol: string;
   amount: number; // Whole unit amount
-  color?: string;
+  color: string;
 }
 
 export interface DailyFundingBucket {
@@ -54,6 +61,40 @@ const CHART_TICK_STYLE = {
 };
 
 const GRID_STROKE = 'var(--color-outline-variant, #334155)';
+
+// ─── Mock Data Generator ─────────────────────────────────────────────────────
+
+function generateMockFunding(range: TimeRange): DailyFundingBucket[] {
+  const buckets: DailyFundingBucket[] = [];
+  const now = new Date();
+  let days = 30;
+  if (range === '7D') days = 7;
+  else if (range === '90D') days = 90;
+  else if (range === 'All') days = 180;
+
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+    const usdc = Math.floor(Math.random() * 10_000) + 2_000;
+    const eurc = Math.floor(Math.random() * 5_000) + 1_000;
+    const xlm = Math.floor(Math.random() * 2_000) + 500;
+
+    buckets.push({
+      date: d.toISOString().slice(0, 10),
+      label,
+      total_usdc_equiv: usdc + eurc * 1.08 + xlm * 0.12, // rough estimation
+      invoices_funded: Math.floor(Math.random() * 5) + 1,
+      tokens: [
+        { symbol: 'USDC', amount: usdc, color: TOKEN_COLORS.USDC },
+        { symbol: 'EURC', amount: eurc, color: TOKEN_COLORS.EURC },
+        { symbol: 'XLM', amount: xlm, color: TOKEN_COLORS.XLM },
+      ],
+    });
+  }
+  return buckets;
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -98,16 +139,60 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) 
 
 export default function FundingChart() {
   const [range, setRange] = useState<TimeRange>('30D');
-  const funding = useIndexerResource(
-    'analytics.funding',
-    `analytics/funding?period=${range.toLowerCase()}`
-  );
-  const loading = funding.status === 'loading';
-  const data: DailyFundingBucket[] = useMemo(() => funding.data ?? [], [funding.data]);
+  const [data, setData] = useState<DailyFundingBucket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [errorStatus, setErrorStatus] = useState<IndexerNoticeStatus>('unavailable');
+  const [requestId, setRequestId] = useState(0);
+  const [meta, setMeta] = useState<IndexerResponseMeta | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | undefined>();
+
+  const fetchData = useCallback(async (selectedRange: TimeRange, signal?: AbortSignal) => {
+    setLoading(true);
+    setUnavailable(false);
+    setMeta(null);
+    setErrorDetail(undefined);
+    try {
+      const dailyData = await fetchFundingAnalytics(selectedRange.toLowerCase(), {
+        signal,
+        onMeta: setMeta,
+      });
+      setData(dailyData);
+    } catch (err) {
+      if (isAbortError(err)) {
+        return;
+      }
+      // Only substitute demo data in development; otherwise show an honest
+      // "temporarily unavailable" state instead of fabricating volume.
+      if (shouldUseDevMockFallback()) {
+        setData(generateMockFunding(selectedRange));
+      } else {
+        setErrorDetail(indexerErrorDetail(err));
+        const boundary = classifyIndexerClientError(err);
+        setErrorStatus(
+          boundary === 'rate-limited' || boundary === 'unauthorized' || boundary === 'malformed'
+            ? boundary
+            : 'unavailable'
+        );
+        setData([]);
+        setUnavailable(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchData(range, controller.signal);
+    return () => {
+      controller.abort();
+    };
+  }, [range, requestId, fetchData]);
 
   const transformedData = useMemo(() => transformFundingData(data), [data]);
 
-  const isEmpty = funding.status === 'success' && data.length === 0;
+  const isEmpty = !loading && data.length === 0 && !unavailable;
 
   return (
     <div className="flex flex-col gap-6 rounded-[24px] border border-outline-variant/15 bg-surface-container-lowest p-6 shadow-sm">
@@ -115,6 +200,13 @@ export default function FundingChart() {
         <div>
           <h3 className="font-headline text-xl font-bold text-on-surface">LP Funding History</h3>
           <p className="text-sm text-on-surface-variant">Daily volume across supported tokens</p>
+          <DataSourceCaption metric="funding-history" />
+          {meta && !unavailable ? (
+            <div className="mt-2 flex flex-col gap-1">
+              <IndexerFreshnessBadge freshness={meta.freshness} />
+              <IndexerPartialNotice dropped={meta.droppedRecords} />
+            </div>
+          ) : null}
         </div>
 
         {/* Time Range Selector */}
@@ -142,12 +234,15 @@ export default function FundingChart() {
           </div>
         )}
 
-        {funding.status === 'error' ? (
-          <IndexerErrorState
-            error={funding.error}
-            onRetry={funding.retry}
-            subject="funding history"
-          />
+        {unavailable ? (
+          <div className="flex h-full items-center">
+            <IndexerUnavailableNotice
+              dataSource="Funding history"
+              status={errorStatus}
+              detail={errorDetail}
+              onRetry={() => setRequestId((id) => id + 1)}
+            />
+          </div>
         ) : isEmpty ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 border-2 border-dashed border-outline-variant/20 rounded-2xl">
             <span className="material-symbols-outlined text-outline-variant/40 text-4xl">
@@ -224,12 +319,6 @@ export default function FundingChart() {
           </ResponsiveContainer>
         )}
       </div>
-      {funding.meta ? (
-        <div className="flex flex-col gap-2">
-          <IndexerFreshnessBadge freshness={funding.meta.freshness} />
-          <IndexerPartialNotice dropped={funding.meta.droppedRecords} />
-        </div>
-      ) : null}
     </div>
   );
 }

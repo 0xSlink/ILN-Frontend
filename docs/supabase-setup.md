@@ -30,20 +30,61 @@ The current implementation expects two tables:
 - `idx_sent_reminders_invoice_milestone` on `(invoice_id, milestone)` to avoid duplicate sends for the same reminder window.
 - `milestone` should be limited to `24` or `72` for the current reminder logic.
 
-## Local setup workflow
+## Migration & Rollback Strategy (Issue 689)
 
-1. Create a new Supabase project or use a local Supabase instance.
-2. Set the following environment variables in `.env.local`:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY` (only required for reminder cron/server-side writes)
-3. Apply the SQL in [supabase/migrations/001_init_reminders.sql](../supabase/migrations/001_init_reminders.sql).
-4. Restart the Next.js dev server so the new env vars are picked up.
+To ensure zero-downtime releases and safe recovery if a frontend deployment must be rolled back, all database schema changes follow a **strict paired migration and rollback model**:
 
-## RLS note
+1. **Versioned Up/Down Pairs**: Every schema change in `supabase/migrations/` must have both a forward migration (`<version>_<name>.sql`) and a rollback migration (`<version>_<name>.down.sql`).
+2. **Schema Tracking Table**: Migrations record their execution state in `public._schema_migrations` (version, name, SHA256 checksum, applied_at).
+3. **Transactional Execution**: Migrations are wrapped in `BEGIN; ... COMMIT;` blocks to ensure atomic changes.
 
-The current routes use the Supabase admin client when `SUPABASE_SERVICE_ROLE_KEY` is present, so they can bypass RLS during server-side reminder processing. The migration included below uses permissive local-development policies so a contributor can test the browser flow quickly. For a production deployment, replace these local policies with stricter rules that only allow the intended user or service role access.
+### Available Migration Commands
 
-## Migration SQL
+| Command | Purpose |
+| :--- | :--- |
+| `pnpm run db:status` | Inspect all discovered migrations and check rollback readiness |
+| `pnpm run db:verify` | Verify that every migration has a matching, non-empty rollback script |
+| `pnpm run db:dry-run up` | Output the complete transactional SQL to apply pending migrations |
+| `pnpm run db:dry-run down` | Output the transactional rollback SQL for the latest migration |
+| `pnpm run db:migrate` | Generate and execute forward migrations |
+| `pnpm run db:rollback` | Generate and execute rollback migrations |
 
-The matching starter migration lives at [supabase/migrations/001_init_reminders.sql](../supabase/migrations/001_init_reminders.sql).
+---
+
+## Zero-Downtime Schema Evolution Guidelines
+
+When updating the Supabase schema alongside frontend features, adhere to the **Expand and Contract pattern**:
+
+1. **Step 1 — Expand (Additive Changes)**:
+   - Add new columns as nullable or with sensible defaults (e.g. `002_add_reminder_frequency_column.sql`).
+   - Create new tables or non-blocking indexes (`CREATE INDEX CONCURRENTLY` where applicable).
+   - Old frontend code continues to function without errors.
+2. **Step 2 — Deploy & Verify Frontend**:
+   - Deploy new frontend version to Staging preview and run read-only smoke checks (`e2e/mainnet-smoke.spec.ts`).
+   - Promote to Production via the manual promotion gate.
+3. **Step 3 — Contract (Cleanup)**:
+   - In a later release after the old version is fully decommissioned, remove deprecated columns or backfill data.
+
+---
+
+## Incident Rollback Playbook
+
+If a frontend release must be rolled back due to a critical incident (SEV-1):
+
+1. **Frontend Rollback First**:
+   - Execute `vercel rollback` to immediately restore the last known-good frontend deployment (see [docs/incident-response.md](./incident-response.md)).
+   - Because of the Expand pattern, the previous frontend code remains fully compatible with the additive database schema.
+2. **Database Rollback (If Required)**:
+   - Generate the rollback script: `pnpm run db:dry-run down`
+   - Review the generated SQL in the terminal.
+   - Execute the rollback SQL in the Supabase Dashboard SQL Editor or via `psql`.
+   - Verify table structure: `SELECT * FROM public._schema_migrations;`
+
+---
+
+## Migration History
+
+| Version | Migration Script | Rollback Script | Purpose |
+| :--- | :--- | :--- | :--- |
+| `001` | [001_init_reminders.sql](../supabase/migrations/001_init_reminders.sql) | [001_init_reminders.down.sql](../supabase/migrations/001_init_reminders.down.sql) | Initial tables for reminder preferences & sent logs |
+| `002` | [002_add_reminder_frequency_column.sql](../supabase/migrations/002_add_reminder_frequency_column.sql) | [002_add_reminder_frequency_column.down.sql](../supabase/migrations/002_add_reminder_frequency_column.down.sql) | Additive reminder frequency preference field |

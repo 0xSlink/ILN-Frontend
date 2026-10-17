@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { StrKey } from '@stellar/stellar-sdk';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { getNotificationsServiceStatus } from '@/lib/notifications';
 import PaymentReminderEmail from '@/emails/PaymentReminder';
 import { getAllInvoices, getTokenMetadata } from '@/utils/soroban';
 import { formatTokenAmount } from '@/utils/format';
@@ -69,7 +70,27 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true });
+    // The preference is persisted regardless of delivery health (a "saved but
+    // delivery temporarily degraded" state). Distinguish that from a failed
+    // save so the client can show the right guidance. See
+    // docs/notifications-service.md.
+    const delivery = await getNotificationsServiceStatus();
+
+    const response: {
+      success: true;
+      saved: true;
+      delivery: 'ok' | 'degraded';
+      retryAfterSeconds?: number;
+    } = {
+      success: true,
+      saved: true,
+      delivery: delivery.status === 'ok' ? 'ok' : 'degraded',
+    };
+    if (delivery.status !== 'ok' && delivery.retryAfterSeconds !== undefined) {
+      response.retryAfterSeconds = delivery.retryAfterSeconds;
+    }
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error saving reminder preference:', error);
     return NextResponse.json({ error: 'Failed to save preference' }, { status: 500 });
@@ -151,7 +172,30 @@ export async function GET(req: NextRequest) {
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.iln.finance';
             const payerLink = `${baseUrl}/payer`;
             const payNowLink = `${baseUrl}/pay/${inv.id.toString()}`;
-            const unsubscribeUrl = `${baseUrl}/api/reminders/unsubscribe?address=${pref.address}`;
+
+            const supabase = getSupabaseAdmin();
+            const { data: prefData } = await supabase
+              .from('reminder_preferences')
+              .select('unsubscribe_token')
+              .eq('address', pref.address)
+              .maybeSingle();
+
+            let unsubscribeToken = prefData?.unsubscribe_token;
+            if (!unsubscribeToken) {
+              const crypto = await import('crypto');
+              unsubscribeToken = crypto.randomBytes(32).toString('hex');
+              await supabase
+                .from('reminder_preferences')
+                .update({ unsubscribe_token: unsubscribeToken })
+                .eq('address', pref.address);
+            }
+
+            const tokenHash = require('crypto')
+              .createHash('sha256')
+              .update(unsubscribeToken + (process.env.UNSUBSCRIBE_TOKEN_SECRET || 'default-secret'))
+              .digest('hex');
+
+            const unsubscribeUrl = `${baseUrl}/api/reminders/unsubscribe?address=${pref.address}&token=${tokenHash}`;
 
             const { error: sendError } = await getResend().emails.send({
               from: 'ILN Reminders <reminders@iln.finance>',

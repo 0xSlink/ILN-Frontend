@@ -181,7 +181,6 @@ test.describe('Live testnet governance vote journey', () => {
 
     // Should not crash or show browser errors
     const errors = await page.evaluate(() => {
-      // @ts-expect-error - Playwright test environment doesn't have full window interface
       return window.__NEXT_DATA__?.props?.pageProps?.error || null;
     });
 

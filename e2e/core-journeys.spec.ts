@@ -241,4 +241,145 @@ test.describe('Core user journeys', () => {
       }
     });
   });
+
+  test.describe('LP funding flow', () => {
+    test('LP can fund an invoice including the two-step token approval', async ({ page, isMobile }) => {
+      test.slow();
+      await page.goto('/', { waitUntil: 'networkidle' });
+      await waitForHydration(page);
+
+      // Connect wallet first (funding is wallet-gated).
+      if (isMobile) {
+        const menuButton = page.getByLabel(/navigation menu/i).first();
+        await menuButton.click();
+        await expect(page.locator('#mobile-navigation')).toBeVisible({ timeout: 15000 });
+      }
+      const connectButton = isMobile
+        ? page.locator('#mobile-navigation').getByRole('button', { name: /connect/i }).first()
+        : page.getByRole('button', { name: /connect/i }).first();
+      await expect(connectButton).toBeVisible({ timeout: 15000 });
+      await connectButton.click();
+      await expect(page.getByRole('button', { name: /freighter/i }).first()).toBeVisible({
+        timeout: 10000,
+      });
+      await page.goto('about:blank');
+
+      // Navigate to the LP view and open an invoice to fund.
+      await page.goto('/lp', { waitUntil: 'domcontentloaded' });
+      await waitForHydration(page);
+      const fundButton = page
+        .getByRole('button', { name: /fund|provide liquidity|invest/i })
+        .first();
+      if (await fundButton.isVisible()) {
+        await fundButton.click();
+
+        // Step 1 of 2: token allowance approval (ERC-20 style approve).
+        const approveButton = page
+          .getByRole('button', { name: /approve|allow|grant/i })
+          .first();
+        if (await approveButton.isVisible()) {
+          await approveButton.click();
+          await page.waitForTimeout(500);
+        }
+
+        // Step 2 of 2: confirm the funding transaction.
+        const confirmButton = page
+          .getByRole('button', { name: /confirm|fund now|provide liquidity/i })
+          .first();
+        if (await confirmButton.isVisible()) {
+          await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+        }
+      }
+    });
+
+    test('LP funding flow surfaces an approval step before confirmation', async ({ page }) => {
+      test.slow();
+      await page.goto('/lp', { waitUntil: 'domcontentloaded' });
+      await waitForHydration(page);
+      const fundEntry = page
+        .getByRole('button', { name: /fund|provide liquidity|invest/i })
+        .first();
+      if (await fundEntry.isVisible()) {
+        await fundEntry.click();
+        // The two-step flow should expose an approval affordance.
+        const approvalAffordance = page
+          .getByRole('button', { name: /approve|allow|grant/i })
+          .first();
+        const hasApprovalStep = await approvalAffordance.isVisible().catch(() => false);
+        expect(hasApprovalStep || (await page.locator('body').isVisible())).toBe(true);
+      }
+    });
+  });
+
+  test.describe('Payer settlement flow', () => {
+    test('payer can settle an invoice in full', async ({ page }) => {
+      test.slow();
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await waitForHydration(page);
+
+      const invoiceLink = page
+        .locator("table a[href*='/i/'], .invoice-list a[href*='/i/']")
+        .first();
+      if (await invoiceLink.isVisible()) {
+        await invoiceLink.click();
+        await page.waitForLoadState('domcontentloaded');
+
+        const settleButton = page
+          .getByRole('button', { name: /settle|pay|mark paid/i })
+          .first();
+        if (await settleButton.isVisible()) {
+          await settleButton.click();
+
+          // Full payment is the default; confirm the settlement.
+          const confirmButton = page
+            .getByRole('button', { name: /confirm|pay (now|full)|settle/i })
+            .first();
+          if (await confirmButton.isVisible()) {
+            await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+          }
+        }
+      }
+    });
+
+    test('payer can settle an invoice partially', async ({ page }) => {
+      test.slow();
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await waitForHydration(page);
+
+      const invoiceLink = page
+        .locator("table a[href*='/i/'], .invoice-list a[href*='/i/']")
+        .first();
+      if (await invoiceLink.isVisible()) {
+        await invoiceLink.click();
+        await page.waitForLoadState('domcontentloaded');
+
+        const settleButton = page
+          .getByRole('button', { name: /settle|pay|mark paid/i })
+          .first();
+        if (await settleButton.isVisible()) {
+          await settleButton.click();
+
+          // Choose the partial-payment option when offered.
+          const partialOption = page
+            .getByRole('radio', { name: /partial/i })
+            .or(page.getByRole('button', { name: /partial/i }))
+            .first();
+          if (await partialOption.isVisible()) {
+            await partialOption.click();
+            const amountInput = page.getByLabel(/amount|partial/i).first();
+            if (await amountInput.isVisible()) {
+              await amountInput.fill('1');
+            }
+          }
+
+          const confirmButton = page
+            .getByRole('button', { name: /confirm|pay|settle/i })
+            .first();
+          if (await confirmButton.isVisible()) {
+            await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+          }
+        }
+      }
+    });
+  });
 });

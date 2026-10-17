@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   LineChart,
   Line,
@@ -12,13 +12,24 @@ import {
   ReferenceLine,
   type TooltipProps,
 } from 'recharts';
-import { calculateMovingAverage, MonthlyDefaultWithMA } from '@/utils/defaultRate';
-import { useIndexerResource } from '@/hooks/useIndexerResource';
 import {
-  IndexerErrorState,
-  IndexerFreshnessBadge,
-  IndexerPartialNotice,
-} from '@/components/indexer/IndexerStatus';
+  calculateMovingAverage,
+  MonthlyDefaultBucket,
+  MonthlyDefaultWithMA,
+} from '@/utils/defaultRate';
+import IndexerUnavailableNotice, {
+  shouldUseDevMockFallback,
+  type IndexerNoticeStatus,
+} from '@/components/IndexerUnavailableNotice';
+import DataSourceCaption from '@/components/DataSourceCaption';
+import { IndexerFreshnessBadge, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
+import type { IndexerResponseMeta } from '@/lib/indexer/types';
+import {
+  fetchDefaultAnalytics,
+  classifyIndexerClientError,
+  indexerErrorDetail,
+  isAbortError,
+} from '@/lib/indexer-client';
 
 const CHART_TICK_STYLE = {
   fill: 'var(--color-on-surface-variant, #94a3b8)',
@@ -68,13 +79,84 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) 
   );
 }
 
+function generateMockDefaults(): MonthlyDefaultBucket[] {
+  const buckets: MonthlyDefaultBucket[] = [];
+  const now = new Date();
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - i);
+    const label = d.toLocaleDateString('en-US', {
+      month: 'short',
+      year: 'numeric',
+    });
+    const funded = Math.floor(Math.random() * 20) + 10;
+    const defaulted = Math.floor(Math.random() * Math.min(3, funded));
+    const defaultRate = funded > 0 ? (defaulted / funded) * 100 : 0;
+
+    buckets.push({
+      date: d.toISOString().slice(0, 7),
+      label,
+      defaulted,
+      funded,
+      defaultRate: Math.round(defaultRate * 100) / 100,
+    });
+  }
+  return buckets;
+}
+
 export default function DefaultRateChart() {
-  const defaults = useIndexerResource('analytics.defaults', 'analytics/defaults?period=12m');
-  const loading = defaults.status === 'loading';
-  const chartData: MonthlyDefaultWithMA[] = useMemo(
-    () => calculateMovingAverage(defaults.data ?? [], 1),
-    [defaults.data]
-  );
+  const [chartData, setChartData] = useState<MonthlyDefaultWithMA[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [errorStatus, setErrorStatus] = useState<IndexerNoticeStatus>('unavailable');
+  const [requestId, setRequestId] = useState(0);
+  const [meta, setMeta] = useState<IndexerResponseMeta | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | undefined>();
+
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setUnavailable(false);
+    setMeta(null);
+    setErrorDetail(undefined);
+    try {
+      const withMA = await fetchDefaultAnalytics('12m', { signal, onMeta: setMeta });
+      setChartData(withMA);
+    } catch (err) {
+      if (isAbortError(err)) {
+        return;
+      }
+      // Only substitute demo data in development; otherwise show an honest
+      // "temporarily unavailable" state instead of fabricating metrics.
+      if (shouldUseDevMockFallback()) {
+        const mockData = generateMockDefaults();
+        const withMA = calculateMovingAverage(mockData, 1);
+        setChartData(withMA);
+      } else {
+        setErrorDetail(indexerErrorDetail(err));
+        const boundary = classifyIndexerClientError(err);
+        setErrorStatus(
+          boundary === 'rate-limited' || boundary === 'unauthorized' || boundary === 'malformed'
+            ? boundary
+            : 'unavailable'
+        );
+        setChartData([]);
+        setUnavailable(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: initial chart load on mount/retry.
+    void fetchData(controller.signal);
+    return () => {
+      controller.abort();
+    };
+  }, [requestId, fetchData]);
+
+  // No data must render as a placeholder, never as a 0.00% default rate.
   const hasData = chartData.length > 0;
 
   const currentRate = useMemo(() => {
@@ -109,6 +191,13 @@ export default function DefaultRateChart() {
         <div>
           <h3 className="font-headline text-xl font-bold text-on-surface">Default Rate Trend</h3>
           <p className="text-sm text-on-surface-variant">Protocol health indicator</p>
+          <DataSourceCaption metric="default-rate" />
+          {meta && !unavailable ? (
+            <div className="mt-2 flex flex-col gap-1">
+              <IndexerFreshnessBadge freshness={meta.freshness} />
+              <IndexerPartialNotice dropped={meta.droppedRecords} />
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -146,13 +235,16 @@ export default function DefaultRateChart() {
           </div>
         )}
 
-        {defaults.status === 'error' ? (
-          <IndexerErrorState
-            error={defaults.error}
-            onRetry={defaults.retry}
-            subject="default rate history"
-          />
-        ) : defaults.status === 'success' && !hasData ? (
+        {unavailable ? (
+          <div className="flex h-full items-center">
+            <IndexerUnavailableNotice
+              dataSource="Default-rate history"
+              status={errorStatus}
+              detail={errorDetail}
+              onRetry={() => setRequestId((id) => id + 1)}
+            />
+          </div>
+        ) : chartData.length === 0 && !loading ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-outline-variant/20">
             <span className="material-symbols-outlined text-outline-variant/40 text-4xl">
               bar_chart
@@ -216,12 +308,6 @@ export default function DefaultRateChart() {
           </ResponsiveContainer>
         )}
       </div>
-      {defaults.meta ? (
-        <div className="flex flex-col gap-2">
-          <IndexerFreshnessBadge freshness={defaults.meta.freshness} />
-          <IndexerPartialNotice dropped={defaults.meta.droppedRecords} />
-        </div>
-      ) : null}
     </div>
   );
 }

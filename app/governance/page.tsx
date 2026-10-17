@@ -34,13 +34,11 @@ function StatusBadge({ status }: { status: ProposalStatus }) {
       icon: 'fiber_manual_record',
     },
     Passed: { color: 'bg-primary/15 text-primary border-primary/30', icon: 'check_circle' },
-    Failed: { color: 'bg-red-500/15 text-red-500 border-red-500/30', icon: 'cancel' },
     Rejected: { color: 'bg-red-500/15 text-red-500 border-red-500/30', icon: 'cancel' },
     Executed: {
       color: 'bg-purple-500/15 text-purple-500 border-purple-500/30',
       icon: 'rocket_launch',
     },
-    Pending: { color: 'bg-amber-500/15 text-amber-500 border-amber-500/30', icon: 'schedule' },
     Vetoed: { color: 'bg-red-500/15 text-red-500 border-red-500/30', icon: 'gavel' },
   };
   const { color, icon } = config[status];
@@ -60,7 +58,7 @@ function StatusBadge({ status }: { status: ProposalStatus }) {
 }
 
 function displayStatus(status: ProposalStatus): ProposalFilter | ProposalStatus {
-  return status === 'Failed' ? 'Rejected' : status;
+  return status;
 }
 
 // ─── Type badge ───────────────────────────────────────────────────────────────
@@ -88,7 +86,7 @@ function ProposalCard({ proposal }: { proposal: Proposal }) {
   return (
     <Link
       href={`/governance/${proposal.id}`}
-      className="group block rounded-2xl border border-outline-variant/20 bg-surface-container-lowest hover:border-primary/40 hover:shadow-lg transition-all duration-200 p-6"
+      className="proposal-card group block rounded-2xl border border-outline-variant/20 bg-surface-container-lowest hover:border-primary/40 hover:shadow-lg transition-all duration-200 p-6"
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -124,7 +122,6 @@ function ProposalCard({ proposal }: { proposal: Proposal }) {
       <VoteProgressBar
         votesFor={proposal.votesFor}
         votesAgainst={proposal.votesAgainst}
-        votesAbstain={proposal.votesAbstain}
         quorumRequired={proposal.quorumRequired}
         compact
       />
@@ -147,12 +144,6 @@ function ProposalCard({ proposal }: { proposal: Proposal }) {
           <span className="text-xs font-medium text-purple-500 flex items-center gap-1">
             <span className="material-symbols-outlined text-[13px]">rocket_launch</span>
             Executed
-          </span>
-        )}
-        {proposal.status === 'Failed' && (
-          <span className="text-xs font-medium text-red-500 flex items-center gap-1">
-            <span className="material-symbols-outlined text-[13px]">cancel</span>
-            Rejected
           </span>
         )}
         {proposal.status === 'Vetoed' && (
@@ -191,7 +182,9 @@ function FilterTabs({
         >
           {f}
           <span
-            className={`ml-1.5 text-xs ${active === f ? 'text-white/70' : 'text-on-surface-variant/60'}`}
+            className={`ml-1.5 text-xs ${
+              active === f ? 'text-white/70' : 'text-on-surface-variant/60'
+            }`}
           >
             {counts[f]}
           </span>
@@ -321,7 +314,7 @@ export default function GovernancePage() {
                 ))}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="text-center py-24">
+              <div className="proposal-empty text-center py-24">
                 <span className="material-symbols-outlined text-5xl text-on-surface-variant/30 block mb-4">
                   inbox
                 </span>

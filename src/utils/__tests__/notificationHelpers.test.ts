@@ -1,12 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MAX_NOTIFICATIONS,
+  NOTIFICATIONS_PAGE_SIZE,
   notificationsStorageKey,
   readStateStorageKey,
   formatTimeAgo,
   getNotificationIcon,
   getNotificationAccentClass,
+  sortNotificationsNewestFirst,
+  NOTIFICATION_CATEGORIES,
+  NOTIFICATION_CATEGORY_LABELS,
+  resolveNotificationCategory,
+  filterNotificationsByCategory,
+  countNotificationsByCategory,
 } from '../notificationHelpers';
+import type { NotificationItem } from '@/context/NotificationContext';
 
 describe('storage key helpers', () => {
   it('namespaces the notifications key by wallet address', () => {
@@ -19,6 +27,35 @@ describe('storage key helpers', () => {
 
   it('exposes a MAX_NOTIFICATIONS cap', () => {
     expect(MAX_NOTIFICATIONS).toBe(50);
+  });
+
+  it('renders notifications in pages smaller than the retention cap', () => {
+    expect(NOTIFICATIONS_PAGE_SIZE).toBe(20);
+    expect(NOTIFICATIONS_PAGE_SIZE).toBeLessThan(MAX_NOTIFICATIONS);
+  });
+});
+
+describe('sortNotificationsNewestFirst', () => {
+  const item = (id: string, createdAt: string): NotificationItem => ({
+    id,
+    category: 'invoice',
+    type: 'info',
+    title: id,
+    message: id,
+    href: '/',
+    createdAt,
+    read: false,
+  });
+
+  it('orders newest first without mutating the input', () => {
+    const input = [
+      item('old', '2026-01-01T00:00:00Z'),
+      item('new', '2026-03-01T00:00:00Z'),
+      item('mid', '2026-02-01T00:00:00Z'),
+    ];
+    const sorted = sortNotificationsNewestFirst(input);
+    expect(sorted.map((n) => n.id)).toEqual(['new', 'mid', 'old']);
+    expect(input.map((n) => n.id)).toEqual(['old', 'new', 'mid']);
   });
 });
 
@@ -94,5 +131,78 @@ describe('getNotificationAccentClass', () => {
 
   it('returns the default primary class for other types', () => {
     expect(getNotificationAccentClass('submitted' as any)).toBe('text-primary');
+  });
+});
+
+describe('notification categories', () => {
+  function item(
+    id: string,
+    category: NotificationItem['category'],
+    read = false
+  ): NotificationItem {
+    return {
+      id,
+      category,
+      type: 'info',
+      title: id,
+      message: id,
+      href: '/',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      read,
+    };
+  }
+
+  it('labels every category, including admin', () => {
+    expect(NOTIFICATION_CATEGORIES).toEqual(['invoice', 'lp', 'governance', 'reputation', 'admin']);
+    NOTIFICATION_CATEGORIES.forEach((category) =>
+      expect(NOTIFICATION_CATEGORY_LABELS[category]).toBeTruthy()
+    );
+  });
+
+  it('keeps a known backend category as-is', () => {
+    expect(resolveNotificationCategory('admin', 'info')).toBe('admin');
+    expect(resolveNotificationCategory('lp', 'proposal')).toBe('lp');
+  });
+
+  it('infers a missing or unknown category from the type', () => {
+    expect(resolveNotificationCategory(undefined, 'proposal')).toBe('governance');
+    expect(resolveNotificationCategory(undefined, 'reputation')).toBe('reputation');
+    expect(resolveNotificationCategory('audit', 'signer_rotation')).toBe('admin');
+    expect(resolveNotificationCategory(undefined, 'parameter_update')).toBe('admin');
+    expect(resolveNotificationCategory(undefined, 'protocol_paused')).toBe('admin');
+  });
+
+  it('falls back to invoice when nothing identifies the category', () => {
+    expect(resolveNotificationCategory(undefined, 'settled')).toBe('invoice');
+    expect(resolveNotificationCategory('unknown', undefined)).toBe('invoice');
+    expect(resolveNotificationCategory(42, 'info')).toBe('invoice');
+  });
+
+  it('filters by category and passes everything through for all', () => {
+    const items = [item('a', 'invoice'), item('b', 'admin'), item('c', 'governance')];
+    expect(filterNotificationsByCategory(items, 'all')).toBe(items);
+    expect(filterNotificationsByCategory(items, 'admin').map((n) => n.id)).toEqual(['b']);
+    expect(filterNotificationsByCategory(items, 'reputation')).toEqual([]);
+  });
+
+  it('counts totals and unread per category', () => {
+    const counts = countNotificationsByCategory([
+      item('a', 'invoice'),
+      item('b', 'invoice', true),
+      item('c', 'admin'),
+    ]);
+    expect(counts.all).toEqual({ total: 3, unread: 2 });
+    expect(counts.invoice).toEqual({ total: 2, unread: 1 });
+    expect(counts.admin).toEqual({ total: 1, unread: 1 });
+    expect(counts.reputation).toEqual({ total: 0, unread: 0 });
+  });
+
+  it('still counts a legacy stored item with an unrecognised category under all', () => {
+    const legacy = { ...item('x', 'invoice'), category: 'legacy' } as unknown as NotificationItem;
+    expect(countNotificationsByCategory([legacy]).all).toEqual({ total: 1, unread: 1 });
+  });
+
+  it('uses the admin icon for admin notifications', () => {
+    expect(getNotificationIcon('admin', 'info')).toBe('admin_panel_settings');
   });
 });

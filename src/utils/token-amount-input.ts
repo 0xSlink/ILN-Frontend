@@ -3,9 +3,9 @@ import { formatAmountFromUnits, parseAmountToUnits } from '@/utils/invoiceSubmis
 export const STROOPS_PER_XLM = 10_000_000;
 export const MIN_INVOICE_AMOUNT_STROOPS = 1n;
 
-/** Input/display decimal places for invoice amounts (USDC/EURC: 6, XLM: 7). */
+/** Input/display decimal places for invoice amounts (USDC: 6, EURC/XLM: 7). */
 export function getTokenInputDecimals(symbol: string): number {
-  return symbol === 'XLM' ? 7 : 6;
+  return symbol === 'USDC' ? 6 : 7;
 }
 
 export function getMinimumInvoiceAmountXlm(): string {

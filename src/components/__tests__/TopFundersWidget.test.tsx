@@ -14,7 +14,7 @@ vi.mock('@/context/ToastContext', () => ({
 }));
 
 const fetchMock = vi.fn();
-const CACHE_KEY = 'iln_top_funders_30d_v2';
+const CACHE_KEY = 'iln_top_funders_30d';
 
 function leaderboard(rows: unknown[]) {
   return { ok: true, json: async () => proxySuccessEnvelope('leaderboard', rows) };
@@ -60,9 +60,7 @@ describe('TopFundersWidget', () => {
   it('shows an explicit error, not an empty leaderboard, when the fetch fails', async () => {
     fetchMock.mockRejectedValue(new Error('network down'));
     render(<TopFundersWidget />);
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Unable to load active LPs. The indexer could not be reached.'
-    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(/temporarily unavailable/i);
     expect(
       screen.queryByText('No active LP leaderboard data is available right now.')
     ).not.toBeInTheDocument();
@@ -91,6 +89,14 @@ describe('TopFundersWidget', () => {
     });
     render(<TopFundersWidget />);
     expect(await screen.findByText('Indexer freshness unknown')).toBeInTheDocument();
+  });
+
+  it('shows an honest unavailable notice when the indexer returns 503 (down)', async () => {
+    fetchMock.mockResolvedValue({ status: 503, json: async () => ({ error: 'unavailable' }) });
+    render(<TopFundersWidget />);
+    await screen.findByText(/temporarily unavailable/i);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByText('No active LP leaderboard data is available right now.')).toBeNull();
   });
 
   it('serves from a fresh localStorage cache without refetching', async () => {

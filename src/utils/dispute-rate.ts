@@ -42,7 +42,7 @@ export function getDisputeRateColorClasses(color: DisputeRateColor): {
       };
     case 'amber':
       return {
-        value: 'text-amber-700 dark:text-amber-400',
+        value: 'text-amber-800 dark:text-amber-400',
         border: 'border-amber-200/60 dark:border-amber-800/60',
         sparkline: '#d97706',
       };

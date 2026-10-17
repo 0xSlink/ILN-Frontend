@@ -15,6 +15,7 @@
 /test-results
 /playwright-report
 **/__snapshots__
+*.snap
 
 # next.js
 /.next/
@@ -49,6 +50,7 @@ build-storybook.log
 .env*
 !.env.local.example
 !.env.local.example.allowlist
+!.env.production.example
 
 # vercel
 .vercel

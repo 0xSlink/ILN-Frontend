@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLeaderboard } from '@/lib/leaderboard';
-import { IndexerError } from '@/lib/indexer/errors';
+import { INDEXER_ERROR_STATUS } from '@/lib/indexer/errors';
 import { checkRateLimit, getClientKey } from '@/lib/rate-limit';
 
 const ALLOWED_TYPES = ['lp', 'payer', 'freelancer'];
@@ -46,16 +46,19 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const data = await getLeaderboard(type, period, limit);
-    return NextResponse.json(data, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) {
-    // Typed indexer failures keep their code/status; never echo upstream details.
-    if (error instanceof IndexerError) {
+    const result = await getLeaderboard(type, period, limit);
+    if (result.unavailable) {
+      // Typed code lets clients distinguish auth/version/config failures; no upstream details.
       return NextResponse.json(
-        { error: error.message, code: error.code },
-        { status: error.status, headers: { 'Cache-Control': 'no-store' } }
+        { error: 'Indexer temporarily unavailable', ...(result.code ? { code: result.code } : {}) },
+        {
+          status: result.code ? INDEXER_ERROR_STATUS[result.code] : 503,
+          headers: { 'Cache-Control': 'no-store' },
+        }
       );
     }
+    return NextResponse.json(result.data, { headers: { 'Cache-Control': 'no-store' } });
+  } catch (error) {
     console.error('Error fetching leaderboard:', (error as Error)?.name ?? 'Error');
     return NextResponse.json({ error: 'Failed to fetch leaderboard' }, { status: 500 });
   }

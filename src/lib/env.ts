@@ -23,12 +23,8 @@ export const env = {
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   CRON_SECRET: process.env.CRON_SECRET || '',
   NOTIFICATION_API: process.env.NOTIFICATION_API || '',
-  // Indexer – server-only; consumed by src/lib/indexer/server.ts
-  INDEXER_URL: process.env.INDEXER_URL || '',
-  INDEXER_API_KEY: process.env.INDEXER_API_KEY || '',
-  INDEXER_TIMEOUT_MS: process.env.INDEXER_TIMEOUT_MS || '',
-  INDEXER_API_VERSION_POLICY: process.env.INDEXER_API_VERSION_POLICY || 'strict',
-  INDEXER_STALE_AFTER_SECONDS: process.env.INDEXER_STALE_AFTER_SECONDS || '300',
+  // Indexer REST config is server-only and read solely by src/lib/indexer/server.ts;
+  // it is deliberately absent here because this module is reachable from browser code.
 
   // Stellar / Contract – have testnet defaults in constants.ts but validated here
   NEXT_PUBLIC_CONTRACT_ID: optionalEnv(
@@ -58,6 +54,7 @@ export const env = {
   NEXT_PUBLIC_INSURANCE_POOL_ENABLED: booleanEnv('NEXT_PUBLIC_INSURANCE_POOL_ENABLED'),
   NEXT_PUBLIC_ORACLE_ENABLED: booleanEnv('NEXT_PUBLIC_ORACLE_ENABLED'),
   NEXT_PUBLIC_NFT_ENABLED: booleanEnv('NEXT_PUBLIC_NFT_ENABLED'),
+  NEXT_PUBLIC_MAINTENANCE_MODE: booleanEnv('NEXT_PUBLIC_MAINTENANCE_MODE'),
   NEXT_PUBLIC_NFT_CONTRACT_ID: process.env.NEXT_PUBLIC_NFT_CONTRACT_ID || '',
   NEXT_PUBLIC_NFT_METADATA_METHOD: optionalEnv('NEXT_PUBLIC_NFT_METADATA_METHOD', 'token_uri'),
   NEXT_PUBLIC_NFT_EVENT_HINTS: process.env.NEXT_PUBLIC_NFT_EVENT_HINTS || '',
@@ -69,7 +66,7 @@ export const env = {
     'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
   ),
 
-  // Indexer WebSocket (REST access goes through /api/indexer, see INDEXER_URL)
+  // Indexer WebSocket (REST access goes through the /api/indexer proxy)
   NEXT_PUBLIC_INDEXER_WS_URL: optionalEnv('NEXT_PUBLIC_INDEXER_WS_URL', 'ws://localhost:8080/ws'),
 
   // WalletConnect
@@ -77,6 +74,9 @@ export const env = {
 
   // App
   NEXT_PUBLIC_APP_URL: optionalEnv('NEXT_PUBLIC_APP_URL', 'https://app.iln.finance'),
+
+  // Real-User Monitoring (RUM) – optional beacon endpoint for Core Web Vitals
+  NEXT_PUBLIC_RUM_ENDPOINT: process.env.NEXT_PUBLIC_RUM_ENDPOINT || '',
 
   // GitHub (feedback API)
   GITHUB_TOKEN: process.env.GITHUB_TOKEN || '',

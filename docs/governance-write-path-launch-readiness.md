@@ -8,13 +8,13 @@ This gate consolidates the governance write-path outcomes tracked in issues #849
 
 For each action, either complete the live-verification requirements or keep it explicitly marked not-yet-live and prevent launch material from representing it as an on-chain action.
 
-| Governance action                    | Current status | Required launch evidence                                                                                                                                   |
-| ------------------------------------ | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cast vote (`castVote`)               | Stubbed        | Deployed-contract integration test verifies the signed transaction, authorization, persisted vote, and resulting tally; otherwise keep the UI warning.     |
-| Delegate / undelegate voting power   | Stubbed        | Deployed-contract integration test verifies both delegation directions, resulting voting power, and authorization; otherwise keep the UI warning.          |
-| Create proposal (`createProposal`)   | Stubbed        | Deployed-contract integration test verifies the submitted proposal and proposer; otherwise keep the UI warning.                                            |
-| Execute proposal (`executeProposal`) | Stubbed        | Deployed-contract integration test verifies eligibility, timelock enforcement, and the resulting on-chain parameter change; otherwise keep the UI warning. |
-| Veto proposal (`vetoProposal`)       | Stubbed        | Deployed-contract integration test verifies admin authorization, veto reason recording, and final proposal state; otherwise keep the UI warning.           |
+| Governance action | Current status | Required launch evidence |
+| --- | --- | --- |
+| Cast vote (`castVote`) | Stubbed | Deployed-contract integration test verifies the signed transaction, authorization, persisted vote, and resulting tally; otherwise keep the UI warning. |
+| Delegate / undelegate voting power | Stubbed | Deployed-contract integration test verifies both delegation directions, resulting voting power, and authorization; otherwise keep the UI warning. |
+| Create proposal (`createProposal`) | Stubbed | Deployed-contract integration test verifies the submitted proposal and proposer; otherwise keep the UI warning. |
+| Execute proposal (`executeProposal`) | Stubbed | Deployed-contract integration test verifies eligibility, timelock enforcement, and the resulting on-chain parameter change; otherwise keep the UI warning. |
+| Veto proposal (`vetoProposal`) | Stubbed | Deployed-contract integration test verifies admin authorization, veto reason recording, and final proposal state; otherwise keep the UI warning. |
 
 The current statuses above must be reconciled with [the contract integration status table](contract-integration-status.md) and `GOVERNANCE_INTEGRATION_STATUS` in `src/utils/governance.ts` whenever this checklist is reviewed. Do not change a status to `Real` until the listed evidence is attached to the release PR and passes in CI against the deployed contract/network configuration.
 
@@ -35,7 +35,7 @@ Issue #852 must remain open until a maintainer completes and records this sign-o
 - [ ] Mainnet contract IDs, network configuration, authorization, and transaction failure handling have been reviewed for every action marked Real.
 - [ ] Residual risks and any intentionally disabled actions are documented in the release PR.
 
-**Maintainer:** **\*\*\*\***\_\_\_\_**\*\*\*\***  
-**Review date:** **\*\*\*\***\_\_\_\_**\*\*\*\***  
-**Release PR / CI run:** **\*\*\*\***\_\_\_\_**\*\*\*\***  
+**Maintainer:** ____________________  
+**Review date:** ____________________  
+**Release PR / CI run:** ____________________  
 **Decision:** Governance writes are ( ) launch-ready as live / ( ) not launch-ready; mocked actions remain disclosed

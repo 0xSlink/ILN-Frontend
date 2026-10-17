@@ -83,7 +83,9 @@ export default function ProtocolYieldAnalyticsSection({
           value={metrics.highestThisWeek ? `#${metrics.highestThisWeek.id}` : '—'}
           sub={
             metrics.highestThisWeek
-              ? `${metrics.highestThisWeek.effectiveYieldPct.toFixed(2)}% · ${metrics.highestThisWeek.symbol}`
+              ? `${metrics.highestThisWeek.effectiveYieldPct.toFixed(2)}% · ${
+                  metrics.highestThisWeek.symbol
+                }`
               : 'No funded invoices this week'
           }
         />
@@ -92,7 +94,9 @@ export default function ProtocolYieldAnalyticsSection({
           value={metrics.lowestThisWeek ? `#${metrics.lowestThisWeek.id}` : '—'}
           sub={
             metrics.lowestThisWeek
-              ? `${metrics.lowestThisWeek.effectiveYieldPct.toFixed(2)}% · ${metrics.lowestThisWeek.symbol}`
+              ? `${metrics.lowestThisWeek.effectiveYieldPct.toFixed(2)}% · ${
+                  metrics.lowestThisWeek.symbol
+                }`
               : 'No funded invoices this week'
           }
         />

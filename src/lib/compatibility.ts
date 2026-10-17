@@ -97,11 +97,7 @@ function getFreighterVersionSync(): string | null {
     const candidates: unknown[] = [
       (w.freighter as Record<string, unknown> | undefined)?.version,
       (w.stellar as Record<string, unknown> | undefined)?.freighterVersion,
-      (
-        (w.stellar as Record<string, unknown> | undefined)?.freighter as
-          | Record<string, unknown>
-          | undefined
-      )?.version,
+      ((w.stellar as Record<string, unknown> | undefined)?.freighter as Record<string, unknown> | undefined)?.version,
       document.querySelector('meta[name="freighter-version"]')?.getAttribute('content'),
     ];
     for (const c of candidates) {
@@ -136,7 +132,7 @@ export function detectWallet(ua?: string): WalletInfo {
   const hasFreighter =
     !!w.freighter ||
     !!(w.stellar as Record<string, unknown> | undefined)?.freighter ||
-    (typeof document !== 'undefined' && !!document.querySelector('[data-freighter]'));
+    typeof document !== 'undefined' && !!document.querySelector('[data-freighter]');
 
   if (hasFreighter) {
     return { type: 'freighter', version: getFreighterVersionSync(), provider: 'freighter' };
@@ -155,7 +151,9 @@ export function getCompatibilityContext(overrides?: {
   userAgent?: string;
   wallet?: WalletInfo;
 }): CompatibilityContext {
-  const ua = overrides?.userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : '');
+  const ua =
+    overrides?.userAgent ??
+    (typeof navigator !== 'undefined' ? navigator.userAgent : '');
 
   const browser = parseBrowser(ua);
   const os = parseOS(ua);

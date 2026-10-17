@@ -51,21 +51,21 @@ describe('FundingChart', () => {
   });
 
   it('shows a typed failure instead of generated funding data', async () => {
-    const random = vi.spyOn(Math, 'random');
     fetchMock().mockResolvedValue(
       errorEnvelope('unauthorized', 'The indexer rejected the server credentials.')
     );
     render(<FundingChart />);
 
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveAttribute('data-error-code', 'unauthorized');
-    expect(alert).toHaveTextContent('Unable to load funding history.');
-    // Credential failures are not retryable from the browser.
-    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    expect(alert).toHaveAttribute('data-testid', 'indexer-notice-unauthorized');
+    expect(alert).toHaveTextContent('The indexer rejected the server credentials.');
+    // Credential failures are never retried automatically.
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('No funding activity in this period')).not.toBeInTheDocument();
-    expect(random).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Total Funding/)).not.toBeInTheDocument();
   });
-  it('explains an indexer API version mismatch without offering a futile retry', async () => {
+
+  it('explains an indexer API version mismatch without retrying it', async () => {
     fetchMock().mockResolvedValue(
       errorEnvelope(
         'version_mismatch',
@@ -75,9 +75,9 @@ describe('FundingChart', () => {
     render(<FundingChart />);
 
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveAttribute('data-error-code', 'version_mismatch');
+    expect(alert).toHaveAttribute('data-testid', 'indexer-notice-malformed');
     expect(alert).toHaveTextContent('The indexer API version 2.0.0 is not supported.');
-    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    expect(fetchMock()).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -98,17 +98,15 @@ describe('DefaultRateChart', () => {
   });
 
   it('shows placeholders, not zero rates or mock data, when the indexer times out', async () => {
-    const random = vi.spyOn(Math, 'random');
     fetchMock().mockResolvedValue(
       errorEnvelope('timeout', 'The indexer took too long to respond.', 504)
     );
     render(<DefaultRateChart />);
 
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Unable to load default rate history.');
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(alert).toHaveAttribute('data-testid', 'indexer-notice-unavailable');
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.queryByText('0.00%')).not.toBeInTheDocument();
     expect(screen.getAllByText('—')).toHaveLength(3);
-    expect(random).not.toHaveBeenCalled();
   });
 });

@@ -15,8 +15,10 @@ const EXTENSIONS = ['.ts', '.tsx'];
 const IGNORED = /(__tests__|\.test\.|\.spec\.|\.stories\.|[/\\]mocks[/\\]|[/\\]stories[/\\])/;
 
 const FORBIDDEN_IN_BROWSER: Array<[RegExp, string]> = [
-  [/\bINDEXER_API_KEY\b/, 'reads the server-only indexer credential'],
-  [/process\.env\.INDEXER_URL\b/, 'reads the server-only indexer URL'],
+  [/process\.env(?:\.|\[['"])INDEXER_API_KEY\b/, 'reads the server-only indexer credential'],
+  [/(?:import|export)[^;]*\bINDEXER_API_KEY\b/, 'imports the server-only indexer credential'],
+  [/^\s*(?:export\s+)?const\s+INDEXER_API_KEY\b/m, 'defines the server-only indexer credential'],
+  [/process\.env(?:\.|\[['"])INDEXER_URL\b/, 'reads the server-only indexer URL'],
   [/NEXT_PUBLIC_INDEXER_API_URL/, 'calls the indexer REST API directly instead of /api/indexer'],
   [/lib\/indexer\/server['"]/, 'imports the server-only indexer client'],
 ];
@@ -80,7 +82,7 @@ describe('indexer browser boundary', () => {
       expect.arrayContaining([
         path.join('src', 'components', 'ActivityFeed.tsx'),
         path.join('src', 'components', 'charts', 'FundingChart.tsx'),
-        path.join('src', 'lib', 'indexer', 'client.ts'),
+        path.join('src', 'lib', 'indexer-client.ts'),
       ])
     );
   });

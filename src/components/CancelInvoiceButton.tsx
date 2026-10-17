@@ -41,7 +41,10 @@ export default function CancelInvoiceButton({
 
     try {
       const { tx } = await cancelInvoice(walletAddress, invoice.id);
-      const txHash = await execute(tx, 'Cancel invoice');
+      const txHash = await execute(tx, {
+        expectedAction: 'cancel_invoice',
+        title: 'Cancel invoice',
+      });
 
       if (!txHash) throw new Error('Transaction was not submitted.');
 

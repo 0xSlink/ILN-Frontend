@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { TrendingUp, AlertTriangle } from 'lucide-react';
+import useReducedMotion from '@/hooks/useReducedMotion';
 
 interface ScoreSimulatorProps {
   currentPaid: number;
@@ -17,6 +18,7 @@ export const ScoreSimulator: React.FC<ScoreSimulatorProps> = ({
   const [additionalPaid, setAdditionalPaid] = useState<number>(0);
   const [additionalDefaulted, setAdditionalDefaulted] = useState<number>(0);
   const [displayScore, setDisplayScore] = useState<number | string>(0);
+  const reducedMotion = useReducedMotion();
 
   const currentScore = useMemo(() => {
     if (currentSubmitted === 0) return 0;
@@ -34,6 +36,13 @@ export const ScoreSimulator: React.FC<ScoreSimulatorProps> = ({
   }, [currentPaid, currentSubmitted, additionalPaid, additionalDefaulted]);
 
   useEffect(() => {
+    // When reduced motion is preferred, jump straight to the final value
+    // instead of animating the score transition.
+    if (reducedMotion) {
+      setDisplayScore(projectedScore);
+      return;
+    }
+
     // Simple animation logic for the score transition
     if (typeof projectedScore === 'number') {
       const start = typeof displayScore === 'number' ? displayScore : 0;
@@ -61,7 +70,7 @@ export const ScoreSimulator: React.FC<ScoreSimulatorProps> = ({
     } else {
       setDisplayScore(projectedScore);
     }
-  }, [projectedScore]);
+  }, [projectedScore, reducedMotion]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement>,

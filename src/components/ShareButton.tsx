@@ -33,7 +33,9 @@ function buildLPTweet(invoice: Invoice, shareUrl: string): string {
   const settlementDays = Math.max(1, Math.round((now - fundedAt) / 86400));
   return (
     `Earned ${yieldAmount} USDC yield on Invoice #${invoice.id.toString()} ` +
-    `via @ILNProtocol on @stellar — ${rate}% return in ${settlementDays} day${settlementDays !== 1 ? 's' : ''}. ` +
+    `via @ILNProtocol on @stellar — ${rate}% return in ${settlementDays} day${
+      settlementDays !== 1 ? 's' : ''
+    }. ` +
     shareUrl
   );
 }
@@ -111,7 +113,9 @@ export default function ShareButton({ invoice, userAddress, baseUrl }: ShareButt
         {copied ? 'Copied!' : 'Copy text'}
       </button>
       <span
-        className={`text-xs font-mono ${charCount > TWEET_MAX_CHARS ? 'text-red-500' : 'text-on-surface-variant/60'}`}
+        className={`text-xs font-mono ${
+          charCount > TWEET_MAX_CHARS ? 'text-red-500' : 'text-on-surface-variant/60'
+        }`}
         aria-label="Character count"
       >
         {charCount}/{TWEET_MAX_CHARS}

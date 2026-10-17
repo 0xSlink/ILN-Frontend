@@ -137,53 +137,11 @@ This guide consolidates common local setup issues, symptoms, and resolution step
   pnpm test -- --update-snapshots
   ```
 
----
+### Symptom: Nightly testnet smoke fails with `returned HTTP 404`
 
-## Browser / OS / Wallet Compatibility Triage (#794)
-
-Since Freighter (and future WalletConnect, per Issue 18) are browser-extension / external-app dependencies outside the app's direct control, their own version updates can break compatibility unexpectedly. Every error captured by `src/lib/errorTracking.ts` is enriched with structured context (`browser.name`, `browser.version`, `os.name`, `os.version`, `wallet.type`, `wallet.version`, `wallet.provider`) so you can segment error rates by these dimensions.
-
-### How it is captured
-
-- `src/lib/compatibility.ts` parses `navigator.userAgent` for browser/OS and inspects `window.freighter` / `window.stellar.freighter` and `localStorage.iln_wallet_provider` for wallet type/version.
-- `src/lib/errorTracking.ts` attaches this context as **tags** and **contexts** on every `captureException`/`reportError`, on `ErrorBoundary.componentDidCatch`, and on global `window.onerror` / `unhandledrejection` handlers installed by `instrumentation-client.ts` and `app/Providers.tsx`.
-- If `NEXT_PUBLIC_SENTRY_DSN` is configured, the same tags are forwarded to Sentry; otherwise events are emitted as `iln:error` / `iln:analytics:error_captured` CustomEvents for any custom sink — no code change required to switch providers.
-
-### Using the dashboard to triage "works for me" vs "broken for a specific wallet version"
-
-The breakdown view does not require custom building — use your error-tracking provider's dashboard filtering/grouping (e.g. Sentry Discover / Issues → Tags):
-
-1. **Reproduce the report**: note the reporter's browser, OS, wallet type and version (ask the reporter to copy from the ErrorBoundary "Copy" button or from `navigator.userAgent` + Freighter extension version in `chrome://extensions` or `about:addons`).
-2. **Open the error dashboard** (Sentry → Issues or Discover, or your `iln:error` sink).
-3. **Filter / Group By**:
-   - Group by `wallet.type` then `wallet.version` — a spike isolated to e.g. `freighter:5.18.0` with flat rates on other versions indicates a wallet regression.
-   - Break down by `browser.name` + `browser.version` and `os.name` — extension hosts differ by browser; e.g. `Chrome 125 / Windows` vs `Firefox`.
-   - Compare error rate (events / session or events / wallet_connected) segmented by those tags over the last 7–14 days.
-4. **Decide**:
-   - If the spike is **across all versions** → app regression; bisect recent deploys.
-   - If the spike is **one wallet version / one browser-OS combo** → wallet compatibility issue; pin a known-good version in docs, file an upstream issue with the wallet vendor, and consider a feature flag / workaround.
-   - If the rate is **flat and low** → likely user-specific (locked wallet, wrong network) — follow the Wallet and Stellar Testnet section above.
-
-### Adding a new wallet provider
-
-When adding a provider (e.g. WalletConnect), update `src/lib/compatibility.ts:detectWallet()` to return its `type`/`version` and ensure `getStoredWalletProvider()` is set on connect. No dashboard change is needed — new tag values appear automatically.
-
-### Local verification
-
-```bash
-# In browser console on any page:
-# 1. Observe current context
-await import('/src/lib/compatibility.ts').then(m => m.getCompatibilityContext())
-
-# 2. Trigger a test error and watch the enriched event
-window.dispatchEvent(new CustomEvent('iln:error-test'))
-# Or force an error:
-window.dispatchEvent(new Event('error'))
-```
-
-Or listen in code/tests:
-
-```js
-window.addEventListener('iln:error', (e) => console.log(e.detail.tags, e.detail.context));
-window.addEventListener('iln:analytics', (e) => console.log(e.detail));
-```
+- **Underlying Cause**: The live testnet deployment (`https://invoice-liquidity-network.vercel.app`) was built from a commit that predates the route, so it serves the default Next.js 404 page. The route's code is fine; the deployment is stale.
+- **Resolution**:
+  Confirm the route exists in `app/`, check what the live deployment returns, and redeploy the current branch from Vercel:
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' https://invoice-liquidity-network.vercel.app/leaderboard
+  ```

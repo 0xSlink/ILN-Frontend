@@ -71,6 +71,20 @@ export const Default: Story = {
 
 Stories are automatically discovered via the glob `../src/**/*.stories.@(js|jsx|mjs|ts|tsx)` configured in `.storybook/main.ts`.
 
+## Dark Mode Coverage
+
+Every story is automatically captured in **both light and dark mode** via Chromatic modes configured in `.storybook/preview.ts`. This ensures dark-mode-specific regressions (e.g. unreadable status badges, contrast failures) are caught without needing separate story variants.
+
+To opt a specific story out of dark mode capture:
+
+```tsx
+export const DynamicStory: Story = {
+  parameters: {
+    chromatic: { modes: [{ name: 'light', background: '#fff8f3', theme: 'light' }] },
+  },
+};
+```
+
 ## Snapshot Storage
 
 Snapshots are stored and managed by **Chromatic's cloud service**. The `CHROMATIC_PROJECT_TOKEN` secret must be configured in the GitHub repository settings (`Settings → Secrets → Actions`).

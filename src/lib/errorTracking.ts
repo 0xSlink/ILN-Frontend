@@ -51,7 +51,10 @@ function hasSentryDsn(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN);
 }
 
-export function buildErrorReport(error: Error, extra?: Record<string, unknown>): ErrorReport {
+export function buildErrorReport(
+  error: Error,
+  extra?: Record<string, unknown>
+): ErrorReport {
   const context = getCompatibilityContext();
   const tags = getCompatibilityTags(context);
   return {
@@ -63,7 +66,10 @@ export function buildErrorReport(error: Error, extra?: Record<string, unknown>):
   };
 }
 
-export function reportError(error: Error, extra?: Record<string, unknown>): ErrorReport {
+export function reportError(
+  error: Error,
+  extra?: Record<string, unknown>
+): ErrorReport {
   const report = buildErrorReport(error, extra);
 
   // 1. Forward to Sentry if configured.
@@ -95,7 +101,9 @@ export function reportError(error: Error, extra?: Record<string, unknown>): Erro
   // 2. Emit DOM event so any sink (tests, custom dashboard, analytics) can observe.
   if (typeof window !== 'undefined') {
     try {
-      window.dispatchEvent(new CustomEvent<ErrorReport>(ERROR_EVENT, { detail: report }));
+      window.dispatchEvent(
+        new CustomEvent<ErrorReport>(ERROR_EVENT, { detail: report })
+      );
     } catch {
       // ignore
     }
@@ -118,7 +126,10 @@ export function reportError(error: Error, extra?: Record<string, unknown>): Erro
   return report;
 }
 
-export function reportMessage(message: string, extra?: Record<string, unknown>): ErrorReport {
+export function reportMessage(
+  message: string,
+  extra?: Record<string, unknown>
+): ErrorReport {
   return reportError(new Error(message), extra);
 }
 
@@ -137,15 +148,13 @@ export function installGlobalErrorTracking(): void {
   installed = true;
 
   window.addEventListener('error', (event) => {
-    const err =
-      event.error instanceof Error ? event.error : new Error(event.message || 'Unknown error');
+    const err = event.error instanceof Error ? event.error : new Error(event.message || 'Unknown error');
     reportError(err, { source: 'window.onerror', filename: event.filename, lineno: event.lineno });
   });
 
   window.addEventListener('unhandledrejection', (event) => {
     const reason = event.reason;
-    const err =
-      reason instanceof Error ? reason : new Error(String(reason ?? 'Unhandled rejection'));
+    const err = reason instanceof Error ? reason : new Error(String(reason ?? 'Unhandled rejection'));
     reportError(err, { source: 'unhandledrejection' });
   });
 }

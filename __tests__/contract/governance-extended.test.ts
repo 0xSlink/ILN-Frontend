@@ -11,6 +11,9 @@
  * - MOCK_PROPOSALS / MOCK_VOTES data
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { rpc, nativeToScVal } from '@stellar/stellar-sdk';
+import { server } from '@/mocks/server';
 
 import {
   executeProposal,
@@ -20,6 +23,7 @@ import {
   lookupToken,
   createProposal,
   fetchParameterUpdates,
+  fetchSignerRotations,
   fetchVotesForAddress,
   fetchProposals,
   fetchProtocolParameters,
@@ -31,6 +35,11 @@ import {
   type CreateProposalPayload,
   type Proposal,
 } from '@/utils/governance';
+import {
+  combineRecorders,
+  detectMockBacking,
+  expectMockBackingStatus,
+} from '@/test-utils/mock-detection';
 
 const SIGNER = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const mockSignTx = vi.fn(async (_xdr: string) => 'signedXDR');
@@ -145,36 +154,69 @@ describe('governance – lookupToken', () => {
     await expect(lookupToken('')).rejects.toThrow('Invalid Stellar address');
   });
 
-  it('rejects address that does not start with G', async () => {
-    await expect(
-      lookupToken('CABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCD')
-    ).rejects.toThrow('Invalid Stellar address');
+  it('rejects address that does not start with G or C', async () => {
+    await expect(lookupToken('X' + 'A'.repeat(55))).rejects.toThrow('Invalid Stellar address');
   });
 
-  it('returns Unknown Token for valid G-address not in known set', async () => {
-    vi.useFakeTimers();
-    // Valid G-address (G + 55 base32 chars) not in accepted or known tokens
-    const promise = lookupToken('GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBVN');
-    vi.runAllTimers();
-    const token = await promise;
-    expect(token.name).toBe('Unknown Token');
-  });
-
-  it('returns Unknown Token with truncated symbol for unknown valid G-address', async () => {
-    vi.useFakeTimers();
-    const promise = lookupToken('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF');
-    vi.runAllTimers();
-    const token = await promise;
-    expect(token.symbol).toBe('GAAA');
-    expect(token.name).toBe('Unknown Token');
-  });
-
-  it('rejects C-prefixed token contract addresses as invalid', async () => {
-    // Token contract IDs on Stellar start with C, not G
-    // lookupToken validates for G-prefix, so C-prefixed addresses are rejected
+  it('rejects already accepted tokens', async () => {
     await expect(
       lookupToken('CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75')
-    ).rejects.toThrow('Invalid Stellar address');
+    ).rejects.toThrow('already an accepted token');
+  });
+
+  it('simulates Soroban read calls and returns token name and symbol on success', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData:
+          {} as unknown as rpc.Api.SimulateTransactionSuccessResponse['transactionData'],
+        minResourceFee: '100',
+        events: [],
+        result: {
+          retval: nativeToScVal('Wrapped Bitcoin'),
+        },
+      } as unknown as rpc.Api.SimulateTransactionResponse)
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData:
+          {} as unknown as rpc.Api.SimulateTransactionSuccessResponse['transactionData'],
+        minResourceFee: '100',
+        events: [],
+        result: {
+          retval: nativeToScVal('wBTC'),
+        },
+      } as unknown as rpc.Api.SimulateTransactionResponse);
+
+    const token = await lookupToken('CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC');
+    expect(token.name).toBe('Wrapped Bitcoin');
+    expect(token.symbol).toBe('wBTC');
+    expect(token.address).toBe('CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC');
+    mockSimulate.mockRestore();
+  });
+
+  it('throws an error without mock fallback if token simulation fails', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: 'Contract error: FeeOnTransferToken',
+        transactionData:
+          {} as unknown as rpc.Api.SimulateTransactionSuccessResponse['transactionData'],
+        minResourceFee: '100',
+        events: [],
+      } as unknown as rpc.Api.SimulateTransactionResponse)
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData:
+          {} as unknown as rpc.Api.SimulateTransactionSuccessResponse['transactionData'],
+        minResourceFee: '100',
+        events: [],
+      } as unknown as rpc.Api.SimulateTransactionResponse);
+
+    await expect(
+      lookupToken('CD3TE3IAHM737P236XZL2OYU275ZKD6MN7YH7PYYAXYIGEH55OPEWYJC')
+    ).rejects.toThrow('FeeOnTransferToken');
+    mockSimulate.mockRestore();
   });
 });
 
@@ -265,16 +307,48 @@ describe('governance – fetchParameterUpdates', () => {
 });
 
 describe('governance – fetchVotesForAddress', () => {
-  it('returns votes for known mock voter', async () => {
-    vi.useFakeTimers();
-    const promise = fetchVotesForAddress(
-      'GABC123EXAMPLE456789ABC012GHI345JKL678MNO901PQR234STU567VWX890YZ'
+  const MOCK_VOTER = 'GABC123EXAMPLE456789ABC012GHI345JKL678MNO901PQR234STU567VWX890YZ';
+
+  it('returns votes for known mock voter from horizon VoteCast events', async () => {
+    server.use(
+      http.get('https://horizon-testnet.stellar.org/transactions', () => {
+        return HttpResponse.json({
+          _embedded: {
+            records: [
+              {
+                successful: true,
+                created_at: '2026-08-20T10:00:00Z',
+                _embedded: {
+                  records: [
+                    {
+                      type: 'contract',
+                      topics: [
+                        'VoteCast',
+                        '5',
+                        'GABC123EXAMPLE456789ABC012GHI345JKL678MNO901PQR234STU567VWX890YZ',
+                        'true',
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          _links: { next: undefined },
+        });
+      })
     );
+
+    vi.useFakeTimers();
+    const promise = fetchVotesForAddress(MOCK_VOTER);
     vi.runAllTimers();
     const votes = await promise;
 
     expect(Array.isArray(votes)).toBe(true);
     expect(votes.length).toBeGreaterThan(0);
+    expect(votes[0].voter).toBe(MOCK_VOTER);
+    expect(votes[0].proposalId).toBe(5);
+    expect(votes[0].vote).toBe('For');
     // Should be sorted by timestamp descending
     for (let i = 1; i < votes.length; i++) {
       expect(votes[i - 1].timestamp).toBeGreaterThanOrEqual(votes[i].timestamp);
@@ -305,7 +379,6 @@ describe('governance – timeRemaining active paths', () => {
       votingEndsAt: now - 1, // ended 1 second ago
       votesFor: 0,
       votesAgainst: 0,
-      votesAbstain: 0,
       quorumRequired: 100_000,
     };
     expect(timeRemaining(proposal)).toBe('Ended');
@@ -325,7 +398,6 @@ describe('governance – timeRemaining active paths', () => {
       votingEndsAt: now + 86400 * 3 + 3600 * 5, // 3 days 5 hours from now
       votesFor: 0,
       votesAgainst: 0,
-      votesAbstain: 0,
       quorumRequired: 100_000,
     };
     const result = timeRemaining(proposal);
@@ -346,28 +418,26 @@ describe('governance – timeRemaining active paths', () => {
       votingEndsAt: now + 3600 * 5 + 60 * 30, // 5 hours 30 minutes from now
       votesFor: 0,
       votesAgainst: 0,
-      votesAbstain: 0,
       quorumRequired: 100_000,
     };
     const result = timeRemaining(proposal);
     expect(result).toMatch(/\d+h \d+m remaining/);
   });
 
-  it('returns empty string for Failed proposals', () => {
+  it('returns empty string for non-active proposals', () => {
     const now = Math.floor(Date.now() / 1000);
     const proposal: Proposal = {
       id: 103,
       title: 'Test',
       description: 'Test',
       type: 'ParameterUpdate',
-      status: 'Failed',
+      status: 'Rejected',
       proposer: 'G...',
       createdAt: now - 86400,
       votingStartsAt: now - 86400,
       votingEndsAt: now + 86400,
       votesFor: 0,
       votesAgainst: 0,
-      votesAbstain: 0,
       quorumRequired: 100_000,
     };
     expect(timeRemaining(proposal)).toBe('');
@@ -381,10 +451,10 @@ describe('governance – getUserVote', () => {
 
   it('returns the vote choice after casting', async () => {
     vi.useFakeTimers();
-    const promise = castVote(5, 'Abstain', SIGNER, mockSignTx);
+    const promise = castVote(5, 'For', SIGNER, mockSignTx);
     vi.runAllTimers();
     await promise;
-    expect(getUserVote(5)).toBe('Abstain');
+    expect(getUserVote(5)).toBe('For');
   });
 });
 
@@ -674,5 +744,122 @@ describe('governance – fetchProposals session state', () => {
 
     const proposal = proposals.find((p) => p.id === 2);
     expect(proposal?.userVote).toBeUndefined();
+  });
+});
+
+describe('governance – fetchSignerRotations', () => {
+  it('returns default mock signer rotations when Horizon is unavailable', async () => {
+    vi.useFakeTimers();
+    const promise = fetchSignerRotations();
+    vi.runAllTimers();
+    const rotations = await promise;
+    vi.useRealTimers();
+
+    expect(Array.isArray(rotations)).toBe(true);
+    expect(rotations.length).toBeGreaterThan(0);
+    expect(rotations[0]).toHaveProperty('id');
+    expect(rotations[0]).toHaveProperty('oldSigner');
+    expect(rotations[0]).toHaveProperty('newSigner');
+    expect(rotations[0]).toHaveProperty('rotatedAt');
+    expect(rotations[0]).toHaveProperty('action');
+    expect(rotations[0].securityLevel).toBe('critical');
+
+    // Should be sorted descending by timestamp
+    for (let i = 1; i < rotations.length; i++) {
+      expect(rotations[i - 1].rotatedAt).toBeGreaterThanOrEqual(rotations[i].rotatedAt);
+    }
+  });
+
+  it('parses SignerRotated events from Horizon transaction stream', async () => {
+    server.use(
+      http.get('https://horizon-testnet.stellar.org/transactions', () => {
+        return HttpResponse.json({
+          _embedded: {
+            records: [
+              {
+                successful: true,
+                hash: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+                created_at: '2026-08-25T12:00:00Z',
+                _embedded: {
+                  records: [
+                    {
+                      type: 'contract',
+                      topics: [
+                        'SignerRotated',
+                        'GCOEF7LMN456OPQ789RST012UVW345XYZ678ABC901DEF234GHI567JKL',
+                        'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+                        'Quarterly rotation',
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+          _links: { next: undefined },
+        });
+      })
+    );
+
+    vi.useFakeTimers();
+    const promise = fetchSignerRotations();
+    vi.runAllTimers();
+    const rotations = await promise;
+    vi.useRealTimers();
+
+    expect(Array.isArray(rotations)).toBe(true);
+    expect(rotations.length).toBeGreaterThan(0);
+    expect(rotations[0].oldSigner).toBe(
+      'GCOEF7LMN456OPQ789RST012UVW345XYZ678ABC901DEF234GHI567JKL'
+    );
+    expect(rotations[0].newSigner).toBe('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF');
+    expect(rotations[0].reason).toBe('Quarterly rotation');
+    expect(rotations[0].securityLevel).toBe('critical');
+  });
+});
+
+// ─── Mock-backing detection (#857) ────────────────────────────────────────────
+//
+// See the matching block in governance.test.ts for how the recorded status
+// works. Flip 'mock' → 'real' once the linked issue's implementation lands.
+
+describe('governance – mock-backing detection (extended)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function settle<T>(promise: Promise<T>): Promise<T> {
+    await vi.runAllTimersAsync();
+    return promise;
+  }
+
+  it('executeProposal (#840): tx hash provenance and signTx usage', async () => {
+    vi.useFakeTimers();
+    const signTx = vi.fn(async (_xdr: string) => 'signedXDR');
+    const report = await detectMockBacking({
+      run: () => settle(executeProposal(6, SIGNER, signTx)),
+      boundaries: { signTx },
+    });
+    expectMockBackingStatus('executeProposal', report, 'mock');
+  });
+
+  it('lookupToken (#845): reaches Soroban RPC or the network', async () => {
+    vi.useFakeTimers();
+    const simulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValue(new Error('offline'));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+    const report = await detectMockBacking({
+      // Not an accepted or hard-coded "known" token, so a real lookup is required.
+      run: () =>
+        settle(
+          lookupToken('GBQD2MXHXD2SRHRQZRZ5JZ4UNLMTMLZNNDJHCQXIJXE2ANBV5IDWB2XK').catch(
+            () => undefined
+          )
+        ),
+      identify: () => undefined,
+      boundaries: { network: combineRecorders(simulate, fetchSpy) },
+    });
+    expectMockBackingStatus('lookupToken', report, 'mock');
   });
 });

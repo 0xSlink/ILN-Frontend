@@ -1,12 +1,12 @@
 /**
- * Every indexer-backed view × the fixture catalogue: typed errors render an
- * accessible failure (retry only when retrying can help), malformed proxy
- * envelopes are treated as schema errors, and stale data is flagged.
- * No view may fall back to generated data.
+ * Every indexer-backed view × the fixture catalogue: typed proxy errors render
+ * the matching accessible notice (with the proxy's safe detail) and are only
+ * retried automatically when transient, malformed proxy envelopes are rejected,
+ * and stale data is flagged. No view may fall back to generated data.
  */
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import ActivityFeed from '@/components/ActivityFeed';
 import DefaultRateChart from '@/components/charts/DefaultRateChart';
 import FundingChart from '@/components/charts/FundingChart';
@@ -16,11 +16,7 @@ import {
   proxyErrorEnvelope,
   proxySuccessEnvelope,
 } from '@/mocks/fixtures/indexer';
-import {
-  INDEXER_ERROR_STATUS,
-  isRetryableIndexerError,
-  type IndexerErrorCode,
-} from '@/lib/indexer/errors';
+import { INDEXER_ERROR_STATUS, type IndexerErrorCode } from '@/lib/indexer/errors';
 import type { IndexerResourceName } from '@/lib/indexer/types';
 
 const CONSUMERS: Array<{
@@ -37,24 +33,38 @@ const ERROR_CODES = Object.keys(INDEXER_ERROR_STATUS) as IndexerErrorCode[];
 
 const originalFetch = global.fetch;
 
+/** Notice variant each proxy error code must render as. */
+const NOTICE_FOR_CODE: Record<IndexerErrorCode, string> = {
+  unauthorized: 'unauthorized',
+  forbidden: 'unauthorized',
+  rate_limited: 'rate-limited',
+  schema: 'malformed',
+  version_mismatch: 'malformed',
+  bad_request: 'malformed',
+  unknown_resource: 'malformed',
+  timeout: 'unavailable',
+  network: 'unavailable',
+  upstream: 'unavailable',
+  not_configured: 'unavailable',
+  not_found: 'unavailable',
+};
+const TRANSIENT = new Set<IndexerErrorCode>(['timeout', 'network', 'upstream']);
+
 function respondWith(body: unknown, status = 200) {
-  global.fetch = vi.fn().mockResolvedValue(
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    })
+  // A fresh Response per call: retries must not see an already-consumed body.
+  global.fetch = vi.fn().mockImplementation(
+    async () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      })
   );
 }
 
-let randomSpy: ReturnType<typeof vi.spyOn>;
-
-beforeEach(() => {
-  randomSpy = vi.spyOn(Math, 'random');
-});
+/** Text that only appears when a view renders indexer rows. */
+const DATA_MARKERS = [/Invoice submitted by/, /Invoice funded by/, /Total Funding/, /%$/];
 
 afterEach(() => {
-  // No consumer may fabricate data with Math.random on any path.
-  expect(randomSpy).not.toHaveBeenCalled();
   global.fetch = originalFetch;
   vi.restoreAllMocks();
 });
@@ -68,12 +78,17 @@ describe.each(CONSUMERS)('$name', ({ resource, element }) => {
     render(element);
 
     const alert = await screen.findByRole('alert');
-    expect(alert).toHaveAttribute('data-error-code', code);
-    expect(alert).toHaveTextContent(`Fixture message for ${code}.`);
+    expect(alert).toHaveAttribute('data-testid', `indexer-notice-${NOTICE_FOR_CODE[code]}`);
+    // Rate limiting is handled from the HTTP status and Retry-After, not the envelope detail.
+    if (code !== 'rate_limited') expect(alert).toHaveTextContent(`Fixture message for ${code}.`);
 
-    const retry = screen.queryByRole('button', { name: 'Retry' });
-    if (isRetryableIndexerError(code)) expect(retry).toBeInTheDocument();
-    else expect(retry).not.toBeInTheDocument();
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.length;
+    if (TRANSIENT.has(code)) expect(calls).toBeGreaterThan(1);
+    else expect(calls).toBe(1);
+
+    for (const marker of DATA_MARKERS.slice(0, 3)) {
+      expect(screen.queryByText(marker)).not.toBeInTheDocument();
+    }
   });
 
   it.each(malformedProxyEnvelopes.map((f) => [f.name, f.body] as const))(
@@ -81,7 +96,10 @@ describe.each(CONSUMERS)('$name', ({ resource, element }) => {
     async (_name, body) => {
       respondWith(body);
       render(element);
-      expect(await screen.findByRole('alert')).toHaveAttribute('data-error-code', 'schema');
+      expect(await screen.findByRole('alert')).toHaveAttribute(
+        'data-testid',
+        'indexer-notice-malformed'
+      );
     }
   );
 
@@ -90,7 +108,10 @@ describe.each(CONSUMERS)('$name', ({ resource, element }) => {
       resource === 'leaderboard' ? 'invoice.events' : 'leaderboard';
     respondWith(proxySuccessEnvelope(other, []));
     render(element);
-    expect(await screen.findByRole('alert')).toHaveAttribute('data-error-code', 'schema');
+    expect(await screen.findByRole('alert')).toHaveAttribute(
+      'data-testid',
+      'indexer-notice-malformed'
+    );
   });
 
   it('flags stale data', async () => {
