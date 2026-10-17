@@ -62,3 +62,24 @@ export const INDEXER_SERVER_URL = process.env.INDEXER_URL || process.env.NEXT_PU
  * When set, enables higher rate limits vs. anonymous requests.
  */
 export const INDEXER_API_KEY = process.env.INDEXER_API_KEY || '';
+
+/**
+ * Default timeout for indexer requests in milliseconds (#1107).
+ */
+export const INDEXER_DEFAULT_TIMEOUT_MS = 10_000;
+
+/**
+ * Maximum retry attempts for transient indexer failures (#1108).
+ */
+export const INDEXER_DEFAULT_RETRIES = 2;
+
+/**
+ * Base backoff in milliseconds for exponential retry (#1108).
+ */
+export const INDEXER_DEFAULT_BACKOFF_MS = 300;
+
+/**
+ * Maximum backoff cap in milliseconds for exponential retry (#1108).
+ */
+export const INDEXER_MAX_BACKOFF_MS = 2_000;
+

@@ -1,10 +1,13 @@
-import { fetchLeaderboard as fetchLeaderboardData, type LeaderboardEntry } from '@/lib/indexerClient';
+import { fetchLeaderboard as fetchLeaderboardData, type LeaderboardEntry, type LeaderboardResult,
+  type IndexerRequestOptions, } from '@/lib/indexerClient';
 
 export interface LeaderboardResult<T = unknown[]> {
   data: T;
   /** True when the indexer was unreachable (distinct from "no rows"). */
   unavailable: boolean;
 }
+
+export type { LeaderboardResult };
 
 /**
  * Fetch the leaderboard from the indexer service via the centralized client.
@@ -16,7 +19,8 @@ export interface LeaderboardResult<T = unknown[]> {
  */
 export async function getLeaderboard<T = LeaderboardEntry[]>(
   type: string,
-  period: string
+  period: string,
+  options?: IndexerRequestOptions
 ): Promise<LeaderboardResult<T>> {
   try {
     // Use centralized indexer client - single authoritative boundary
@@ -27,4 +31,10 @@ export async function getLeaderboard<T = LeaderboardEntry[]>(
     console.error('[LeaderboardAPI] Error fetching leaderboard:', error);
     return { data: [] as unknown as T, unavailable: true };
   }
+  const indexerUrl = process.env.INDEXER_URL;
+  if (!indexerUrl) {
+    return { data: [] as unknown as T, unavailable: false, status: 'empty' };
+  }
+
+  return fetchLeaderboard<T>(type, period, options);
 }

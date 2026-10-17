@@ -5,12 +5,18 @@ import Link from 'next/link';
 import { formatAddress, formatRelativeTime, formatUSDC } from '@/utils/format';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
+  type IndexerNoticeStatus,
 } from '@/components/IndexerUnavailableNotice';
 import DataSourceCaption from '@/components/DataSourceCaption';
 import { 
-  fetchInvoiceEvents, 
   type RawInvoiceEvent as IndexerRawInvoiceEvent 
 } from '@/lib/indexerClient';
+import {
+  fetchInvoiceEvents,
+  classifyIndexerClientError,
+  isAbortError,
+  type RawInvoiceEvent,
+} from '@/lib/indexer-client';
 
 type InvoiceEventType =
   | 'submitted'
@@ -35,6 +41,10 @@ interface InvoiceEvent {
   actor?: string;
   data?: Record<string, unknown>;
   raw: RawInvoiceEvent;
+}
+
+interface ActivityFeedProps {
+  invoiceId: bigint;
 }
 
 const EVENT_TYPE_MAP: Record<string, InvoiceEventType> = {
@@ -275,20 +285,33 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
   const [events, setEvents] = useState<InvoiceEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorStatus, setErrorStatus] = useState<IndexerNoticeStatus>('unavailable');
   const [expandedEvents, setExpandedEvents] = useState<Record<number, boolean>>({});
 
-  const fetchEvents = useCallback(async () => {
+  const fetchEvents = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoading(true);
       // Use centralized indexer client - single authoritative boundary
       // with explicit schema validation and timeout handling
       const rawEvents = await fetchInvoiceEvents(invoiceId);
+      setError(null);
+      const rawEvents = await fetchInvoiceEvents(invoiceId, { signal });
       setEvents(rawEvents.map(parseInvoiceEvent));
       setError(null);
     } catch (err) {
       console.error('[ActivityFeed] Failed to fetch events:', err);
+      if (isAbortError(err)) {
+        return;
+      }
+      console.error(err);
       setEvents([]);
       setError('Unable to load activity feed.');
+      const boundary = classifyIndexerClientError(err);
+      setErrorStatus(
+        boundary === 'rate-limited' || boundary === 'unauthorized' || boundary === 'malformed'
+          ? boundary
+          : 'unavailable'
+      );
 
       // Only substitute demonstration data in development. In every other
       // environment (including production) show the honest "temporarily
@@ -326,7 +349,11 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
   }, [invoiceId]);
 
   useEffect(() => {
-    fetchEvents();
+    const controller = new AbortController();
+    void fetchEvents(controller.signal);
+    return () => {
+      controller.abort();
+    };
   }, [fetchEvents]);
 
   const sortedEvents = useMemo(
@@ -361,6 +388,7 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
         </p>
         <IndexerUnavailableNotice
           dataSource="The invoice activity feed"
+          status={errorStatus}
           onRetry={() => {
             setError(null);
             setEvents([]);
