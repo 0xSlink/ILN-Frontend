@@ -4,29 +4,9 @@ Thank you for your interest in contributing to the Invoice Liquidity Network (IL
 
 ## Prerequisites
 
-- **Node.js**: Version 20 LTS (`.nvmrc` specified: `20.20.2`)
-- **pnpm**: Version 9 or higher
+- **Node.js**: Version 18 or higher (recommended: Node.js 20 LTS)
+- **npm**: Version 9 or higher
 - **Git**: For version control
-
-## Issue Leveling and Label Curation
-
-To help contributors find tasks aligned with their experience and available time, we triage issues by **Complexity** and **Context/Familiarity requirements**.
-
-### "Good First Issue" vs. "Trivial Complexity"
-
-- **Good First Issue**:
-
-  - **Context Requirement**: Low. A newcomer with no previous knowledge of our domain (Stellar/Soroban, invoice factoring, localized routing configurations) should be able to solve it using common web development skills.
-  - **Self-Contained**: The task has a clear start and end point, affects isolated files, and does not require complex integrations or cross-cutting structural modifications.
-  - **Examples**: Implementing helper scripts (such as `pnpm run clean`), writing troubleshooting documentation, adding static content/badges, fixing localized stylesheets.
-  - **Label**: `good-first-issue`
-
-- **Trivial Complexity**:
-  - **Context Requirement**: Variable (often High). While the code changes themselves might be extremely small (e.g. changing 2 lines in a React context or smart contract call), it requires specific familiarity with the codebase, history, or integration layers to understand _why_ the change is needed and how to do it safely.
-  - **Examples**: Tweaking a Freighter smart contract connection event listener, altering a specific Supabase permission or RLS script.
-  - **Label**: `complexity: trivial`
-
-For a curated list of candidate issues matching these criteria, see [good-first-issue-candidates.md](docs/good-first-issue-candidates.md).
 
 ## Getting Started
 
@@ -48,28 +28,19 @@ For a curated list of candidate issues matching these criteria, see [good-first-
 ### 2. Install Dependencies
 
 ```bash
-pnpm install
+npm install
 ```
 
 The `prepare` script runs `husky` automatically, registering the hooks in `.husky/`.
 
 ### What the hooks do
 
-| Hook         | Trigger      | Action                                                                 |
-| ------------ | ------------ | ---------------------------------------------------------------------- |
-| `pre-commit` | `git commit` | Runs `eslint --fix` and `prettier --write` on staged files only        |
-| `pre-push`   | `git push`   | Runs `tsc --incremental` to cache and catch type errors before pushing |
+| Hook         | Trigger      | Action                                                               |
+| ------------ | ------------ | -------------------------------------------------------------------- |
+| `pre-commit` | `git commit` | Runs `eslint --fix` and `prettier --write` on staged files only      |
+| `pre-push`   | `git push`   | Runs `tsc --noEmit` to catch type errors before the branch is pushed |
 
-### Husky Hook Performance & Caching
-
-To optimize the contributor experience, we audited the performance of the Husky hooks:
-
-- **`pre-commit` (`npx lint-staged`)**: Takes ~1.9s to run when no staged files need formatting, and typically under 5–10s for formatted staged edits.
-- **`pre-push` (`tsc`)**: Switching from a full typecheck (`npx tsc --noEmit`) to an incremental typecheck (`npx tsc --incremental`) improves performance significantly:
-  - **Cold Run (Full check / clean config)**: ~32.3 seconds.
-  - **Warm Run (Incremental / local cache)**: ~8.4 seconds (a ~74% speedup).
-
-The generated `tsconfig.tsbuildinfo` build cache file is ignored in `.gitignore` to keep git diffs clean.
+Hooks are scoped to staged files via `lint-staged`, so they typically complete in well under 10 seconds.
 
 ### Skipping hooks (not recommended)
 
@@ -161,7 +132,7 @@ If working on Testnet, fund your account using the Friendbot:
 All shared UI components are documented in Storybook. Browse them locally:
 
 ```bash
-pnpm run storybook
+npm run storybook
 ```
 
 A Storybook is also deployed to GitHub Pages on every merge to `main` — check the repo's Pages link for the latest published version.
@@ -169,21 +140,12 @@ A Storybook is also deployed to GitHub Pages on every merge to `main` — check 
 ### 6. Start Development Server
 
 ```bash
-pnpm run dev
+npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## Development Workflow
-
-### Lockfile Integrity & Package Manager Conventions
-
-To prevent silent dependency version drift and ensure deterministic reproducible builds across all developer environments and CI/CD pipelines, this repository enforces strict lockfile integrity:
-
-- **Authoritative Lockfile**: `pnpm-lock.yaml` is the sole source of truth for installed dependency versions. Never use `npm install`, `yarn`, or manual edits on `pnpm-lock.yaml`.
-- **Enforced `--frozen-lockfile` in CI**: All GitHub Actions CI jobs install dependencies with `pnpm install --frozen-lockfile`. If a pull request modifies `package.json` without committing a corresponding update to `pnpm-lock.yaml`, the CI install step will fail.
-- **Drift Detection**: CI runs an explicit check (`git diff --exit-code pnpm-lock.yaml`) verifying that a fresh install produces zero diffs against the committed lockfile.
-- **Adding or Updating Dependencies**: Always use `pnpm add <pkg>` or `pnpm update <pkg>` locally, verify the changes with `pnpm run verify`, and commit both `package.json` and `pnpm-lock.yaml` together.
 
 ### Pre-Push Checklist: `pnpm run verify`
 
@@ -193,64 +155,80 @@ Before pushing a branch or opening a PR, run:
 pnpm run verify
 ```
 
-This runs the same checks as CI, in the same order, in a single command: `lint` → `env:check` → `format:check` → `tsc --incremental` → `test`. A passing `pnpm run verify` locally means the CI `lint` and `tests` jobs will pass too, so use it instead of running each check separately to avoid round-trips on avoidable CI failures.
+This runs the same checks as CI, in the same order, in a single command: `lint` → `env:check` → `i18n:check` → `format:check` → `tsc --noEmit` → `test`. A passing `pnpm run verify` locally means the CI `lint` and `tests` jobs will pass too, so use it instead of running each check separately to avoid round-trips on avoidable CI failures.
 
-### Troubleshooting Local vs CI Build Mismatch
+### Issue and PR Assignment Policy
 
-If a build or test run succeeds in the GitHub Actions CI environment but fails locally on your machine, it is often due to stale build artifact caches, Next.js build caches, or outdated storybook/test caches.
+Issues that are assigned to a contributor are expected to move forward promptly. If an issue remains assigned without a linked PR update for 7 days, the repository automation will post a reminder comment. If the issue still shows no linked PR activity after 14 days, the assignee is automatically removed so the issue can be claimed by someone else.
 
-To resolve this, run the clean script to clear out all generated build files and caches:
+The thresholds and message text are configurable through the workflow inputs and repository variables used by [.github/workflows/stale-assignments.yml](.github/workflows/stale-assignments.yml). Contributors should keep assignments current, open or update a linked PR early, and unassign themselves if they can no longer work on the issue.
 
-```bash
-pnpm run clean
-```
+### Issue and PR Assignment Policy
 
-This clears the following paths:
+Issues that are assigned to a contributor are expected to move forward promptly. If an issue remains assigned without a linked PR update for 7 days, the repository automation will post a reminder comment. If the issue still shows no linked PR activity after 14 days, the assignee is automatically removed so the issue can be claimed by someone else.
 
-- `.next/` (Next.js build cache)
-- `.turbo/` (Turborepo execution cache)
-- `storybook-static/` (Storybook static build)
-- `coverage/` (Vitest coverage reports)
-- `test-results/` & `playwright-report/` (Playwright E2E test artifacts)
-- `.lighthouseci/` (Lighthouse audit report caches)
-- `tsconfig.tsbuildinfo` (TypeScript incremental compilation info)
+The thresholds and message text are configurable through the workflow inputs and repository variables used by [.github/workflows/stale-assignments.yml](.github/workflows/stale-assignments.yml). Contributors should keep assignments current, open or update a linked PR early, and unassign themselves if they can no longer work on the issue.
 
-After cleaning, run a fresh install with frozen lockfile and verify:
+### Before Proposing Architecture Changes
 
-```bash
-pnpm install --frozen-lockfile
-pnpm run verify
-```
+Read [docs/architecture.md](docs/architecture.md) first. Some questions have already been decided, and reopening one without that context wastes review time:
 
-### Makefile Support
+- **GraphQL**: the frontend reads data over REST, Soroban RPC, Horizon, and the indexer's REST/WebSocket endpoints. The decision to adopt, defer, or drop GraphQL is made in [#929](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/issues/929) and recorded in the status section of [docs/graphql-query-guidelines.md](docs/graphql-query-guidelines.md). Read both before proposing a GraphQL client or layer.
 
-For contributors who prefer using `make`, a top-level `Makefile` is available mirroring standard `pnpm` tasks:
+### Data Fetching and React Query Architecture
 
-| Target         | Executed Command | Purpose                     |
-| :------------- | :--------------- | :-------------------------- |
-| `make install` | `pnpm install`   | Install dependencies        |
-| `make dev`     | `pnpm dev`       | Start development server    |
-| `make build`   | `pnpm build`     | Build production bundle     |
-| `make test`    | `pnpm test`      | Run Vitest unit tests       |
-| `make lint`    | `pnpm lint`      | Run ESLint check            |
-| `make format`  | `pnpm format`    | Run Prettier formatter      |
-| `make verify`  | `pnpm verify`    | Run full verification suite |
+For full architectural specifications, key factories, caching defaults, and mutation patterns, consult the canonical **[Data-Fetching Architecture Guide](docs/data-fetching-architecture.md)** and **[Architecture Overview](docs/architecture.md)**.
 
-### Component Scaffolding
+To ensure consistent caching, loading states, and bundle efficiency across the application:
 
-To quickly create a new React component along with its matching Storybook story and Vitest test stub following project conventions:
+1. **Centralized Query Hooks**:
+   All contract data and network fetching logic must be encapsulated inside custom React Query hooks under `src/hooks/queries/` (or `src/hooks/`).
 
-```bash
-pnpm scaffold:component <ComponentName>
-# Or for nested components:
-pnpm scaffold:component ui/CustomCard
-```
+   - Direct `fetch()` calls and direct `useQueryClient` / `QueryClient` usage are **disallowed** inside UI component files (`src/components`, `src/screens`, `src/app`).
+   - An ESLint rule in `eslint.config.mjs` flags direct `fetch` and `useQueryClient` imports/usages in component files outside `src/hooks`.
 
-This command generates:
+2. **Shared Default Query Configuration**:
+   All query hooks build on `DEFAULT_QUERY_CONFIG` / `createQueryConfig` exported from `src/hooks/queries/defaultConfig`:
 
-- Component file: `src/components/<ComponentName>.tsx`
-- Storybook file: `src/components/<ComponentName>.stories.tsx`
-- Test stub file: `src/components/__tests__/<ComponentName>.test.tsx` (or inside the target subdirectory)
+   - `staleTime`: Default 30,000ms (30 seconds)
+   - `gcTime`: Default 5 minutes (300,000ms)
+   - `refetchOnWindowFocus`: Default `false`
+   - `retry`: Default `2`
+
+   Documented per-hook overrides (such as custom `staleTime` or `refetchInterval`) are permitted via `createQueryConfig({ ... })` when genuinely justified by data volatility.
+
+3. **Exception Process**:
+   In rare cases where direct `fetch` or `useQueryClient` is genuinely required inside a component (e.g. an isolated user feedback form submission or app-level reconnect banner):
+   - Add an inline ESLint disable comment above the line:
+     ```typescript
+     // eslint-disable-next-line no-restricted-syntax, no-restricted-imports -- Legacy inline exception or client-only action
+     ```
+   - Provide a concise comment documenting why a custom hook in `src/hooks/queries` was not used.
+
+### Type Safety: `as any` Casts
+
+Bare `as any` casts silently defeat TypeScript and were the source of a 60+ instance backlog (see #908, #909, #910, #911). New unjustified casts are blocked by the custom `local/require-as-any-justification` ESLint rule in `eslint.config.mjs` (backed by `eslint-rules/require-as-any-justification.mjs`).
+
+1. **Prefer a real type first.** Before reaching for `as any`:
+   - Extend the domain interface (e.g. add an optional field such as `Invoice.whitelist` or `last_activity_ledger` instead of casting around its absence).
+   - Narrow `unknown` payloads (Soroban `scValToNative` results, Horizon event topics) with `typeof` / `in` checks and `Record<string, unknown>`.
+   - Model optional third-party surface explicitly (e.g. `FreighterWindow`, `TokenAvailability`) and use `as unknown as T` for stubs rather than `as any`.
+2. **If the cast is genuinely unavoidable** (a real third-party type gap such as an untyped `@stellar/freighter-api` experimental method or a `recharts` tooltip formatter signature), document it with a justification comment on the **immediately preceding line**:
+
+   ```typescript
+   // as-any justification: @stellar/freighter-api does not type the
+   // experimental `addTrustline` wallet method, so we cast the module
+   // namespace to reach it. Remove once upstream types include it.
+   // See https://github.com/stellar/freighter/issues/...
+   await (freighter as any).addTrustline?.({
+     assetCode: token.symbol,
+     assetIssuer: token.contractId,
+   });
+   ```
+
+   The comment must state the specific type-system limitation and, where one exists, link the upstream issue/type-definition gap. The lint rule errors when this comment is missing.
+
+3. **Scope:** the rule is `error` in production code and `warn` in tests/stories/`__tests__` (test doubles and DOM stubs legitimately need loose casts). Keep test casts minimal and typed where cheap to do so.
 
 ### Code Style and Formatting
 
@@ -260,20 +238,20 @@ We use **ESLint** and **Prettier** to maintain consistent code quality.
 
 ```bash
 # Check for linting errors
-pnpm run lint
+npm run lint
 
 # Auto-fix linting errors
-pnpm run lint:fix
+npm run lint:fix
 ```
 
 #### Formatting
 
 ```bash
 # Format all files
-pnpm run format
+npm run format
 
 # Check formatting without modifying files
-pnpm run format:check
+npm run format:check
 ```
 
 #### Pre-commit Hooks
@@ -281,7 +259,7 @@ pnpm run format:check
 We recommend using Husky for pre-commit hooks (optional but recommended):
 
 ```bash
-pnpm add --save-dev husky lint-staged
+npm install --save-dev husky lint-staged
 npx husky install
 npx husky add .husky/pre-commit "npx lint-staged"
 ```
@@ -306,16 +284,16 @@ Add to `package.json`:
 
 ```bash
 # Run all unit tests
-pnpm test
+npm test
 
 # Run tests in watch mode
-pnpm run test:watch
+npm test -- --watch
 
 # Run tests with coverage
-pnpm test -- --coverage
+npm test -- --coverage
 
 # Update snapshots after intentional UI changes
-pnpm test -- --update-snapshots
+npm test -- --update-snapshots
 ```
 
 #### Test File Organization
@@ -351,43 +329,30 @@ Note: a number of component tests still live as flat files directly under
 only governs where _new_ tests should go. Bulk migration to colocation is a
 candidate for a future dedicated issue.
 
-#### Flaky Test Detection & Quarantine Process
-
-- **Automated Detection**: A scheduled CI workflow (`flaky-test-detection.yml`) runs the full test suite 3× sequentially on a weekly schedule (every Sunday at 03:00 UTC) to identify intermittent test failures without burdening per-PR CI run times.
-- **Quarantining a Flaky Test**:
-  1. Open a GitHub Issue titled `flaky: <Test Description / Suite Name>` detailing the failure log and frequency.
-  2. Mark the flaky test using `.skip` (e.g. `it.skip(...)` or `describe.skip(...)`) in code.
-  3. Include a comment above the `.skip` referencing the tracking issue URL:
-     ```typescript
-     // Quarantined due to flakiness - see https://github.com/Invoice-Liquidity-Network/ILN-Frontend/issues/<issue_number>
-     it.skip('handles dynamic timer updates without race conditions', () => { ... });
-     ```
-  4. Fix the underlying timing or async race condition in a follow-up PR and remove `.skip`.
-
 #### End-to-End Tests (Playwright)
 
 ```bash
 # Run all E2E tests
-pnpm run test:e2e
+npm run test:e2e
 
 # Run E2E tests in headed mode (for debugging)
-pnpm run test:e2e -- --headed
+npm run test:e2e -- --headed
 
 # Run specific test file
-pnpm run test:e2e -- invoice-submission.spec.ts
+npm run test:e2e -- invoice-submission.spec.ts
 ```
 
 #### Visual Regression Tests (Storybook + Chromatic)
 
 ```bash
 # Start Storybook locally
-pnpm run storybook
+npm run storybook
 
 # Build Storybook
-pnpm run build-storybook
+npm run build-storybook
 
 # Run Chromatic visual tests
-pnpm run chromatic
+npm run chromatic
 ```
 
 ### Commit message format
@@ -399,7 +364,7 @@ This repository uses Conventional Commits to power changelog generation via `git
 - Example: `chore: add CHANGELOG and git-cliff automation for frontend repo`
 - After adding release-worthy commits, update the changelog with:
   ```bash
-  pnpm run generate:changelog
+  npm run generate:changelog
   ```
 
 ## Branch Naming Convention
@@ -430,21 +395,21 @@ This convention aligns with our commit message format and helps with changelog g
 
 1. **Code Quality**:
 
-   - Run `pnpm run verify` (lint, env:check, format:check, tsc --noEmit, test) and ensure it passes — this mirrors CI exactly
-   - Run `pnpm run lint:fix` to fix all linting errors
-   - Run `pnpm run format` to ensure consistent formatting
+   - Run `pnpm run verify` (lint, env:check, i18n:check, format:check, tsc --noEmit, test) and ensure it passes — this mirrors CI exactly
+   - Run `npm run lint:fix` to fix all linting errors
+   - Run `npm run format` to ensure consistent formatting
    - Ensure zero ESLint warnings
 
 2. **Testing**:
 
-   - Run `pnpm test` and ensure all tests pass
-   - Run `pnpm run test:e2e` for critical user flows
+   - Run `npm test` and ensure all tests pass
+   - Run `npm run test:e2e` for critical user flows
    - Add tests for new features or bug fixes
    - Maintain test coverage above thresholds (90% lines, 90% functions, 80% branches)
 
 3. **Visual Changes**:
 
-   - If your PR includes UI changes, run `pnpm run storybook`
+   - If your PR includes UI changes, run `npm run storybook`
    - Ensure Storybook stories are updated or added for new components
    - Chromatic will automatically run visual regression tests on your PR
 
@@ -452,6 +417,34 @@ This convention aligns with our commit message format and helps with changelog g
    - Update relevant documentation (README, DESIGN.md, architecture docs)
    - Add comments for complex logic
    - Update TypeScript types if needed
+
+### Closing issues that claim a mock was replaced
+
+A merged PR's `Closes #…` keyword automatically closes the issue whether or not the diff does what the issue says. Governance write paths were once closed as "live" while still returning `Math.random()` fake hashes and in-memory mock mutations because PR #670 was merged with `Closes #651 / #652 / #653` without manual or automated verification of the write paths. See the [governance mock-closure retrospective](docs/governance-mock-regression-retrospective.md) and [frontend mock closure audit](docs/frontend-mock-closure-audit.md) for full context on this motivating incident.
+
+To prevent recurrence, the following process controls are mandatory:
+
+- **PR Template Checklist Item (Process Control)**: Every PR template requires explicit confirmation of two items before merge:
+  1. _Mock-Replacement Verification_: If the PR claims to close an issue saying "replace mock", "implement real", or "wire live", both author and reviewer must confirm that the specific mock pattern (e.g. `Math.random()` fake hash, in-memory mock state mutation, unused signer parameter, `MOCK_*` array stub) is completely removed in the diff.
+  2. _Linked-Issue Behavior Verification_: Reviewers must verify that the actual behavior change described in the linked issue is present in the PR diff, not just that CI is green.
+- **Authors:** only use `Closes` for issues the diff fully resolves. Use `Refs #…` for partial work, and state explicitly in the description which sub-claims remain open.
+- **Reviewers:** check which checks actually ran on the PR. A PR with no test workflow in its checks list has no CI signal.
+- For contract-integration functions, record the function as `'real'` using the mock-backing detection helper ([docs/testing.md → Mock-backing detection](docs/testing.md#mock-backing-detection)).
+- If the PR changes a status doc (e.g. `docs/contract-integration-status.md` or `docs/mock-inventory.md`), the doc and the `Closes` lines must agree. If the doc still says **Stubbed** or **Mock**, the issue stays open.
+
+### Issue and PR Title Conventions (Implementation vs. Planning/Documentation)
+
+Issue titles like "Replace X mock with live integration" read as done-when-closed, which caused severe confusion when closed by planning or documentation PRs. All contributors and maintainers must adhere to the following title conventions (Issue #855):
+
+| Category            | Allowed Title Prefixes / Verbs                                                               | Usage Guidelines & Merge Requirements                                                                                                                                            | Examples                                                                                                                    |
+| :------------------ | :------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------- |
+| **Implementation**  | `feat:`, `fix:`, `Implement real <X>`, `Replace <X> mock with on-chain <Y>`, `Wire live <X>` | **Only** for PRs and issues delivering actual runtime code changes. May only be closed when the mock is completely removed from the production codebase and verified with tests. | `feat(governance): implement real castVote transaction signing`, `fix: replace lookupToken mock with live Soroban RPC read` |
+| **Planning & Spec** | `plan:`, `spec:`, `rfc:`, `Design <X>`, `Architecture for <X>`                               | For architectural designs, ADRs, sequence diagrams, and interface planning. **Never** use "Replace..." or "Wire..." in a planning issue title.                                   | `plan: design Soroban batch transaction signing architecture`, `spec: multi-token liquidity pool error handling`            |
+| **Documentation**   | `docs:`, `Document <X>`, `Update <X> guide`                                                  | For updating guides, API references, or status trackers.                                                                                                                         | `docs: document governance contract integration status`, `docs: update deployment runbook for testnet`                      |
+| **Audit & Triage**  | `audit:`, `triage:`, `Audit <X> for <Y>`                                                     | For surveys, static analysis, gap analysis, and incident retrospectives. The deliverable is a report doc or inventory, not the fix itself.                                       | `audit: review closed mock-replacement issues for regressions`, `audit: check as-any cast occurrences in components`        |
+| **Tracking / Epic** | `tracking:`, `epic:`, `[Epic] <X>`                                                           | Umbrella issues grouping multiple sub-tasks. Must **not** be closed via keyword by a PR resolving only a subset of child issues.                                                 | `tracking: governance live contract integration suite`, `epic: mainnet launch security controls`                            |
+
+These conventions apply to all new issues and PRs going forward and are referenced by this hardening batch (#853–#856).
 
 ### PR Description Template
 
@@ -486,6 +479,8 @@ Add screenshots for UI changes
 - [ ] Documentation updated
 - [ ] No new warnings generated
 - [ ] All tests passing
+- [ ] Mock-replacement verification completed (if applicable)
+- [ ] Linked-issue behavior verified in diff
 ```
 
 ## Internationalization (i18n)
@@ -564,6 +559,10 @@ ILN supports multiple languages using i18next. All user-facing strings must be e
 
    supportedLngs: ["en", "es", "[locale]"],
    ```
+
+Then run `pnpm run i18n:check` to confirm the new locale has exactly the same keys as English. CI runs the same check and fails on any missing or extra key.
+
+See the [locale expansion plan](docs/i18n.md#locale-expansion-plan) for how the next locale is chosen and who owns its translations.
 
 ### i18n Configuration
 
@@ -872,7 +871,6 @@ export const Variant: Story = {
 
 If you need help:
 
-- Check the consolidated troubleshooting guide: [docs/troubleshooting.md](docs/troubleshooting.md) for local environment setup issues, Freighter, Supabase or Resend gotchas.
 - Check existing [GitHub Issues](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/issues)
 - Review the [architecture documentation](docs/architecture.md)
 - Read the [design system guide](DESIGN.md)
@@ -909,61 +907,46 @@ When you open a PR, GitHub will automatically suggest reviewers based on the fil
 
 If you become a regular contributor to a specific area of the codebase, you can request to be added as a code owner. Contact a maintainer to discuss this.
 
+## Stale Assignment Policy
+
+To maintain effective Wave throughput and ensure issues don't get claimed and abandoned, this repository uses an automated stale assignment reclaimer.
+
+### How It Works
+
+The stale assignment bot runs daily and monitors assigned issues:
+
+1. **Warning Stage (7 days of inactivity)**
+
+   - If an issue has been assigned for 7+ days with no linked PR activity, a warning comment is added
+   - The issue is labeled with `stale-assignment-warning`
+   - The assignee is notified with instructions to either:
+     - Open a draft PR
+     - Comment with a progress update
+     - Unassign themselves if no longer working on it
+
+2. **Reclaim Stage (14 days of inactivity)**
+   - If no activity is detected for 14+ days, the assignment is automatically removed
+   - The issue is labeled with `assignment-reclaimed`
+   - Other contributors can then claim the issue
+
+### Configuration
+
+The timeout periods are configurable in `.github/workflows/stale-assignments.yml`:
+
+- `WARNING_DAYS`: Days before warning comment (default: 7)
+- `RECLAIM_DAYS`: Days before unassignment (default: 14)
+
+### For Contributors
+
+- **When claiming an issue**: Open a draft PR within 7 days to show active work
+- **If you need more time**: Comment on the issue with a progress update to reset the timer
+- **If you can't complete it**: Unassign yourself promptly so others can claim it
+- **After reclamation**: If your assignment was reclaimed but you're still working on it, re-assign yourself and open a PR promptly
+
+### Exemptions
+
+Issues with linked open PRs are automatically exempt from the stale assignment check.
+
 ## Code of Conduct
 
 Please be respectful and constructive in all interactions. We aim to create a welcoming environment for all contributors.
-
----
-
-## Feature Flag Lifecycle
-
-ILN uses `NEXT_PUBLIC_*_ENABLED` environment variable flags to gate features that are not yet live. Flags are a short-term tool — they must not accumulate indefinitely.
-
-### Current flags
-
-| Flag                                 | Default | Purpose                               |
-| ------------------------------------ | ------- | ------------------------------------- |
-| `NEXT_PUBLIC_INSURANCE_POOL_ENABLED` | `false` | Liquidity insurance pooling panel     |
-| `NEXT_PUBLIC_NFT_ENABLED`            | `false` | Soroban Invoice NFT metadata displays |
-| `NEXT_PUBLIC_ORACLE_ENABLED`         | `false` | Oracle verification badges            |
-
-### Lifecycle stages
-
-```
-[Draft]  →  [Gated / false]  →  [Gated / true (canary)]  →  [Shipped → removed]
-```
-
-1. **Gated / false** — Feature is in development. All code paths are wrapped with `if (env.NEXT_PUBLIC_*_ENABLED)`. The flag defaults to `false` in `src/lib/env.ts` and is listed in `.env.local.example`.
-2. **Gated / true (canary)** — Feature is complete and under observation. The flag is set to `true` in production environment variables but the conditional code paths remain.
-3. **Shipped** — Feature has been stable for at least one full sprint. **The flag must be removed.** See the removal checklist below.
-
-### Adding a new flag
-
-1. Add the env var to `src/lib/env.ts` using `booleanEnv('NEXT_PUBLIC_MY_FEATURE_ENABLED')`.
-2. Add an entry to `.env.local.example` with value `false` and a comment describing the feature.
-3. Document it in the table above in this section.
-4. Open an issue to track the flag's removal, linked to the shipping milestone.
-
-### Removing a flag (cleanup checklist)
-
-When a feature ships and the flag is no longer needed:
-
-- [ ] Remove the `NEXT_PUBLIC_*_ENABLED` entry from `src/lib/env.ts`.
-- [ ] Remove the entry from `.env.local.example`.
-- [ ] Delete all `if (env.NEXT_PUBLIC_*_ENABLED)` conditional branches and their `else` paths (keep only the enabled code).
-- [ ] Remove the flag from the table in this section of `CONTRIBUTING.md`.
-- [ ] Update `README.md` if the flag appeared in the Environment Variables Reference table.
-- [ ] Run the audit script to confirm no stale references remain:
-  ```bash
-  pnpm exec tsx scripts/audit-feature-flags.ts
-  ```
-
-### Automated auditing
-
-The repo includes `scripts/audit-feature-flags.ts`, which scans the codebase and reports:
-
-- Which flags exist and where they are referenced.
-- Flags with zero code references (candidates for cleanup).
-- Flags whose default is `true` (candidates for full removal).
-
-This script runs as an **informational, non-blocking** CI step on every PR that touches flag-gated code (see `.github/workflows/feature-flag-audit.yml`). The report appears in the GitHub Actions job summary.

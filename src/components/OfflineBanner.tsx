@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+// eslint-disable-next-line no-restricted-imports -- App reconnect banner query client exception
 import { useQueryClient } from '@tanstack/react-query';
 import { WifiOff, X, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';

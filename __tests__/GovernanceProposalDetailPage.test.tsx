@@ -67,7 +67,6 @@ const baseProposal = {
   votingEndsAt: Math.floor(Date.now() / 1000) - 7 * 86400,
   votesFor: 215800,
   votesAgainst: 44100,
-  votesAbstain: 12400,
   quorumRequired: 100000,
   parameterChanges: [
     {

@@ -121,7 +121,9 @@ export default function InvoiceLifecycleTimeline({ status }: InvoiceLifecycleTim
               </span>
               <span
                 aria-hidden="true"
-                className={`text-xs font-bold ${reached ? 'text-on-surface' : 'text-on-surface-variant'}`}
+                className={`text-xs font-bold ${
+                  reached ? 'text-on-surface' : 'text-on-surface-variant'
+                }`}
               >
                 {step.label}
               </span>

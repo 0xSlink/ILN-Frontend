@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchParameterUpdates, type ParameterUpdateEvent } from '@/utils/governance';
 import { governanceKeys, QUERY_TIMINGS } from './keys';
+import { createQueryConfig } from './defaultConfig';
 
 /** Default announcement window: only surface changes from the last 48 hours. */
 export const PARAMETER_UPDATE_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -20,10 +21,12 @@ export function useParameterUpdates(windowMs: number = PARAMETER_UPDATE_WINDOW_M
   return useQuery<ParameterUpdateEvent[], Error, ParameterUpdateEvent[]>({
     queryKey: governanceKeys.parameterUpdates,
     queryFn: fetchParameterUpdates,
-    ...QUERY_TIMINGS.parameterUpdates,
-    select: (events) => {
-      const cutoff = Date.now() / 1000 - windowMs / 1000;
-      return events.filter((event) => event.updatedAt >= cutoff);
-    },
+    ...createQueryConfig({
+      ...QUERY_TIMINGS.parameterUpdates,
+      select: (events) => {
+        const cutoff = Date.now() / 1000 - windowMs / 1000;
+        return events.filter((event) => event.updatedAt >= cutoff);
+      },
+    }),
   });
 }

@@ -1,10 +1,18 @@
 import type { NextConfig } from 'next';
 import withPWA from 'next-pwa';
+import { withSentryConfig } from '@sentry/nextjs';
+import { assertNoPublicIndexerSecrets } from './src/lib/indexer/env-guard';
+
+// Fail the build before Next.js can inline an indexer credential into browser bundles.
+assertNoPublicIndexerSecrets();
 
 const nextConfig: NextConfig & { allowedDevOrigins?: string[] } = {
   reactStrictMode: true,
   turbopack: {},
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  // instrumentationHook moved out of experimental in Next 15+
+  // (removing stale flag that caused TS2353; instrumentation.ts is still picked up automatically)
+  experimental: {},
   async headers() {
     return [
       {
@@ -88,7 +96,7 @@ const nextConfig: NextConfig & { allowedDevOrigins?: string[] } = {
   },
 };
 
-export default withPWA({
+const pwaWrapped = withPWA({
   dest: 'public',
   register: true,
   skipWaiting: true,
@@ -168,3 +176,16 @@ export default withPWA({
     },
   ],
 })(nextConfig);
+
+// Wrap with Sentry to enable source map upload at build time.
+// Source maps are deleted from the Vercel CDN after upload (hideSourceMaps: true)
+// so they are not publicly accessible. See docs/sentry-integration.md.
+export default withSentryConfig(pwaWrapped, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  silent: !process.env.CI,
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+  },
+  disableLogger: true,
+});

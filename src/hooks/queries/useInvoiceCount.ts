@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getInvoiceCount } from '@/utils/soroban';
 import { invoiceKeys, QUERY_TIMINGS } from './keys';
+import { createQueryConfig } from './defaultConfig';
 
 /**
  * Polls the contract's `get_invoice_count` every 30 seconds.
@@ -12,10 +13,12 @@ import { invoiceKeys, QUERY_TIMINGS } from './keys';
  * fall back to a static value — see {@link LiveInvoiceTicker}.
  */
 export function useInvoiceCount() {
-  return useQuery({
+  return useQuery<number, Error>({
     queryKey: invoiceKeys.count,
     queryFn: async () => Number(await getInvoiceCount()),
-    refetchInterval: 30_000,
-    ...QUERY_TIMINGS.invoiceCount,
+    ...createQueryConfig({
+      ...QUERY_TIMINGS.invoiceCount,
+      refetchInterval: 30_000,
+    }),
   });
 }

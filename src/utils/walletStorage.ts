@@ -9,6 +9,9 @@
 
 export const WALLET_ADDRESS_STORAGE_KEY = 'iln_wallet_address';
 export const WALLET_PROVIDER_STORAGE_KEY = 'iln_wallet_provider';
+/** Dispatched to other tabs when this tab's wallet session is cleared so they
+ *  drop retained session data too (cross-tab disconnect privacy, issue #1098). */
+export const WALLET_DISCONNECT_STORAGE_KEY = 'iln_wallet_disconnect';
 
 export type WalletProviderType = 'freighter' | 'walletconnect';
 
@@ -26,7 +29,11 @@ export function setStoredWalletProvider(
   storage.setItem(WALLET_PROVIDER_STORAGE_KEY, provider);
 }
 
-/** Prefixes/keys considered user-session data, removed on disconnect. */
+/**
+ * Prefixes/keys considered user-session data, removed on disconnect.
+ * `iln-address-book-` covers both the legacy `<prefix><wallet>` key and the
+ * origin/network-scoped `<prefix>v1-<tag>-<wallet>` key (walletRecordStore.ts).
+ */
 export const WALLET_SCOPED_PREFIXES = [
   'iln-address-book-',
   'iln-watchlist',
@@ -47,4 +54,16 @@ export function clearWalletStorage(storage: Storage = window.localStorage): void
     }
   }
   toRemove.forEach((key) => storage.removeItem(key));
+  // Notify other tabs so they clear retained session data as well.
+  broadcastWalletDisconnect(storage);
+}
+
+/** Signal every other tab that this tab's wallet session was cleared. */
+export function broadcastWalletDisconnect(storage: Storage = window.localStorage): void {
+  try {
+    storage.setItem(WALLET_DISCONNECT_STORAGE_KEY, String(Date.now()));
+    storage.removeItem(WALLET_DISCONNECT_STORAGE_KEY);
+  } catch {
+    // best-effort cross-tab signal
+  }
 }

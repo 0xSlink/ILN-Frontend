@@ -1,0 +1,92 @@
+# Automatic PR labeling based on changed file paths
+# Labels are applied when a PR touches files in the specified paths
+#
+# Schema: actions/labeler@v5 requires each label to be a list of match
+# rules, not a bare list of globs (that was the v4 schema). See
+# https://github.com/actions/labeler#pattern-syntax for the current format.
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/workflows/**'
+          - '.github/labeler.yml'
+          - '.github/dependabot.yml'
+          - '.github/CODEOWNERS'
+          - '.husky/**'
+          - '.gitcliff.toml'
+          - 'eslint.config.mjs'
+          - 'prettierrc'
+          - 'vitest.config.ts'
+          - 'playwright.config.ts'
+          - 'stryker.conf.json'
+          - '.lighthouserc.json'
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'docs/**'
+          - 'README.md'
+          - 'CONTRIBUTING.md'
+          - 'DESIGN.md'
+          - 'SECURITY.md'
+          - 'CHANGELOG.md'
+          - 'PR_NEW.md'
+
+testing:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '__tests__/**'
+          - 'e2e/**'
+          - 'vitest.setup.ts'
+          - 'vitest.shims.d.ts'
+
+ui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/components/**'
+          # app/ is the live route tree; src/app/ is retained for legacy
+          # tests/experiments only (see docs/architecture.md).
+          - 'app/**/page.tsx'
+          - 'app/**/layout.tsx'
+          - 'styles/**'
+
+hooks:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/hooks/**'
+          - 'src/context/**'
+
+contracts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/lib/soroban.ts'
+          - 'src/lib/horizon.ts'
+          - 'src/lib/indexer-websocket.ts'
+          - 'src/lib/contract/**'
+          - 'src/lib/invoice-nft.ts'
+
+api:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'app/api/**'
+
+utils:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/utils/**'
+          - 'src/lib/**'
+
+types:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'src/types/**'
+          - 'src/constants.ts'
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'package.json'
+          - 'pnpm-lock.yaml'
+          - 'tsconfig.json'
+          - 'next.config.ts'
+          - 'postcss.config.mjs'

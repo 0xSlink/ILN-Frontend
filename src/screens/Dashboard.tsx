@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+// eslint-disable-next-line no-restricted-imports -- Legacy dashboard query client exception
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import Footer from '@/components/Footer';
@@ -21,6 +22,7 @@ import CancelInvoiceButton from '@/components/CancelInvoiceButton';
 import SkeletonRow from '@/components/SkeletonRow';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import PageHeader from '@/components/PageHeader';
+import { useVisibleWindow } from '@/hooks/useVisibleWindow';
 
 const STELLAR_EXPERT_CONTRACT_URL = `https://stellar.expert/explorer/${NETWORK_NAME.toLowerCase()}/contract/${CONTRACT_ID}`;
 
@@ -40,6 +42,8 @@ export type FreelancerStatusFilter =
 export type FreelancerSortKey = 'amount' | 'due_date';
 export type SortOrder = 'asc' | 'desc';
 export type ViewMode = 'table' | 'timeline';
+
+const TABLE_PAGE_SIZE = 50;
 
 export function applyFreelancerFiltersAndSort(
   invoices: Invoice[],
@@ -103,6 +107,21 @@ export default function DashboardPage() {
     () => applyFreelancerFiltersAndSort(myInvoices, statusFilter, sortKey, sortOrder),
     [myInvoices, statusFilter, sortKey, sortOrder]
   );
+
+  // Only a bounded window of rows is mounted at a time so the table stays
+  // responsive against large per-wallet invoice sets.
+  const {
+    hasMore: hasMoreRows,
+    visibleSlice,
+    loadMore,
+    remaining,
+  } = useVisibleWindow<Invoice>(
+    displayedInvoices,
+    TABLE_PAGE_SIZE,
+    [statusFilter, sortKey, sortOrder],
+    'freelancer-invoices-table'
+  );
+  const visibleInvoices = visibleSlice(displayedInvoices);
 
   const onSort = (nextSortKey: FreelancerSortKey) => {
     if (sortKey === nextSortKey) {
@@ -380,10 +399,14 @@ export default function DashboardPage() {
                         </td>
                       </tr>
                     ) : (
-                      displayedInvoices.map((invoice, _index) => (
+                      visibleInvoices.map((invoice) => (
                         <tr
                           key={invoice.id.toString()}
-                          className={`transition-colors ${selectedIds.has(invoice.id.toString()) ? 'bg-primary/5' : 'hover:bg-surface-container-low'}`}
+                          className={`transition-colors ${
+                            selectedIds.has(invoice.id.toString())
+                              ? 'bg-primary/5'
+                              : 'hover:bg-surface-container-low'
+                          }`}
                         >
                           <td className="px-4 py-5 pl-6">
                             <input
@@ -495,7 +518,18 @@ export default function DashboardPage() {
                     )}
                   </tbody>
                 </table>
-                <div className="flex justify-end border-t border-outline-variant/10 bg-surface-container-low/30">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-outline-variant/10 bg-surface-container-low/30 px-4 py-3">
+                  {hasMoreRows ? (
+                    <button
+                      type="button"
+                      onClick={loadMore}
+                      className="rounded-lg border border-outline-variant/30 px-4 py-2 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-high"
+                    >
+                      Load more ({remaining} remaining)
+                    </button>
+                  ) : (
+                    <span className="hidden sm:block" aria-hidden />
+                  )}
                   <LastUpdated updatedAt={dataUpdatedAt} />
                 </div>
               </div>
@@ -509,7 +543,9 @@ export default function DashboardPage() {
       <BulkActionBar
         selectedInvoices={selectedInvoices}
         onClearSelection={() => setSelectedIds(new Set())}
-        onRefresh={refetch as any}
+        onRefresh={() => {
+          void refetch();
+        }}
       />
 
       <Footer />

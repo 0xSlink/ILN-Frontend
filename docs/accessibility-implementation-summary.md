@@ -210,3 +210,36 @@ If issues arise:
 ---
 
 _This implementation ensures compliance with WCAG 2.1 Success Criterion 4.1.3 (Status Messages) and provides an accessible experience for all users._
+
+---
+
+## Route Coverage Sign-Off
+
+**Date:** 2026-08-26
+**Status:** Zero known jest-axe violations across all routes
+
+### Coverage Matrix
+
+| Route | Test File | Status |
+|---|---|---|
+| `/` (HomePage) | `HomePage.a11y.test.tsx` | Covered |
+| `/analytics` | `AnalyticsPage.a11y.test.tsx` | Covered |
+| `/governance` | `GovernancePage.a11y.test.tsx` | Covered |
+| `/marketplace` | `MarketplacePage.a11y.test.tsx` | Covered |
+| `/profile` | `ProfilePage.a11y.test.tsx` | Covered |
+| `/lp` | `LPDashboard.a11y.test.tsx` | Covered |
+| `/i/:id` (InvoiceDetail) | `InvoiceDetailPage.a11y.test.tsx` | Covered |
+| `/tokens` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/roadmap` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/leaderboard` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/referrals` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/payer` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/freelancer` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/admin` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/lp` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/pay` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/submit` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/stats` | `MissingRoutes.a11y.test.tsx` | Covered |
+| `/offline` | `MissingRoutes.a11y.test.tsx` | Covered |
+
+All routes under `app/` now have jest-axe accessibility coverage. No violations found.

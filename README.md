@@ -102,7 +102,7 @@ The app is a single Next.js project (App Router) that talks directly to Soroban 
 └── e2e/                        # Playwright end-to-end specs
 ```
 
-> `src/app/` is a legacy tree kept around for older route experiments and is **not** what Next.js actually serves — `app/` at the repository root is the live route tree. See [Frontend Architecture Overview](docs/architecture.md) for the full explanation and directory-by-directory breakdown.
+> `src/app/` is a legacy tree kept around for older route experiments and is **not** what Next.js actually serves — `app/` at the repository root is the live route tree. See [Frontend Architecture Overview](docs/architecture.md) for the full explanation and directory-by-directory breakdown..
 
 ### Core Component Layers
 
@@ -175,18 +175,22 @@ See [docs/feature-flags.md](docs/feature-flags.md) for the full reference, inclu
 <details>
 <summary><b>Indexer, notifications & email (server / cron)</b></summary>
 
-| Variable                               | Description                                                                                |
-| -------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_INDEXER_API_URL`          | Indexer REST API base URL (activity feed, analytics charts).                               |
-| `NEXT_PUBLIC_INDEXER_WS_URL`           | Indexer WebSocket URL for real-time updates.                                               |
-| `INDEXER_URL`                          | Server-side indexer URL (leaderboard, server functions).                                   |
-| `NOTIFICATION_API`                     | External backend base URL for notifications.                                               |
-| `NEXT_PUBLIC_SUPABASE_URL`             | Supabase project URL.                                                                      |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`        | Supabase anonymous (browser-safe) key.                                                     |
-| `SUPABASE_SERVICE_ROLE_KEY`            | Server-only key used by the reminder cron to bypass RLS.                                   |
-| `RESEND_API_KEY`                       | Resend API key used to send payer reminder emails.                                         |
-| `CRON_SECRET`                          | Secret used to authorize `GET /api/reminders` (the cron trigger).                          |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | WalletConnect project ID, from [cloud.walletconnect.com](https://cloud.walletconnect.com). |
+| Variable                               | Description                                                                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_INDEXER_API_URL`          | Deprecated: read server-side only as a fallback for `INDEXER_URL`.                                |
+| `NEXT_PUBLIC_INDEXER_WS_URL`           | Indexer WebSocket URL for real-time updates.                                                      |
+| `INDEXER_URL`                          | Server-only indexer base URL. The browser reaches it only via `/api/indexer/*`.                   |
+| `INDEXER_API_KEY`                      | Server-only bearer credential for the indexer. Never use a `NEXT_PUBLIC_` name (the build fails). |
+| `INDEXER_TIMEOUT_MS`                   | Upstream indexer timeout in ms (default `8000`, clamped 1000–30000).                              |
+| `INDEXER_API_VERSION_POLICY`           | `strict` (default) requires `X-Indexer-Api-Version: 1.x`; `allow-missing` only for rollout.       |
+| `INDEXER_STALE_AFTER_SECONDS`          | Age after which indexer data is shown as stale (default `300`).                                   |
+| `NOTIFICATION_API`                     | External backend base URL for notifications.                                                      |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Supabase project URL.                                                                             |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`        | Supabase anonymous (browser-safe) key.                                                            |
+| `SUPABASE_SERVICE_ROLE_KEY`            | Server-only key used by the reminder cron to bypass RLS.                                          |
+| `RESEND_API_KEY`                       | Resend API key used to send payer reminder emails.                                                |
+| `CRON_SECRET`                          | Secret used to authorize `GET /api/reminders` (the cron trigger).                                 |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | WalletConnect project ID, from [cloud.walletconnect.com](https://cloud.walletconnect.com).        |
 
 Local UI development works fine without these — they only matter when exercising Supabase-backed reminders, email delivery, or WalletConnect. See [docs/supabase-setup.md](docs/supabase-setup.md) for the reminder schema.
 
@@ -231,9 +235,14 @@ Open [http://localhost:3000](http://localhost:3000). To use a funded testnet wal
 | `pnpm run lint:fix`                | Run ESLint with automatic fixes                                       |
 | `pnpm run format` / `format:check` | Write / check Prettier formatting                                     |
 | `pnpm run env:check`               | Verify `.env.local.example` covers every env var the code references  |
+| `pnpm run env:drift-check`         | Check mainnet vs. testnet configuration drift and validate invariants |
+| `pnpm run db:status`               | Inspect Supabase schema migrations and rollback readiness             |
+| `pnpm run db:dry-run`              | Generate transactional up/down SQL for Supabase schema migrations     |
 | `pnpm test`                        | Run the Vitest unit/integration suite once                            |
 | `pnpm run test:watch`              | Run Vitest in watch mode                                              |
+| `pnpm run coverage:trend`          | Print the per-directory coverage table for the enforced scope         |
 | `pnpm run test:e2e`                | Run the Playwright end-to-end suite                                   |
+| `pnpm run test:mainnet-smoke`      | Run read-only Playwright smoke test against live mainnet deployment   |
 | `pnpm run test:mutation`           | Run Stryker mutation testing                                          |
 | `pnpm run verify`                  | Lint + env:check + format:check + typecheck + unit tests, in one shot |
 | `pnpm run storybook`               | Start Storybook locally on port 6006                                  |
@@ -274,27 +283,43 @@ pnpm run verify        # everything CI checks, in one command
 
 ### Reference
 
-| Doc                                              | What it covers                                            |
-| ------------------------------------------------ | --------------------------------------------------------- |
-| [Route Map](docs/route-map.md)                   | Every canonical route, its purpose, and active redirects. |
-| [Feature Flags Reference](docs/feature-flags.md) | Every `NEXT_PUBLIC_*` flag and what it gates.             |
-| [API Routes](docs/api-routes.md)                 | Request/response shapes for the app's own API routes.     |
-| [Error Codes Reference](docs/error-codes.md)     | Mapped contract error codes and remediation guidance.     |
-| [i18n Setup Guide](docs/i18n.md)                 | Locale architecture and how to add a new locale.          |
-| [Supabase Setup](docs/supabase-setup.md)         | Schema and setup for the payer reminder flow.             |
+| Doc                                                                                | What it covers                                                   |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [Route Map](docs/route-map.md)                                                     | Every canonical route, its purpose, and active redirects.        |
+| [Feature Flags Reference](docs/feature-flags.md)                                   | Every `NEXT_PUBLIC_*` flag and what it gates.                    |
+| [API Routes](docs/api-routes.md)                                                   | Request/response shapes for the app's own API routes.            |
+| [Error Codes Reference](docs/error-codes.md)                                       | Mapped contract error codes and remediation guidance.            |
+| [i18n Setup Guide](docs/i18n.md)                                                   | Locale architecture and how to add a new locale.                 |
+| [Accessibility Conformance Statement](docs/accessibility-conformance-statement.md) | WCAG 2.1 AA target, verification summary, and known limitations. |
+| [Supabase Setup](docs/supabase-setup.md)                                           | Schema and setup for the payer reminder flow.                    |
 
-### CI, quality gates & operations
+## 🔗 Useful Links & Documentation
 
-| Doc                                                                | What it covers                                                   |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| [CI/CD Overview](docs/ci-cd.md)                                    | Workflow triggers, required status checks, runner configuration. |
-| [Visual Regression Workflow](docs/VISUAL_REGRESSION_WORKFLOW.md)   | Chromatic baseline configuration.                                |
-| [Lighthouse CI](docs/LIGHTHOUSE_CI.md)                             | Performance budget thresholds and how they're enforced.          |
-| [Bundle Size Tracking](docs/bundle-size.md)                        | Bundle budget policy and how the size-check workflow works.      |
-| [Contract Fixtures](docs/contract-fixtures.md)                     | Test fixtures used for Soroban contract interaction tests.       |
-| [Contract Integration Status](docs/contract-integration-status.md) | Current status of live contract integration coverage.            |
-| [Screen Reader Testing Guide](docs/screen-reader-testing-guide.md) | Manual a11y verification steps beyond automated checks.          |
-| [Incident Response Process](docs/incident-response.md)             | Frontend-specific security incident response process.            |
+- **Documentation Index**: Browse all project documentation in [docs/README.md](docs/README.md).
+- **Getting Started Guide**: Refer to the [Quick Start](#-quick-start) section.
+- **Developer Quickstart**: Follow the full setup guide in [docs/developer-quickstart.md](docs/developer-quickstart.md).
+- **Troubleshooting Guide**: Consolidated list of local setup symptoms, Freighter connection, and database gotchas in [docs/troubleshooting.md](docs/troubleshooting.md).
+- **Component Library (Storybook)**: Browse the full component library with interactive controls, variants, and a11y checks at the [published Storybook](https://invoice-liquidity-network.github.io/ILN-Frontend) (deployed from `main`).
+- **Frontend Architecture Overview**: Learn about our architecture design and libraries in [docs/architecture.md](docs/architecture.md).
+- **i18n Setup Guide**: Review the current i18n architecture and locale-addition workflow in [docs/i18n.md](docs/i18n.md).
+- **Frontend Error Code Reference**: See the mapped contract error codes and remediation guidance in [docs/error-codes.md](docs/error-codes.md).
+- **useWallet Hook Documentation**: Detailed guide for wallet integration and SEP-10 authentication in [docs/hooks/use-wallet.md](docs/hooks/use-wallet.md).
+- **Contribution Guidelines**: Read [CONTRIBUTING.md](CONTRIBUTING.md) for comprehensive setup instructions, testing standards, code style guidelines, Stellar-specific setup, and development workflow.
+- **Visual Regression Testing**: Learn about baseline configurations in [docs/VISUAL_REGRESSION_WORKFLOW.md](docs/VISUAL_REGRESSION_WORKFLOW.md).
+- **Design System Blueprint**: Deep dive into "The Fiscal Atelier" aesthetic rules in [DESIGN.md](DESIGN.md).
+- **Live Deployed App**: Access the application on [app.iln.finance](https://app.iln.finance).
+
+| Doc                                                                | What it covers                                                             |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| [CI/CD Overview](docs/ci-cd.md)                                    | Workflow triggers, required status checks, runner configuration.           |
+| [Visual Regression Workflow](docs/VISUAL_REGRESSION_WORKFLOW.md)   | Chromatic baseline configuration.                                          |
+| [Lighthouse CI](docs/LIGHTHOUSE_CI.md)                             | Performance budget thresholds and how they're enforced.                    |
+| [Bundle Size Tracking](docs/bundle-size.md)                        | Bundle budget policy and how the size-check workflow works.                |
+| [Contract Fixtures](docs/contract-fixtures.md)                     | Test fixtures used for Soroban contract interaction tests.                 |
+| [Contract Integration Status](docs/contract-integration-status.md) | Current status of live contract integration coverage.                      |
+| [Screen Reader Testing Guide](docs/screen-reader-testing-guide.md) | Manual a11y verification steps beyond automated checks.                    |
+| [Incident Response Process](docs/incident-response.md)             | Frontend-specific security incident response process.                      |
+| [PWA Manifest Audit](docs/pwa-manifest-audit.md)                   | Manifest/icon production-readiness findings and manual sign-off checklist. |
 
 <details>
 <summary><b>Additional internal references</b></summary>
@@ -318,6 +343,31 @@ Read the full breakdown — layout grids, elevation layers, and color tokens —
 ## Contributing
 
 Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first — it covers setup, testing standards, code style, and Stellar-specific conventions in detail. The short version:
+
+### 🔍 Marketplace Explorer
+
+A central marketplace listing all active open invoices waiting for funding, detailed interest rates, and risk rankings.
+![Marketplace Explorer](public/screenshots/marketplace.png)
+
+---
+
+## 🔗 Useful Links & Documentation
+
+- **Documentation Index**: Browse all project documentation in [docs/README.md](docs/README.md).
+- **Getting Started Guide**: Refer to the [Quick Start](#-quick-start) section.
+- **Component Library (Storybook)**: Browse the full component library with interactive controls, variants, and a11y checks at the [published Storybook](https://invoice-liquidity-network.github.io/ILN-Frontend) (deployed from `main`).
+- **Frontend Architecture Overview**: Learn about our architecture design and libraries in [docs/architecture.md](docs/architecture.md).
+- **useWallet Hook Documentation**: Detailed guide for wallet integration and SEP-10 authentication in [docs/hooks/use-wallet.md](docs/hooks/use-wallet.md).
+- **Contribution Guidelines**: Read [CONTRIBUTING.md](CONTRIBUTING.md) for comprehensive setup instructions, testing standards, code style guidelines, Stellar-specific setup, and development workflow.
+- **Visual Regression Testing**: Learn about baseline configurations in [docs/VISUAL_REGRESSION_WORKFLOW.md](docs/VISUAL_REGRESSION_WORKFLOW.md).
+- **Design System Blueprint**: Deep dive into "The Fiscal Atelier" aesthetic rules in [DESIGN.md](DESIGN.md).
+- **Live Deployed App**: Access the application on [app.iln.finance](https://app.iln.finance).
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 1. Create a branch: `git checkout -b feature/your-feature-name`
 2. Make your changes, and add/update stories and tests for any component behavior you touch.

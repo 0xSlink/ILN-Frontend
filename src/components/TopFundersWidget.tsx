@@ -2,6 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { useToast } from '@/context/ToastContext';
+import IndexerUnavailableNotice, {
+  type IndexerNoticeStatus,
+} from '@/components/IndexerUnavailableNotice';
+import { IndexerFreshnessBadge } from '@/components/indexer/IndexerStatus';
+import {
+  classifyIndexerClientError,
+  fetchLeaderboardEntries,
+  indexerErrorDetail,
+} from '@/lib/indexer-client';
+import { isIndexerFreshness, type IndexerFreshness } from '@/lib/indexer/freshness';
 
 type Funder = {
   address: string;
@@ -45,36 +55,71 @@ export default function TopFundersWidget() {
   const { addToast } = useToast();
   const [rows, setRows] = useState<Funder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [requestId, setRequestId] = useState(0);
+  const [retrying, setRetrying] = useState(false);
+  const [errorStatus, setErrorStatus] = useState<IndexerNoticeStatus>('unavailable');
+  const [errorDetail, setErrorDetail] = useState<string | undefined>();
+  const [freshness, setFreshness] = useState<IndexerFreshness | null>(null);
 
   useEffect(() => {
     const run = async () => {
       try {
+        setUnavailable(false);
         const cachedRaw = localStorage.getItem(CACHE_KEY);
         if (cachedRaw) {
-          const cached = JSON.parse(cachedRaw) as { savedAt: number; rows: Funder[] };
-          if (Date.now() - cached.savedAt < CACHE_TTL_MS) {
+          const cached = JSON.parse(cachedRaw) as {
+            savedAt: number;
+            rows: Funder[];
+            freshness?: unknown;
+          };
+          // Caches without freshness predate #1110 and are refetched rather than shown as live.
+          if (Date.now() - cached.savedAt < CACHE_TTL_MS && isIndexerFreshness(cached.freshness)) {
             setRows(cached.rows);
+            setFreshness(cached.freshness);
             setLoading(false);
             return;
           }
         }
 
-        const response = await fetch('/api/leaderboard?type=lp&period=30d&limit=10', {
-          cache: 'no-store',
+        let latestFreshness: IndexerFreshness | null = null;
+        const data = await fetchLeaderboardEntries('lp', '30d', 10, {
+          onMeta: (meta) => {
+            latestFreshness = meta.freshness;
+          },
         });
-        const data = (await response.json()) as unknown;
         const normalized = normalizeFunders(data);
         setRows(normalized);
-        localStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), rows: normalized }));
-      } catch {
+        setFreshness(latestFreshness);
+        localStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({ savedAt: Date.now(), rows: normalized, freshness: latestFreshness })
+        );
+      } catch (err) {
+        // Every failure is surfaced; an unreachable indexer is never shown as "no LPs".
         setRows([]);
+        setUnavailable(true);
+        setErrorDetail(indexerErrorDetail(err));
+        const boundary = classifyIndexerClientError(err);
+        setErrorStatus(
+          boundary === 'rate-limited' || boundary === 'unauthorized' || boundary === 'malformed'
+            ? boundary
+            : 'unavailable'
+        );
       } finally {
         setLoading(false);
       }
     };
 
     run();
-  }, []);
+  }, [requestId]);
+
+  const retry = () => {
+    setRetrying(true);
+    setUnavailable(false);
+    setRequestId((id) => id + 1);
+    window.setTimeout(() => setRetrying(false), 600);
+  };
 
   const copyAddress = async (address: string) => {
     try {
@@ -112,7 +157,25 @@ export default function TopFundersWidget() {
 
       {loading && <p className="mt-3 text-sm text-on-surface-variant">Loading active LPs...</p>}
 
-      {!loading && rows.length === 0 && (
+      {!loading && unavailable && (
+        <div className="mt-4">
+          <IndexerUnavailableNotice
+            dataSource="The LP leaderboard"
+            status={errorStatus}
+            detail={errorDetail}
+            onRetry={retry}
+            retrying={retrying}
+          />
+        </div>
+      )}
+
+      {!loading && !unavailable && freshness ? (
+        <div className="mt-3">
+          <IndexerFreshnessBadge freshness={freshness} />
+        </div>
+      ) : null}
+
+      {!loading && !unavailable && rows.length === 0 && (
         <p className="mt-3 text-sm text-on-surface-variant">
           No active LP leaderboard data is available right now.
         </p>

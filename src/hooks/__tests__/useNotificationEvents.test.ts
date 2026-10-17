@@ -30,7 +30,6 @@ function proposal(overrides: Partial<any> = {}) {
     votingEndsAt: 0,
     votesFor: 0,
     votesAgainst: 0,
-    votesAbstain: 0,
     quorumRequired: 0,
     ...overrides,
   };

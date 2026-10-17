@@ -41,6 +41,7 @@ export default function FeedbackWidget() {
 
     setSubmitState({ status: 'submitting' });
     try {
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
       const response = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -183,7 +184,9 @@ export default function FeedbackWidget() {
                         aria-label={`${star} stars`}
                       >
                         <span
-                          className={`material-symbols-outlined ${rating >= star ? 'fill-[1]' : ''}`}
+                          className={`material-symbols-outlined ${
+                            rating >= star ? 'fill-[1]' : ''
+                          }`}
                         >
                           star
                         </span>

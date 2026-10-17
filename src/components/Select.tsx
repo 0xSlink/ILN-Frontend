@@ -246,7 +246,9 @@ export const Select: React.FC<SelectProps> = ({
           {selectedOption?.label ?? placeholder}
         </span>
         <span
-          className={`material-symbols-outlined ml-2 shrink-0 text-base text-on-surface-variant transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`material-symbols-outlined ml-2 shrink-0 text-base text-on-surface-variant transition-transform ${
+            open ? 'rotate-180' : ''
+          }`}
           aria-hidden="true"
         >
           expand_more

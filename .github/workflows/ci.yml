@@ -11,6 +11,44 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  file-size:
+    name: Check tracked file sizes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check file-size policy
+        run: node scripts/check-file-sizes.mjs
+
+  package-manager-drift:
+    name: Package-manager drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check package-manager drift
+        run: pnpm run pm:drift-check
+
+      - name: Verify lockfile integrity
+        run: |
+          git diff --exit-code -- pnpm-lock.yaml pnpm-workspace.yaml package.json
+          echo "### Lockfile integrity" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Frozen install left tracked dependency declarations unmodified." >> "$GITHUB_STEP_SUMMARY"
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -24,30 +62,57 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Verify lockfile integrity
         run: |
-          pnpm install --frozen-lockfile
-          git diff --exit-code pnpm-lock.yaml
+          git diff --exit-code -- pnpm-lock.yaml pnpm-workspace.yaml package.json
+          echo "### Lockfile integrity" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Frozen install left tracked dependency declarations unmodified." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run ESLint
         run: pnpm run lint
 
+      - name: Flag snapshot changes for review
+        if: github.event_name == 'pull_request'
+        run: |
+          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.snap' '__tests__/__snapshots__/*')
+          if [ -n "$changed" ]; then
+            echo "## ⚠️ Snapshot files changed" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "The following snapshot files were modified in this PR:" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$changed" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Per testing guidelines, snapshot diffs must be explained in the PR description." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Check env example sync
         run: pnpm run env:check
+
+      - name: Check for unfilled placeholders in docs
+        run: pnpm run docs:check-placeholders
+
+      - name: Check configuration drift
+        run: pnpm run env:drift-check
+
+      - name: Check locale key parity
+        run: pnpm run i18n:check
 
       - name: Check formatting with Prettier
         run: pnpm run format:check
 
       - name: Run TypeScript type check
-        run: pnpm exec tsc --noEmit
+        run: pnpm run typecheck
 
-      - name: Run npm audit for security vulnerabilities
-        run: npm audit --audit-level=moderate
+      - name: Run security audit for vulnerabilities
+        run: pnpm run security:audit
 
       - name: Check for postinstall script changes in dependencies
         run: |
@@ -68,7 +133,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -89,7 +154,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -142,10 +207,33 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build
         run: pnpm run build
+
+  config-drift:
+    name: Check configuration drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check mainnet vs testnet configuration drift
+        run: pnpm run env:drift-check
+

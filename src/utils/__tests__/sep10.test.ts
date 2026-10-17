@@ -29,323 +29,197 @@ function response(body: unknown, status = 200): Response {
   });
 }
 
-function validChallenge(homeDomain = 'example.com'): string {
-  return WebAuth.buildChallengeTx(
-    serverKey,
-    walletKey.publicKey(),
-    homeDomain,
-    300,
-    NETWORK,
-    'auth.example.com'
-  );
+function textResponse(body: string, status = 200): Response {
+  return new Response(body, { status, headers: { 'Content-Type': 'text/plain' } });
 }
 
-function createFetchMock(options?: {
-  challenge?: string;
-  challengeStatus?: number;
-  token?: string;
-}) {
-  const servedChallenge = options?.challenge ?? challenge;
-  fetchMock = vi.fn<typeof fetch>(async (input, init) => {
-    const url = new URL(input.toString());
-    if (url.pathname === '/.well-known/stellar.toml') {
-      return new Response(
-        `SIGNING_KEY = "${serverKey.publicKey()}"\nWEB_AUTH_ENDPOINT = "https://auth.example.com/auth"`,
-        { status: 200 }
-      );
-    }
-    if (init?.method === 'POST') {
-      const body = new URLSearchParams(String(init.body));
-      const signedXdr = body.get('transaction') ?? '';
-      expect(() =>
-        WebAuth.verifyChallengeTxSigners(
-          signedXdr,
-          serverKey.publicKey(),
-          NETWORK,
-          [walletKey.publicKey()],
-          'example.com',
-          'auth.example.com'
-        )
-      ).not.toThrow();
-      return response({ token: options?.token ?? jwt(Math.floor(Date.now() / 1_000) + 300) });
-    }
-    if (options?.challengeStatus) return response({}, options.challengeStatus);
-    return response({ transaction: servedChallenge });
-  });
-  vi.stubGlobal('fetch', fetchMock);
-}
+// ─── fetchChallenge ───────────────────────────────────────────────────────────
 
-function authOptions(overrides: Partial<AuthenticateSep10Options> = {}): AuthenticateSep10Options {
-  return {
-    address: walletKey.publicKey(),
-    homeDomain: 'example.com',
-    network: 'TESTNET',
-    networkPassphrase: NETWORK,
-    signTransaction: async (transactionXdr) => {
-      const signed = TransactionBuilder.fromXDR(transactionXdr, NETWORK);
-      signed.sign(walletKey);
-      return signed.toXDR();
-    },
-    assertWalletIdentity: async () => {},
-    ...overrides,
-  };
-}
+describe('fetchChallenge (#1071)', () => {
+  beforeEach(() => vi.restoreAllMocks());
 
-function testSession(token: string, expiresAt: number) {
-  return {
-    token,
-    address: walletKey.publicKey(),
-    domain: 'example.com',
-    authOrigin: 'https://auth.example.com',
-    network: 'TESTNET',
-    expiresAt,
-  };
-}
-
-beforeEach(() => {
-  __resetSep10State();
-  serverKey = Keypair.fromRawEd25519Seed(new Uint8Array(32).fill(1));
-  walletKey = Keypair.fromRawEd25519Seed(new Uint8Array(32).fill(2));
-  vi.stubGlobal('fetch', vi.fn());
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
-
-describe('authenticateWithSep10', () => {
-  it('validates the domain-bound challenge, signs it, and exchanges it for an expiring token', async () => {
-    challenge = validChallenge();
-    createFetchMock();
-    const diagnostics = vi.fn();
-
-    const session = await authenticateWithSep10(authOptions({ onDiagnostics: diagnostics }));
-
-    expect(session.domain).toBe('example.com');
-    expect(session.network).toBe('TESTNET');
-    expect(session.expiresAt).toBeGreaterThan(Date.now());
-    expect(new URL(fetchMock.mock.calls[1][0].toString()).searchParams.get('account')).toBe(
-      walletKey.publicKey()
-    );
-    expect(fetchMock.mock.calls[2][1]).toEqual(
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          'Content-Type': 'application/x-www-form-urlencoded',
-        }),
-      })
-    );
-    expect(diagnostics).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        domain: 'example.com',
-        network: 'TESTNET',
-        serverHealth: 'available',
-      })
-    );
-  });
-
-  it('deduplicates concurrent authentication attempts for the same wallet and network', async () => {
-    challenge = validChallenge();
-    createFetchMock();
-    const signTransaction = vi.fn(authOptions().signTransaction);
-    const options = authOptions({ signTransaction });
-
-    const [first, second] = await Promise.all([
-      authenticateWithSep10(options),
-      authenticateWithSep10(options),
-    ]);
-
-    expect(first).toEqual(second);
-    expect(signTransaction).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-  });
-
-  it('rejects a challenge bound to the wrong home domain', async () => {
-    challenge = validChallenge('attacker.example.net');
-    createFetchMock();
-
-    await expect(authenticateWithSep10(authOptions())).rejects.toMatchObject({
-      code: 'CHALLENGE_INVALID',
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('rejects an expired challenge without asking the wallet to sign', async () => {
-    const now = Date.now();
-    const dateSpy = vi.spyOn(Date, 'now').mockReturnValue(now - 3_600_000);
-    challenge = validChallenge();
-    dateSpy.mockRestore();
-    createFetchMock();
-    const signTransaction = vi.fn(async (transactionXdr: string) => transactionXdr);
-
-    await expect(authenticateWithSep10(authOptions({ signTransaction }))).rejects.toMatchObject({
-      code: 'CHALLENGE_EXPIRED',
-    });
-    expect(signTransaction).not.toHaveBeenCalled();
-  });
-
-  it('rejects a challenge transaction replayed by the server', async () => {
-    challenge = validChallenge();
-    createFetchMock();
-
-    await authenticateWithSep10(authOptions());
-    await expect(authenticateWithSep10(authOptions())).rejects.toMatchObject({
-      code: 'CHALLENGE_REPLAYED',
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(5);
-  });
-
-  it('exposes wallet cancellation as a recoverable signing rejection', async () => {
-    challenge = validChallenge();
-    createFetchMock();
-
-    await expect(
-      authenticateWithSep10(
-        authOptions({
-          signTransaction: async () => {
-            throw new Error('User declined');
-          },
-        })
-      )
-    ).rejects.toMatchObject({ code: 'SIGNING_REJECTED' });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('stops before token exchange if wallet identity changes during signing', async () => {
-    challenge = validChallenge();
-    createFetchMock();
-    const assertWalletIdentity = vi
-      .fn<AuthenticateSep10Options['assertWalletIdentity']>()
-      .mockResolvedValueOnce()
-      .mockResolvedValueOnce()
-      .mockRejectedValueOnce(
-        new Sep10Error('IDENTITY_CHANGED', 'The connected wallet changed during authentication.')
-      );
-
-    await expect(
-      authenticateWithSep10(authOptions({ assertWalletIdentity }))
-    ).rejects.toMatchObject({ code: 'IDENTITY_CHANGED' });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-  });
-
-  it.each([
-    [401, 'HTTP_UNAUTHORIZED'],
-    [403, 'HTTP_FORBIDDEN'],
-  ])('distinguishes backend HTTP %i rejection', async (status, code) => {
-    challenge = validChallenge();
-    createFetchMock({ challengeStatus: status });
-
-    await expect(authenticateWithSep10(authOptions())).rejects.toMatchObject({ code });
-  });
-
-  it('rejects a malformed authentication token response', async () => {
-    challenge = validChallenge();
-    createFetchMock({ token: 'not-a-jwt' });
-
-    await expect(authenticateWithSep10(authOptions())).rejects.toMatchObject({
-      code: 'INVALID_TOKEN',
-    });
-  });
-
-  it('rejects an expired token response', async () => {
-    challenge = validChallenge();
-    createFetchMock({ token: jwt(Math.floor(Date.now() / 1_000) - 1) });
-
-    await expect(authenticateWithSep10(authOptions())).rejects.toMatchObject({
-      code: 'INVALID_TOKEN',
-    });
-  });
-
-  it('rejects a token issued for a different wallet', async () => {
-    challenge = validChallenge();
-    createFetchMock({
-      token: jwt(Math.floor(Date.now() / 1_000) + 300, serverKey.publicKey()),
+  it('returns transaction and networkPassphrase on a happy path', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      return jsonResponse({
+        transaction: CHALLENGE_XDR,
+        network_passphrase: NETWORK_PASSPHRASE,
+        home_domain: HOME_DOMAIN,
+      });
     });
 
-    await expect(authenticateWithSep10(authOptions())).rejects.toMatchObject({
-      code: 'INVALID_TOKEN',
+    const result = await fetchChallenge(HOME_DOMAIN, PUBLIC_KEY);
+    expect(result.transaction).toBe(CHALLENGE_XDR);
+    expect(result.networkPassphrase).toBe(NETWORK_PASSPHRASE);
+  });
+
+  it('requests the challenge with account and home_domain query params', async () => {
+    let capturedUrl = '';
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      capturedUrl = url;
+      return jsonResponse({
+        transaction: CHALLENGE_XDR,
+        network_passphrase: NETWORK_PASSPHRASE,
+        home_domain: HOME_DOMAIN,
+      });
     });
+
+    await fetchChallenge(HOME_DOMAIN, PUBLIC_KEY);
+    expect(capturedUrl).toContain('account=');
+    expect(capturedUrl).toContain('home_domain=');
+    expect(capturedUrl).toContain(encodeURIComponent(PUBLIC_KEY));
+  });
+
+  it('throws when stellar.toml fetch fails', async () => {
+    mockFetch(() => textResponse('Not Found', 404));
+    await expect(fetchChallenge(HOME_DOMAIN, PUBLIC_KEY)).rejects.toThrow(/stellar\.toml/);
+  });
+
+  it('throws when WEB_AUTH_ENDPOINT is missing from stellar.toml', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_NO_AUTH);
+      return jsonResponse({});
+    });
+    await expect(fetchChallenge(HOME_DOMAIN, PUBLIC_KEY)).rejects.toThrow(/WEB_AUTH_ENDPOINT/);
+  });
+
+  it('throws when challenge request returns non-ok status', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      return jsonResponse({ error: 'account not found' }, 400);
+    });
+    await expect(fetchChallenge(HOME_DOMAIN, PUBLIC_KEY)).rejects.toThrow();
+  });
+
+  it('throws when challenge response is missing transaction field', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      return jsonResponse({ network_passphrase: NETWORK_PASSPHRASE });
+    });
+    await expect(fetchChallenge(HOME_DOMAIN, PUBLIC_KEY)).rejects.toThrow(/transaction/);
+  });
+
+  it('throws when challenge response is missing network_passphrase', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      return jsonResponse({ transaction: CHALLENGE_XDR });
+    });
+    await expect(fetchChallenge(HOME_DOMAIN, PUBLIC_KEY)).rejects.toThrow(/network_passphrase/);
+  });
+
+  it('throws when home_domain in response does not match requested domain', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      return jsonResponse({
+        transaction: CHALLENGE_XDR,
+        network_passphrase: NETWORK_PASSPHRASE,
+        home_domain: 'evil.com',
+      });
+    });
+    await expect(fetchChallenge(HOME_DOMAIN, PUBLIC_KEY)).rejects.toThrow(/home_domain mismatch/);
+  });
+
+  it('propagates server error field from challenge response', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      return jsonResponse({ error: 'rate limited' }, 200);
+    });
+    await expect(fetchChallenge(HOME_DOMAIN, PUBLIC_KEY)).rejects.toThrow(/rate limited/);
   });
 });
 
-describe('authenticatedFetch', () => {
-  it('sends the token as a bearer credential', async () => {
-    const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(response({ ok: true }));
+// ─── signChallenge ────────────────────────────────────────────────────────────
 
-    await authenticatedFetch(
-      'https://auth.example.com/private',
-      testSession('valid.jwt.token', Date.now() + 60_000),
-      undefined,
-      requestFetch
-    );
-
-    const sentRequest = requestFetch.mock.calls[0][0] as Request;
-    expect(sentRequest.headers.get('Authorization')).toBe('Bearer valid.jwt.token');
+describe('signChallenge (#1072)', () => {
+  it('calls signTx with the challenge XDR and returns the signed result', async () => {
+    const signTx = vi.fn().mockResolvedValue(SIGNED_XDR);
+    const result = await signChallenge(CHALLENGE_XDR, NETWORK_PASSPHRASE, signTx);
+    expect(signTx).toHaveBeenCalledWith(CHALLENGE_XDR);
+    expect(result).toBe(SIGNED_XDR);
   });
 
-  it('preserves request method, body, and headers when adding bearer auth', async () => {
-    const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(response({ ok: true }));
-    const request = new Request('https://auth.example.com/private', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Request-Id': 'request-1' },
-      body: JSON.stringify({ action: 'read' }),
+  it('throws when network passphrase does not match NETWORK_PASSPHRASE', async () => {
+    const signTx = vi.fn();
+    await expect(signChallenge(CHALLENGE_XDR, WRONG_PASSPHRASE, signTx)).rejects.toThrow(
+      /network passphrase mismatch/
+    );
+    expect(signTx).not.toHaveBeenCalled();
+  });
+
+  it('does not swallow errors thrown by signTx', async () => {
+    const signTx = vi.fn().mockRejectedValue(new Error('USER_REJECTED'));
+    await expect(signChallenge(CHALLENGE_XDR, NETWORK_PASSPHRASE, signTx)).rejects.toThrow(
+      'USER_REJECTED'
+    );
+  });
+});
+
+// ─── exchangeToken ────────────────────────────────────────────────────────────
+
+describe('exchangeToken (#1073)', () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it('returns the JWT token from the auth server', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      return jsonResponse({ token: JWT_TOKEN });
     });
 
-    await authenticatedFetch(
-      request,
-      testSession('valid.jwt.token', Date.now() + 60_000),
-      undefined,
-      requestFetch
-    );
-
-    const sentRequest = requestFetch.mock.calls[0][0] as Request;
-    expect(sentRequest.method).toBe('POST');
-    expect(sentRequest.headers.get('X-Request-Id')).toBe('request-1');
-    expect(await sentRequest.json()).toEqual({ action: 'read' });
+    const result = await exchangeToken(SIGNED_XDR, HOME_DOMAIN);
+    expect(result.token).toBe(JWT_TOKEN);
   });
 
-  it.each([
-    [401, 'HTTP_UNAUTHORIZED'],
-    [403, 'HTTP_FORBIDDEN'],
-  ])('reports HTTP %i as a distinct recoverable rejection', async (status, code) => {
-    const requestFetch = vi.fn<typeof fetch>().mockResolvedValue(response({}, status));
+  it('POSTs to WEB_AUTH_ENDPOINT with the signed transaction', async () => {
+    let capturedBody = '';
+    let capturedMethod = '';
+    mockFetch((url, init) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      capturedBody = String(init?.body ?? '');
+      capturedMethod = String(init?.method ?? '');
+      return jsonResponse({ token: JWT_TOKEN });
+    });
 
-    await expect(
-      authenticatedFetch(
-        'https://auth.example.com/private',
-        testSession('valid.jwt.token', Date.now() + 60_000),
-        undefined,
-        requestFetch
-      )
-    ).rejects.toMatchObject({ code });
+    await exchangeToken(SIGNED_XDR, HOME_DOMAIN);
+    expect(capturedMethod.toUpperCase()).toBe('POST');
+    expect(capturedBody).toContain('transaction=');
+    expect(capturedBody).toContain(encodeURIComponent(SIGNED_XDR));
   });
 
-  it('does not make a request with an expired token', async () => {
-    const requestFetch = vi.fn<typeof fetch>();
-
-    await expect(
-      authenticatedFetch(
-        'https://auth.example.com/private',
-        testSession('expired.jwt.token', Date.now() - 1),
-        undefined,
-        requestFetch
-      )
-    ).rejects.toMatchObject({ code: 'AUTH_REQUIRED' });
-    expect(requestFetch).not.toHaveBeenCalled();
+  it('throws when stellar.toml fetch fails during exchange', async () => {
+    mockFetch(() => textResponse('Not Found', 404));
+    await expect(exchangeToken(SIGNED_XDR, HOME_DOMAIN)).rejects.toThrow(/stellar\.toml/);
   });
 
-  it('refuses to send bearer credentials outside the configured domain', async () => {
-    const requestFetch = vi.fn<typeof fetch>();
+  it('throws when WEB_AUTH_ENDPOINT is missing from stellar.toml during exchange', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_NO_AUTH);
+      return jsonResponse({});
+    });
+    await expect(exchangeToken(SIGNED_XDR, HOME_DOMAIN)).rejects.toThrow(/WEB_AUTH_ENDPOINT/);
+  });
 
-    await expect(
-      authenticatedFetch(
-        'https://attacker.example.net/private',
-        testSession('valid.jwt.token', Date.now() + 60_000),
-        undefined,
-        requestFetch
-      )
-    ).rejects.toMatchObject({ code: 'CONFIGURATION' });
-    expect(requestFetch).not.toHaveBeenCalled();
+  it('throws when token exchange returns non-ok status', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      return jsonResponse({ error: 'invalid signature' }, 401);
+    });
+    await expect(exchangeToken(SIGNED_XDR, HOME_DOMAIN)).rejects.toThrow();
+  });
+
+  it('throws when token exchange response is missing token field', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      return jsonResponse({ not_a_token: 'oops' });
+    });
+    await expect(exchangeToken(SIGNED_XDR, HOME_DOMAIN)).rejects.toThrow(/token/);
+  });
+
+  it('propagates server error field from token exchange response', async () => {
+    mockFetch((url) => {
+      if (url.includes('.well-known/stellar.toml')) return textResponse(STELLAR_TOML_OK);
+      return jsonResponse({ error: 'expired challenge' }, 200);
+    });
+    await expect(exchangeToken(SIGNED_XDR, HOME_DOMAIN)).rejects.toThrow(/expired challenge/);
   });
 });

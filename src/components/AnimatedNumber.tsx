@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import useReducedMotion from '@/hooks/useReducedMotion';
 
 /**
  * Easing function: ease-out cubic
@@ -37,7 +38,8 @@ export interface AnimatedNumberProps {
  *
  * Features:
  * - Smooth ease-out cubic easing
- * - Respects prefers-reduced-motion
+ * - Honours prefers-reduced-motion via the shared useReducedMotion hook
+ *   (degrades to an instant jump to the final value)
  * - Re-animates on value changes
  * - Custom formatter support
  * - No layout shift during animation
@@ -57,22 +59,7 @@ const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
   const animationFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const previousValueRef = useRef<number>(0);
-  const reducedMotionRef = useRef<boolean>(false);
-
-  // Check for reduced motion preference on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-      reducedMotionRef.current = mediaQuery.matches;
-
-      const handleChange = (e: MediaQueryListEvent) => {
-        reducedMotionRef.current = e.matches;
-      };
-
-      mediaQuery.addEventListener('change', handleChange);
-      return () => mediaQuery.removeEventListener('change', handleChange);
-    }
-  }, []);
+  const reducedMotion = useReducedMotion();
 
   // Animation function
   const animate = (timestamp: number) => {
@@ -97,7 +84,7 @@ const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
     }
   };
 
-  // Start animation when value changes
+  // Start animation when value changes (or when the motion preference changes)
   useEffect(() => {
     // Cancel any existing animation
     if (animationFrameRef.current) {
@@ -105,7 +92,7 @@ const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
     }
 
     // If reduced motion is preferred, jump straight to the value
-    if (reducedMotionRef.current) {
+    if (reducedMotion) {
       setDisplayValue(value);
       return;
     }
@@ -120,7 +107,7 @@ const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [value, reanimateOnChange]);
+  }, [value, reanimateOnChange, reducedMotion]);
 
   // Format the display value
   const formattedValue = formatter

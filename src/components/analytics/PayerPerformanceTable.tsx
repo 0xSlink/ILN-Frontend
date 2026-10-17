@@ -118,7 +118,9 @@ const PayerPerformanceTable: React.FC<Props> = ({ data }) => {
                   {formatUSDC(payer.totalYield)}
                 </td>
                 <td
-                  className={`px-6 py-4 text-sm font-bold ${payer.defaultRate > 0 ? 'text-error' : 'text-green-600'}`}
+                  className={`px-6 py-4 text-sm font-bold ${
+                    payer.defaultRate > 0 ? 'text-error' : 'text-green-600'
+                  }`}
                 >
                   {payer.defaultRate.toFixed(1)}%
                 </td>

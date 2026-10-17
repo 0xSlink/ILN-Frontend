@@ -27,6 +27,11 @@ import {
   MOCK_PROPOSALS,
   type CreateProposalPayload,
 } from '@/utils/governance';
+import {
+  combineRecorders,
+  detectMockBacking,
+  expectMockBackingStatus,
+} from '@/test-utils/mock-detection';
 
 const SIGNER = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const mockSignTx = vi.fn(async (_xdr: string) => 'signedXDR');
@@ -71,15 +76,6 @@ describe('governance – castVote', () => {
     const after = MOCK_PROPOSALS.find((p) => p.id === proposalId)?.votesAgainst ?? 0;
     expect(after).toBeGreaterThan(before);
   });
-
-  it('increments votesAbstain when voting Abstain', async () => {
-    const proposalId = 2;
-    const before = MOCK_PROPOSALS.find((p) => p.id === proposalId)?.votesAbstain ?? 0;
-    vi.runAllTimersAsync();
-    await castVote(proposalId, 'Abstain', SIGNER, mockSignTx);
-    const after = MOCK_PROPOSALS.find((p) => p.id === proposalId)?.votesAbstain ?? 0;
-    expect(after).toBeGreaterThan(before);
-  });
 });
 
 describe('governance – fetchProposals & SDK boundary', () => {
@@ -105,7 +101,6 @@ describe('governance – fetchProposals & SDK boundary', () => {
               voting_ends_at: 1700864000,
               votes_for: 1000,
               votes_against: 2500,
-              votes_abstain: 50,
               quorum_required: 500,
             },
           ]),
@@ -188,7 +183,6 @@ describe('governance – parseProposalStatus & contract parsers', () => {
       voting_ends_at: 200,
       votes_for: 300,
       votes_against: 150,
-      votes_abstain: 20,
       quorum_required: 100,
     };
     const parsed = parseProposalFromNative(nativeStruct);
@@ -260,14 +254,74 @@ describe('governance – createProposal', () => {
     const created = MOCK_PROPOSALS.find((p) => p.id === result.proposalId);
     expect(created?.parameterChanges).toBeDefined();
   });
+
+  it('persists the proposal payload and vote state for the created record', async () => {
+    vi.useFakeTimers();
+    const payload: CreateProposalPayload = {
+      formType: 'RemoveToken',
+      title: 'Remove EURC',
+      description: 'Remove EURC from active token set',
+      removeTokenAddress: 'CDTKPWPLOURQA2SGTKTUQOWRCBZEORB4BWBOMJ3D3ZTQQSGE5F6JBQLV',
+    };
+
+    const resultPromise = createProposal(payload, SIGNER, mockSignTx);
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+    const created = MOCK_PROPOSALS.find((p) => p.id === result.proposalId);
+
+    expect(created).toMatchObject({
+      proposer: SIGNER,
+      title: payload.title,
+      description: payload.description,
+      type: 'ProtocolUpgrade',
+      status: 'Active',
+      quorumRequired: 100_000,
+    });
+    expect(created?.parameterChanges?.[0]).toMatchObject({
+      parameter: 'accepted_tokens',
+      newValue: expect.stringContaining('removes EURC'),
+    });
+    vi.useRealTimers();
+  });
+});
+
+describe('governance – stateful write paths', () => {
+  it('updates the right vote bucket and persists userVote for the proposal', async () => {
+    vi.useFakeTimers();
+    const proposalPromise = createProposal(
+      {
+        formType: 'FeeRate',
+        title: 'Isolated vote assertion',
+        description: 'Uses a fresh proposal to avoid prior test state drift.',
+        newValueBps: 75,
+      },
+      SIGNER,
+      mockSignTx
+    );
+    await vi.runAllTimersAsync();
+    const proposed = await proposalPromise;
+
+    const resultPromise = castVote(proposed.proposalId, 'For', SIGNER, mockSignTx);
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+    const created = MOCK_PROPOSALS.find((p) => p.id === proposed.proposalId)!;
+
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+    expect(getUserVote(proposed.proposalId)).toBe('For');
+    expect(created.votesFor).toBe(1250);
+    expect(created.votesAgainst).toBe(0);
+    expect(created.votesAbstain).toBe(0);
+    vi.useRealTimers();
+  });
 });
 
 describe('governance – vote helper functions', () => {
   const proposal = MOCK_PROPOSALS[0];
 
-  it('totalVotes sums all vote types correctly', () => {
+  it('totalVotes sums votes correctly', () => {
     const total = totalVotes(proposal);
-    expect(total).toBe(proposal.votesFor + proposal.votesAgainst + proposal.votesAbstain);
+    expect(total).toBe(proposal.votesFor + proposal.votesAgainst);
   });
 
   it('votePercent returns 0 for zero total', () => {
@@ -283,7 +337,6 @@ describe('governance – vote helper functions', () => {
       ...proposal,
       votesFor: 200_000,
       votesAgainst: 0,
-      votesAbstain: 0,
       quorumRequired: 100_000,
     };
     expect(quorumReached(mockProposal)).toBe(true);
@@ -294,7 +347,6 @@ describe('governance – vote helper functions', () => {
       ...proposal,
       votesFor: 10_000,
       votesAgainst: 5_000,
-      votesAbstain: 1_000,
       quorumRequired: 100_000,
     };
     expect(quorumReached(mockProposal)).toBe(false);
@@ -351,13 +403,33 @@ describe('governance – parameterLabel', () => {
 
 describe('governance – getVotingPower', () => {
   it('returns a positive number', async () => {
-    vi.useFakeTimers();
-    const p = getVotingPower(SIGNER);
-    vi.runAllTimers();
-    const power = await p;
-    vi.useRealTimers();
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData: {} as any,
+        minResourceFee: '100',
+        events: [],
+        result: {
+          retval: nativeToScVal(1234),
+        },
+      } as any);
+
+    const power = await getVotingPower(SIGNER);
+    expect(mockSimulate).toHaveBeenCalled();
+    mockSimulate.mockRestore();
     expect(typeof power).toBe('number');
     expect(power).toBeGreaterThan(0);
+  });
+
+  it('returns 0 when the contract simulation is unsuccessful', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({ error: 'simulation failed' } as any);
+
+    const power = await getVotingPower(SIGNER);
+    mockSimulate.mockRestore();
+    expect(power).toBe(0);
   });
 });
 
@@ -472,5 +544,69 @@ describe('governance – simulateProposalEffect', () => {
         expect(result.warnings.length).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+// ─── Mock-backing detection (#857) ────────────────────────────────────────────
+//
+// Each function records its current expected status. While the real
+// implementation is still pending the status is 'mock' and the test stays
+// green; once the linked issue lands, detection flips and this test fails
+// until the status is changed to 'real', from which point a regression back
+// to a Math.random()/no-network mock fails here, next to the function.
+// Flipping to 'real' may also require stubbing the RPC calls the new
+// implementation makes (see docs/testing.md → "Mock-backing detection").
+
+describe('governance – mock-backing detection', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  async function settle<T>(promise: Promise<T>): Promise<T> {
+    await vi.runAllTimersAsync();
+    return promise;
+  }
+
+  it('castVote (#839): tx hash provenance and signTx usage', async () => {
+    const signTx = vi.fn(async (_xdr: string) => 'signedXDR');
+    const report = await detectMockBacking({
+      run: () => settle(castVote(1, 'For', SIGNER, signTx)),
+      boundaries: { signTx },
+    });
+    expectMockBackingStatus('castVote', report, 'mock');
+  });
+
+  it('createProposal (#841): tx hash provenance and signTx usage', async () => {
+    const signTx = vi.fn(async (_xdr: string) => 'signedXDR');
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Mock detection probe',
+      description: 'Probe proposal used by the mock-backing detection test.',
+      newValueBps: 40,
+    };
+    const report = await detectMockBacking({
+      run: () => settle(createProposal(payload, SIGNER, signTx)),
+      identify: (result) => result.txHash,
+      boundaries: { signTx },
+    });
+    expectMockBackingStatus('createProposal', report, 'mock');
+  });
+
+  it('fetchProtocolParameters (#844): reaches Soroban RPC or the network', async () => {
+    const simulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValue(new Error('offline'));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+    const report = await detectMockBacking({
+      run: () => settle(fetchProtocolParameters().catch(() => undefined)),
+      identify: () => undefined,
+      boundaries: { network: combineRecorders(simulate, fetchSpy) },
+    });
+    expectMockBackingStatus('fetchProtocolParameters', report, 'mock');
   });
 });

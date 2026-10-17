@@ -5,6 +5,7 @@ import { useApprovedTokens } from '@/hooks/useApprovedTokens';
 import { useBalances } from '@/hooks/useBalances';
 import { useWallet } from '@/context/WalletContext';
 import { TokenAmount } from './TokenSelector';
+import { WalletPrivacyControls } from './WalletPrivacyControls';
 import { formatAddress, formatTokenAmount } from '@/utils/format';
 import { NETWORK_NAME } from '@/constants';
 import TestnetFaucetButton from './TestnetFaucetButton';
@@ -30,7 +31,6 @@ export default function WalletButton() {
   // Auto-refreshes every 30s and on each successful transaction; tokens that
   // fail to load surface via `unavailable` for the "Add Trustline" prompt.
   const { balances, unavailable, isLoading: isLoadingBalances } = useBalances(tokens);
-  const [copied, setCopied] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -69,23 +69,33 @@ export default function WalletButton() {
         <button
           onClick={() => setDropdownOpen(!dropdownOpen)}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-full border border-outline-variant/15 transition-all focus:outline-none focus:ring-2 focus:ring-primary/50
-            ${dropdownOpen ? 'bg-surface-container' : 'bg-surface-container-low hover:bg-surface-container'}
+            ${
+              dropdownOpen
+                ? 'bg-surface-container'
+                : 'bg-surface-container-low hover:bg-surface-container'
+            }
           `}
           title={address!}
           aria-expanded={dropdownOpen}
         >
           <span
-            className={`w-2 h-2 rounded-full ${networkMismatch ? 'bg-error animate-pulse' : 'bg-green-500'}`}
+            className={`w-2 h-2 rounded-full ${
+              networkMismatch ? 'bg-error animate-pulse' : 'bg-green-500'
+            }`}
             aria-label={networkMismatch ? 'Wrong network' : 'Connected'}
           />
           <span
-            className={`text-[10px] font-bold uppercase ${networkMismatch ? 'text-error' : 'text-primary'}`}
+            className={`text-[10px] font-bold uppercase ${
+              networkMismatch ? 'text-error' : 'text-primary'
+            }`}
           >
             {networkMismatch ? 'Wrong Network' : NETWORK_NAME}
           </span>
           <span className="text-on-surface-variant/30">|</span>
           <span
-            className={`text-sm font-mono font-medium ${networkMismatch ? 'text-error' : 'text-on-surface'}`}
+            className={`text-sm font-mono font-medium ${
+              networkMismatch ? 'text-error' : 'text-on-surface'
+            }`}
           >
             {formatAddress(address!)}
           </span>
@@ -195,27 +205,13 @@ export default function WalletButton() {
 
             <div className="flex flex-col gap-1 border-t border-outline-variant/10 p-2">
               <TestnetFaucetButton />
-              <button
-                onClick={() => {
-                  void handleCopyAddress();
-                }}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-container-highest text-sm text-on-surface w-full text-left transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  {copied ? 'check' : 'content_copy'}
-                </span>
-                {copied ? 'Copied!' : 'Copy Address'}
-              </button>
-              <button
-                onClick={() => {
+              <WalletPrivacyControls
+                address={address!}
+                onDisconnect={() => {
                   disconnect();
                   setDropdownOpen(false);
                 }}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-error-container hover:text-on-error-container text-error text-sm w-full text-left transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">logout</span>
-                Disconnect
-              </button>
+              />
             </div>
           </div>
         )}

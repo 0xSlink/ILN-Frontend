@@ -2,54 +2,54 @@ version: 2
 
 updates:
   # npm / pnpm workspace packages
-  - package-ecosystem: "npm"
-    directory: "/"
+  - package-ecosystem: 'npm'
+    directory: '/'
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: 'weekly'
+      day: 'monday'
     open-pull-requests-limit: 10
     groups:
       # Stellar SDK packages — kept in sync; bump together
       stellar:
         patterns:
-          - "@stellar/*"
+          - '@stellar/*'
       # Supabase client
       supabase:
         patterns:
-          - "@supabase/*"
+          - '@supabase/*'
       # React + Next.js core
       react-next:
         patterns:
-          - "react"
-          - "react-dom"
-          - "next"
-          - "@types/react"
-          - "@types/react-dom"
+          - 'react'
+          - 'react-dom'
+          - 'next'
+          - '@types/react'
+          - '@types/react-dom'
       # Testing toolchain
       testing:
         patterns:
-          - "@playwright/*"
-          - "vitest"
-          - "@vitest/*"
-          - "playwright"
+          - '@playwright/*'
+          - 'vitest'
+          - '@vitest/*'
+          - 'playwright'
       # Minor / patch updates for everything else — batch to reduce PR noise
       minor-patch:
         update-types:
-          - "minor"
-          - "patch"
+          - 'minor'
+          - 'patch'
     ignore:
       # Major version bumps need manual review for breaking changes
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   # GitHub Actions — keep workflow action versions current
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: 'github-actions'
+    directory: '/'
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: 'weekly'
+      day: 'monday'
     open-pull-requests-limit: 5
     groups:
       actions:
         patterns:
-          - "*"
+          - '*'

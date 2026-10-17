@@ -84,7 +84,9 @@ export default function InvoiceStateDonut({
               onClick={() => toggleState(d.name)}
               className={`flex items-center gap-3 rounded-lg p-2 text-left transition-all ${
                 active ? 'opacity-100' : 'opacity-40 hover:opacity-70'
-              } ${filteredStates.includes(d.name) ? 'ring-1 ring-primary' : ''} hover:bg-surface-variant/30`}
+              } ${
+                filteredStates.includes(d.name) ? 'ring-1 ring-primary' : ''
+              } hover:bg-surface-variant/30`}
             >
               <span
                 style={{

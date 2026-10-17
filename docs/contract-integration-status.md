@@ -1,54 +1,71 @@
 # Smart Contract Integration Status
 
-This document tracks the integration status of Soroban smart contracts within the ILN Frontend codebase. It serves as a visibility guide for contributors and maintainers to know which features are fully backed by live on-chain contracts versus those that are currently stubbed or mock-implemented.
+This document tracks the integration status of Soroban smart contracts within the ILN Frontend codebase. It serves as a visibility guide for contributors and maintainers to know which features are fully backed by live on-chain contracts versus those that are currently stubbed, derived, or deferred.
+
+> Interface source of truth: `Invoice-Liquidity-Network/ILN-Smart-Contract` (branch `dev`), `contracts/invoice_liquidity/src/lib.rs`.
+>
+> 🤖 **Automated Living Inventory:** For an auto-generated, machine-verifiable report of all real, derived, deferred, and mock-backed code paths and pattern signatures across the frontend repository, see **[docs/mock-inventory.md](mock-inventory.md)** (generated via `pnpm run docs:mock-inventory`).
+
+Governance action indicators read `GOVERNANCE_INTEGRATION_STATUS` in `src/utils/governance.ts`. Keep that map aligned with this table: changing an action to `Real` automatically removes its "Not yet live" banner.
 
 ## Integration Status Summary
 
-| Module         | Sub-feature / Function | Status      | Implementation File       | Notes / Tracking Issue Link                                                  |
-| :------------- | :--------------------- | :---------- | :------------------------ | :--------------------------------------------------------------------------- |
-| **Invoices**   | `submitInvoice`        | **Real**    | `src/utils/soroban.ts`    | Fully integrated with deployed Soroban invoice contract.                     |
-| **Invoices**   | `fundInvoice`          | **Real**    | `src/utils/soroban.ts`    | Fully integrated.                                                            |
-| **Invoices**   | `markPaid`             | **Real**    | `src/utils/soroban.ts`    | Fully integrated.                                                            |
-| **Invoices**   | `appealDefault`        | **Real**    | `src/utils/soroban.ts`    | Fully integrated.                                                            |
-| **Invoices**   | `disputeInvoice`       | **Real**    | `src/utils/soroban.ts`    | Fully integrated.                                                            |
-| **Invoices**   | `claimDefault`         | **Real**    | `src/utils/soroban.ts`    | Fully integrated.                                                            |
-| **Invoices**   | `cancelInvoice`        | **Real**    | `src/utils/soroban.ts`    | Fully integrated.                                                            |
-| **Invoices**   | `updateLPWhitelist`    | **Stubbed** | `src/utils/soroban.ts`    | Throws error. Placeholder for upcoming whitelist manager contract.           |
-| **Reputation** | `getReputation`        | **Real**    | `src/utils/soroban.ts`    | Fully integrated.                                                            |
-| **Reputation** | `getPayerScore`        | **Real**    | `src/utils/soroban.ts`    | Fully integrated.                                                            |
-| **Governance** | `getProposals`         | **Real**    | `src/utils/governance.ts` | Fully integrated with deployed `iln_governance` contract `list_proposals()`. |
-| **Governance** | `castVote`             | **Stubbed** | `src/utils/governance.ts` | Mock transaction; needs governance contract deployment.                      |
-| **Governance** | `delegateVotingPower`  | **Stubbed** | `src/utils/governance.ts` | Mock transaction; needs governance contract deployment.                      |
-| **Governance** | `createProposal`       | **Stubbed** | `src/utils/governance.ts` | Mock transaction; needs governance contract deployment.                      |
-| **Governance** | `getGovTokenBalance`   | **Stubbed** | `src/utils/governance.ts` | Mocks return balance; needs token contract integration.                      |
-| **Governance** | `getQuorumThreshold`   | **Stubbed** | `src/utils/governance.ts` | Mocks read-only call; needs governance contract deployment.                  |
-| **Governance** | `getProposalHistory`   | **Stubbed** | `src/utils/governance.ts` | Mocks timeline; needs Stellar SDK/Horizon lookup.                            |
+| Module         | Sub-feature / Function                                                                                                     | Status       | Implementation File              | Notes / Tracking Issue Link                                                                                                                                                           |
+| :------------- | :------------------------------------------------------------------------------------------------------------------------- | :----------- | :------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Invoices**   | `submitInvoice`                                                                                                            | **Real**     | `src/utils/soroban.ts`           | Calls `submit_invoice(freelancer, payer, amount, due_date, discount_rate, token, referral_code)` — token-aware with always-present `ReferralCode` union.                              |
+| **Invoices**   | `fundInvoice`                                                                                                              | **Real**     | `src/utils/soroban.ts`           | Calls `fund_invoice(funder, invoice_id, fund_amount, require_oracle_verification)`. Optional `requireOracleVerification` maps to the on-chain oracle circuit-breaker check (#784).    |
+| **Invoices**   | `markPaid`                                                                                                                 | **Real**     | `src/utils/soroban.ts`           | Fully integrated.                                                                                                                                                                     |
+| **Invoices**   | `appealDefault`                                                                                                            | **Real**     | `src/utils/soroban.ts`           | Fully integrated.                                                                                                                                                                     |
+| **Invoices**   | `disputeInvoice`                                                                                                           | **Real**     | `src/utils/soroban.ts`           | Fully integrated.                                                                                                                                                                     |
+| **Invoices**   | `claimDefault`                                                                                                             | **Real**     | `src/utils/soroban.ts`           | Fully integrated.                                                                                                                                                                     |
+| **Invoices**   | `cancelInvoice`                                                                                                            | **Real**     | `src/utils/soroban.ts`           | Fully integrated.                                                                                                                                                                     |
+| **Invoices**   | `listInvoicesBySubmitter`                                                                                                  | **Real**     | `src/utils/soroban.ts`           | Paginated `list_invoices_by_submitter(submitter, page, page_size)` with legacy `list_invoices_by_freelancer` fallback (#784).                                                         |
+| **Invoices**   | `listInvoicesByLp`                                                                                                         | **Real**     | `src/utils/soroban.ts`           | Paginated `list_invoices_by_lp(lp, page, page_size)` (#784).                                                                                                                          |
+| **Invoices**   | `listInvoicesByPayer`                                                                                                      | **Derived**  | `src/utils/soroban.ts`           | `list_invoices_by_payer` is not an entry point of the current ABI; role detection falls back to the `get_invoice` table scan. Returns `[]` on failure (#784).                         |
+| **Invoices**   | `updateLPWhitelist`                                                                                                        | **Deferred** | `src/utils/soroban.ts`           | No `update_lp_whitelist` entry point on any deployed contract. Gated behind `UPDATE_LP_WHITELIST_SUPPORTED = false`; the LP whitelist UI shows the governance-proposal notice (#783). |
+| **Tokens**     | `getApprovedTokenIds`                                                                                                      | **Real**     | `src/utils/soroban.ts`           | `list_tokens` does not exist; approval is derived per configured candidate via `get_token_decimals(Address)` (#784).                                                                  |
+| **Tokens**     | `adminApproveToken`                                                                                                        | **Real**     | `src/utils/soroban.ts`           | Calls `add_token(token, decimals)` — decimals resolved from known metadata or a provided argument (#784).                                                                             |
+| **Tokens**     | `getTokenMetadata`                                                                                                         | **Real**     | `src/utils/soroban.ts`           | Reads `name`/`symbol`/`decimals` with fallback metadata.                                                                                                                              |
+| **Referrals**  | `getReferralStats`                                                                                                         | **Real**     | `src/utils/soroban.ts`           | Calls `get_referral_stats(code: BytesN<32>)`; parses both the `{total_invoices,total_volume}` struct and raw `u64` revisions (#784).                                                  |
+| **Oracle**     | `OracleBadge`                                                                                                              | **Real**     | `src/components/OracleBadge.tsx` | Feature-flagged badge with `circuit_tripped` / `data_stale` / `unconfigured` states matching the oracle registry ADR-010 (#785).                                                      |
+| **Insurance**  | `getInsurancePoolInfo`                                                                                                     | **Real**     | `src/utils/soroban.ts`           | Reads `get_total_reserve` / `get_premiums_paid` / `get_base_premium_rate_bps` (`insurance_pool` crate).                                                                               |
+| **Other**      | `getReputation` / `getPayerScore`                                                                                          | **Real**     | `src/utils/soroban.ts`           | Fully integrated.                                                                                                                                                                     |
+| **Reputation** | `getReputationEvents`, `getTopFreelancers`, `getTopLPs`                                                                    | **Derived**  | `src/utils/soroban.ts`           | No direct on-chain entry points; tolerant alias chains with defaults. Consumers treat empty results gracefully.                                                                       |
+| **Governance** | `getProposals`                                                                                                             | **Real**     | `src/utils/governance.ts`        | Fully integrated with deployed `iln_governance` contract `list_proposals()`.                                                                                                          |
+| **Governance** | `castVote` / `delegateVotingPower` / `createProposal` / `getGovTokenBalance` / `getQuorumThreshold` / `getProposalHistory` | **Stubbed**  | `src/utils/governance.ts`        | Mock implementations; need governance contract deployment.                                                                                                                            |
 
-## Details of Stubbed Code & TODO Markers
+## Details of Deferred / Derived Code & TODO Markers
 
-### 1. LP Whitelist Manager Stub
+### 1. LP Whitelist Manager — Deferred (#783)
 
-Located in `src/utils/soroban.ts` (`updateLPWhitelist`):
+Located in `src/utils/soroban.ts`:
 
 ```typescript
-/**
- * Stub for updateLPWhitelist — some deployments may not support this
- * instruction; export a placeholder so consumers can safely call it
- * and bundlers don't fail on missing named exports.
- */
+export const UPDATE_LP_WHITELIST_SUPPORTED = false;
+
 export async function updateLPWhitelist(args: { invoiceId: bigint; whitelist: string[] }) {
   throw new Error('updateLPWhitelist is not supported by the deployed contract');
 }
 ```
 
-- **Action Needed:** Implement live transaction builder once contract endpoint is deployed.
+- **Status:** The current contract ABI exposes no `update_lp_whitelist` instruction, so this is deferred rather than stubbed.
+- The `LPWhitelistManager` component gates add/remove behind `UPDATE_LP_WHITELIST_SUPPORTED` and renders the governance-proposal notice instead of broken actions.
+- **Action Needed:** Flip `UPDATE_LP_WHITELIST_SUPPORTED` to `true` and replace the stub with a live transaction builder once the instruction lands on-chain.
 
-### 2. Governance Protocol Stubs
+### 2. `listInvoicesByPayer` — Derived From Table Scan (#784)
+
+There is no `list_invoices_by_payer` entry point in the current ABI. The direct read attempt returns an empty list on current deployments, and `getWalletRoles` continues to detect payer roles through the `get_invoice` enumeration (`getAllInvoices`).
+
+### 3. Reputation history & leaderboards — Derived
+
+`getReputationEvents`, `getTopFreelancers`, and `getTopLPs` have no on-chain backing entry points yet; they use tolerant alias chains and return empty/default values when the reads fail. Consumers (e.g. the profile reputation sparkline, leaderboard) handle empty results gracefully.
+
+### 4. Governance Protocol Stubs
 
 Stubs in `src/utils/governance.ts` marked with `TODO` comments:
 
-- `getProposals` / `fetchProposals` - **Integrated**: Live contract call to `iln_governance` `list_proposals()`.
 - `castVote` (line 264)
+- `getVotingPower` - returns a fixed mock balance until ILN token contract integration.
 - `delegateVotingPower` (line 286)
 - `getGovTokenBalance` (line 326)
 - `getQuorumThreshold` (line 427)

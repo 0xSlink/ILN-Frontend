@@ -1,0 +1,77 @@
+name: Mainnet Post-Deploy Smoke Test
+
+# Manually triggered workflow for post-deploy verification against live Mainnet or Mainnet preview deployments.
+# Strictly runs read-only checks without executing any state-mutating or fund-moving transactions.
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target deployment URL to smoke test'
+        required: true
+        default: 'https://app.iln.finance'
+      mainnet_contract_id:
+        description: 'Optional mainnet factoring contract ID override to cross-check'
+        required: false
+        default: 'CB7N6E56V4K3Q7ZJ6DLR3W3Q6S5ZPYI32AOGI4A4X67E525U4FOWMAIN'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Run Mainnet Read-Only Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Mainnet Post-Deploy Smoke Tests (Read-Only)
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ inputs.target_url }}
+          MAINNET_CONTRACT_ID: ${{ inputs.mainnet_contract_id }}
+          NEXT_PUBLIC_API_MOCKING: disabled
+        run: |
+          echo "🚀 Running read-only mainnet smoke checks against: ${{ inputs.target_url }}"
+          pnpm exec playwright test e2e/mainnet-smoke.spec.ts --project=mobile-375
+
+      - name: Post Smoke Test Summary
+        if: always()
+        run: |
+          {
+            echo "## 🛡️ Mainnet Post-Deploy Smoke Test Results"
+            echo ""
+            echo "- **Target URL**: \`${{ inputs.target_url }}\`"
+            echo "- **Contract ID**: \`${{ inputs.mainnet_contract_id }}\`"
+            echo "- **Execution Mode**: Strictly Read-Only"
+            echo "- **Status**: ${{ job.status == 'success' && '✅ PASSED' || '❌ FAILED' }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Playwright Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mainnet-smoke-playwright-report
+          path: playwright-report/
+          retention-days: 14

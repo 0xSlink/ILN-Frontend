@@ -136,3 +136,12 @@ This guide consolidates common local setup issues, symptoms, and resolution step
   ```bash
   pnpm test -- --update-snapshots
   ```
+
+### Symptom: Nightly testnet smoke fails with `returned HTTP 404`
+
+- **Underlying Cause**: The live testnet deployment (`https://invoice-liquidity-network.vercel.app`) was built from a commit that predates the route, so it serves the default Next.js 404 page. The route's code is fine; the deployment is stale.
+- **Resolution**:
+  Confirm the route exists in `app/`, check what the live deployment returns, and redeploy the current branch from Vercel:
+  ```bash
+  curl -s -o /dev/null -w '%{http_code}\n' https://invoice-liquidity-network.vercel.app/leaderboard
+  ```

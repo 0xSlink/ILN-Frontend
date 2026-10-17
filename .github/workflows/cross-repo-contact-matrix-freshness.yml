@@ -1,0 +1,67 @@
+name: Cross-Repo Contact Matrix Freshness
+
+on:
+  schedule:
+    # 1st of every month at 10:00 UTC
+    - cron: '0 10 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  create-review-reminder:
+    name: Create monthly contact-matrix review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create review issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const docPath = 'docs/cross-repo-incident-coordination.md';
+            const doc = fs.readFileSync(docPath, 'utf8');
+            const now = new Date();
+            const month = now.getUTCMonth() + 1;
+            const marker = `cross-repo-contact-matrix-review-${now.getUTCFullYear()}-${month}`;
+            const title = `chore: review cross-repo contact matrix (${now.getUTCFullYear()}-${month.toString().padStart(2, '0')})`;
+
+            const { data: existingIssues } = await github.rest.issues.listForRepo({
+              ...context.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            if (existingIssues.some((issue) => issue.body?.includes(marker))) {
+              core.info(`A review issue for ${marker} already exists.`);
+              return;
+            }
+
+            const rows = [...doc.matchAll(/^\| (.+?) \| (.+?) \|/gm)]
+              .filter(([, handoff]) => handoff !== 'Handoff' && handoff !== '---')
+              .map(([, handoff, owner]) => `- **${handoff.trim()}**: ${owner.trim()}`)
+              .join('\n');
+
+            const body = [
+              `<!-- ${marker} -->`,
+              '## Monthly cross-repo incident coordination contact review',
+              '',
+              '**Owner:** Incident Commander',
+              '',
+              'Confirm that the escalation contacts in `docs/cross-repo-incident-coordination.md` still reach active responders.',
+              '',
+              '### Contact matrix',
+              rows || '_No contact rows found; investigate immediately._',
+              '',
+              '### Review checklist',
+              '- [ ] Each role handle still maps to the correct cross-repo team or individual.',
+              '- [ ] Any drift has been corrected in the protocol document.',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              ...context.repo,
+              title,
+              body,
+            });

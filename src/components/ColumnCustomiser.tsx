@@ -74,7 +74,9 @@ export default function ColumnCustomiser({
         <span className="material-symbols-outlined text-[18px]">view_column</span>
         <span className="text-sm font-bold uppercase tracking-wider">Columns</span>
         <span
-          className={`material-symbols-outlined text-[18px] transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
+          className={`material-symbols-outlined text-[18px] transition-transform duration-300 ${
+            isOpen ? 'rotate-180' : ''
+          }`}
         >
           expand_more
         </span>
@@ -140,7 +142,9 @@ export default function ColumnCustomiser({
                         )}
                       </div>
                       <span
-                        className={`text-sm font-medium ${column.isMandatory ? 'text-on-surface-variant/60' : 'text-on-surface'}`}
+                        className={`text-sm font-medium ${
+                          column.isMandatory ? 'text-on-surface-variant/60' : 'text-on-surface'
+                        }`}
                       >
                         {column.label}
                       </span>

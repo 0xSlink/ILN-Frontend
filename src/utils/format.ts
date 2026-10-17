@@ -12,14 +12,14 @@ export function formatUSDC(amount: bigint): string {
   return formatTokenAmount(amount, { symbol: 'USDC', decimals: 6 });
 }
 
-export function formatUSD(amount: bigint, decimals = 7): string {
+export function formatUSD(amount: bigint, decimals = 7, locale = 'en-US'): string {
   const negative = amount < 0n;
   const absolute = negative ? amount * -1n : amount;
   const divisor = 10n ** BigInt(decimals);
   const whole = absolute / divisor;
   const fraction = absolute % divisor;
   const cents = Number((fraction * 100n + divisor / 2n) / divisor);
-  const formattedWhole = new Intl.NumberFormat('en-US').format(Number(whole));
+  const formattedWhole = new Intl.NumberFormat(locale).format(Number(whole));
 
   return `${negative ? '-' : ''}$${formattedWhole}.${cents.toString().padStart(2, '0')}`;
 }
@@ -30,8 +30,8 @@ export function formatAddress(address: string): string {
   return address.substring(0, 4) + '...' + address.substring(address.length - 4);
 }
 
-export function formatDate(timestamp: bigint): string {
-  return new Date(Number(timestamp) * 1000).toLocaleDateString();
+export function formatDate(timestamp: bigint, locale = 'en-US'): string {
+  return new Date(Number(timestamp) * 1000).toLocaleDateString(locale);
 }
 
 export function calculateYield(amount: bigint, discount_rate: number): bigint {
