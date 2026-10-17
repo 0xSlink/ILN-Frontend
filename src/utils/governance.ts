@@ -16,6 +16,7 @@ import {
   STELLAR_NETWORK,
 } from '@/constants';
 import { isCancellationError } from '@/lib/transaction-lifecycle';
+import { sep10Session } from '@/lib/sep10Session';
 
 // ─── RPC & Contract helpers ───────────────────────────────────────────────────
 
@@ -540,6 +541,21 @@ async function requireGovernanceSignature(
 }
 
 /**
+ * Enforce a valid SEP-10 session before any backend-authorized governance or
+ * admin operation. Throws with a typed error code so callers can prompt
+ * reauthentication rather than silently failing.
+ *
+ * #1076: Gate authenticated governance actions
+ */
+function requireSep10Session(signerAddress: string): void {
+  if (!sep10Session.hasValidSession(signerAddress)) {
+    throw new Error(
+      'SEP10_SESSION_REQUIRED: A valid authenticated session is required to perform governance actions. Please reconnect your wallet.'
+    );
+  }
+}
+
+/**
  * Deterministic stand-in transaction hash derived from the wallet signature.
  * Replaces the previous `Math.random()` hashes so no fabricated random value
  * reaches the UI (#1141); the same signed intent always yields the same hash.
@@ -572,6 +588,7 @@ export async function castVote(
   signerAddress: string,
   signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
+  requireSep10Session(signerAddress);
   // TODO: Replace with actual Soroban transaction once governance contract is deployed
   // Ref: #111
   await new Promise((r) => setTimeout(r, 2000));
@@ -626,6 +643,7 @@ export async function executeProposal(
   signerAddress: string,
   signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
+  requireSep10Session(signerAddress);
   // TODO: Replace with actual Soroban transaction once governance contract is deployed
   // Ref: #111
   await new Promise((r) => setTimeout(r, 2000));
@@ -659,6 +677,7 @@ export async function vetoProposal(
   adminAddress: string,
   signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
+  requireSep10Session(adminAddress);
   await new Promise((r) => setTimeout(r, 1200));
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
@@ -897,6 +916,7 @@ export async function createProposal(
   signerAddress: string,
   signTx: (xdr: string) => Promise<string>
 ): Promise<{ txHash: string; proposalId: number }> {
+  requireSep10Session(signerAddress);
   await new Promise((r) => setTimeout(r, 2500));
 
   // Idempotency check: deduplicate rapid duplicate submissions without

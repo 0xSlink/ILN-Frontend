@@ -1,7 +1,7 @@
 /**
  * Wire types for the indexer boundary.
  *
- * The browser only ever talks to `/api/indexer/*` (see `client.ts`), which
+ * The browser only ever talks to `/api/indexer/*` (see `src/lib/indexer-client.ts`), which
  * responds with one of the envelopes below. Data inside a success envelope has
  * already been validated server-side by the resource parsers in `resources.ts`.
  */
