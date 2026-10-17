@@ -49,6 +49,7 @@ vi.mock('@/hooks/useBalances', () => ({
 }));
 
 vi.mock('@/lib/treasury-rates', () => ({
+  THREE_MONTH_TBILL_SOURCE: 'U.S. Treasury Fiscal Data (3-month T-bill)',
   fetchThreeMonthTBillRatePct: (...args: unknown[]) => fetchThreeMonthTBillRatePctMock(...args),
 }));
 

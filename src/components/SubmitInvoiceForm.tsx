@@ -488,7 +488,11 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                           searchAddresses(addressBookQuery).map((entry, index) => (
                             <div
                               key={entry.id}
-                              className={`px-4 py-3 text-sm cursor-pointer ${highlightedIndex === index ? 'bg-primary text-surface-container-lowest' : 'hover:bg-surface-variant/50'}`}
+                              className={`px-4 py-3 text-sm cursor-pointer ${
+                                highlightedIndex === index
+                                  ? 'bg-primary text-surface-container-lowest'
+                                  : 'hover:bg-surface-variant/50'
+                              }`}
                               onClick={() => handleSelectAddress(entry.address)}
                             >
                               <div className="flex justify-between">
@@ -511,7 +515,9 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
 
                 <div className="grid gap-5 md:grid-cols-2">
                   <Field
-                    label={`${t('submitForm.amountLabel')}${selectedToken ? ` (${selectedToken.symbol})` : ''}`}
+                    label={`${t('submitForm.amountLabel')}${
+                      selectedToken ? ` (${selectedToken.symbol})` : ''
+                    }`}
                     tooltip="The full value of the invoice. This is what the payer owes you in total."
                     error={displayErrors.amount}
                     errorId="amount-error"

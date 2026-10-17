@@ -58,6 +58,7 @@ export function connectIndexerWebSocket(options: IndexerWebSocketOptions): Index
 
   const connect = () => {
     if (closed || typeof WebSocket === 'undefined') {
+      console.warn('[IndexerWebSocket] WebSocket unavailable or connection closed');
       options.onStatusChange?.('error');
       return;
     }
@@ -66,11 +67,13 @@ export function connectIndexerWebSocket(options: IndexerWebSocketOptions): Index
     ws?.close();
 
     try {
+      console.log('[IndexerWebSocket] Attempting connection to:', INDEXER_WS_URL);
       options.onStatusChange?.('connecting');
       ws = new WebSocket(INDEXER_WS_URL);
 
       ws.onopen = () => {
         attempt = 0;
+        console.log('[IndexerWebSocket] Connected successfully');
         options.onStatusChange?.('connected');
         flushBuffer();
       };
@@ -95,11 +98,14 @@ export function connectIndexerWebSocket(options: IndexerWebSocketOptions): Index
         }
       };
 
-      ws.onerror = () => {
+      ws.onerror = (event: Event) => {
+        const wsEvent = event as unknown as Record<string, unknown>;
+        console.error('[IndexerWebSocket] WebSocket error:', wsEvent);
         options.onStatusChange?.('error');
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event: CloseEvent) => {
+        console.log('[IndexerWebSocket] Connection closed:', event.code, event.reason);
         ws = null;
         if (!closed) {
           scheduleReconnect();

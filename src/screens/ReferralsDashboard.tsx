@@ -19,11 +19,15 @@ function shareUrl(platform: SharePlatform, link: string): string {
     case 'x':
       return `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
     case 'telegram':
-      return `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(`Join ILN and get paid instantly!`)}`;
+      return `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(
+        `Join ILN and get paid instantly!`
+      )}`;
     case 'whatsapp':
       return `https://wa.me/?text=${encodeURIComponent(text)}`;
     case 'email':
-      return `mailto:?subject=${encodeURIComponent('Join Invoice Liquidity Network')}&body=${encodeURIComponent(
+      return `mailto:?subject=${encodeURIComponent(
+        'Join Invoice Liquidity Network'
+      )}&body=${encodeURIComponent(
         `Hi,\n\nI've been using Invoice Liquidity Network to get paid instantly for my work. You should check it out!\n\nUse my referral link to get started: ${link}`
       )}`;
   }

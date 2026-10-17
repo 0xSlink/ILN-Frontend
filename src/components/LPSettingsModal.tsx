@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useLPSettings } from '@/hooks/useLPSettings';
+import { NOTIFICATION_CATEGORIES } from '@/utils/notificationHelpers';
 
 interface LPSettingsModalProps {
   isOpen: boolean;
@@ -73,12 +74,12 @@ export default function LPSettingsModal({ isOpen, onClose }: LPSettingsModalProp
             </h4>
 
             <div className="space-y-3">
-              {(['invoice', 'lp', 'governance', 'reputation'] as const).map((category) => (
+              {NOTIFICATION_CATEGORIES.map((category) => (
                 <label key={category} className="flex items-center justify-between cursor-pointer">
                   <span className="text-sm text-on-surface capitalize">{category} events</span>
                   <input
                     type="checkbox"
-                    checked={settings.notificationPreferences.categories[category]}
+                    checked={settings.notificationPreferences.categories[category] ?? true}
                     onChange={(e) =>
                       updateNotificationPreferences({
                         categories: {

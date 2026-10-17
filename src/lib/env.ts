@@ -53,6 +53,7 @@ export const env = {
   NEXT_PUBLIC_INSURANCE_POOL_ENABLED: booleanEnv('NEXT_PUBLIC_INSURANCE_POOL_ENABLED'),
   NEXT_PUBLIC_ORACLE_ENABLED: booleanEnv('NEXT_PUBLIC_ORACLE_ENABLED'),
   NEXT_PUBLIC_NFT_ENABLED: booleanEnv('NEXT_PUBLIC_NFT_ENABLED'),
+  NEXT_PUBLIC_MAINTENANCE_MODE: booleanEnv('NEXT_PUBLIC_MAINTENANCE_MODE'),
   NEXT_PUBLIC_NFT_CONTRACT_ID: process.env.NEXT_PUBLIC_NFT_CONTRACT_ID || '',
   NEXT_PUBLIC_NFT_METADATA_METHOD: optionalEnv('NEXT_PUBLIC_NFT_METADATA_METHOD', 'token_uri'),
   NEXT_PUBLIC_NFT_EVENT_HINTS: process.env.NEXT_PUBLIC_NFT_EVENT_HINTS || '',
@@ -76,6 +77,9 @@ export const env = {
 
   // App
   NEXT_PUBLIC_APP_URL: optionalEnv('NEXT_PUBLIC_APP_URL', 'https://app.iln.finance'),
+
+  // Real-User Monitoring (RUM) – optional beacon endpoint for Core Web Vitals
+  NEXT_PUBLIC_RUM_ENDPOINT: process.env.NEXT_PUBLIC_RUM_ENDPOINT || '',
 
   // GitHub (feedback API)
   GITHUB_TOKEN: process.env.GITHUB_TOKEN || '',

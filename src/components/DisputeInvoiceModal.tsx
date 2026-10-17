@@ -35,7 +35,10 @@ export default function DisputeInvoiceModal({
 
     try {
       const tx = await disputeInvoice(address, invoice.id, reasonHash);
-      const txHash = await execute(tx, 'Dispute invoice');
+      const txHash = await execute(tx, {
+        expectedAction: 'dispute_invoice',
+        title: 'Dispute invoice',
+      });
       if (txHash) {
         addToast({
           type: 'success',

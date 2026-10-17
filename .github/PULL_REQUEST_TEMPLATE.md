@@ -78,3 +78,5 @@ Closes #
 - [ ] Documentation updated (README, DESIGN.md, architecture docs) if needed
 - [ ] No new console warnings or errors
 - [ ] All tests passing locally
+- [ ] **Mock-Replacement Verification**: If this PR claims to close a "replace mock", "implement real", or "wire live" issue, I have verified that the specific mock pattern (e.g. `Math.random()` fake hash, in-memory mock mutation, unused signer parameter, `MOCK_*` stub) is genuinely removed in the diff, and any status docs match the code.
+- [ ] **Linked-Issue Behavior Verification**: Confirmed that the actual behavior change described in the linked issue is present in the PR diff, not just that CI is green.

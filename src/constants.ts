@@ -24,6 +24,8 @@ export const GOVERNANCE_ADMIN_ADDRESS =
   process.env.NEXT_PUBLIC_GOVERNANCE_ADMIN_ADDRESS ||
   'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 export const GOVERNANCE_CONTRACT_ID = process.env.NEXT_PUBLIC_GOVERNANCE_CONTRACT_ID || CONTRACT_ID;
+/** ILN governance token contract — used for voting power and quorum calculations. */
+export const ILN_TOKEN_CONTRACT_ID = process.env.NEXT_PUBLIC_ILN_TOKEN_CONTRACT_ID || CONTRACT_ID;
 
 // ─── Invoice NFT display (#234) ───────────────────────────────────────────────
 
@@ -41,3 +43,43 @@ export const NFT_EVENT_HINTS = process.env.NEXT_PUBLIC_NFT_EVENT_HINTS || '';
 // ─── Indexer WebSocket Configuration ────────────────────────────────────────────
 
 export const INDEXER_WS_URL = process.env.NEXT_PUBLIC_INDEXER_WS_URL || 'ws://localhost:8080/ws';
+
+// ─── Indexer API Configuration ──────────────────────────────────────────────
+
+/**
+ * Public indexer API URL (exposed to browser, no auth required)
+ */
+export const INDEXER_API_URL = process.env.NEXT_PUBLIC_INDEXER_API_URL || 'https://api.iln.example.com';
+
+/**
+ * Server-side indexer URL with optional authentication.
+ * Used for leaderboard, analytics, and higher-volume server calls.
+ */
+export const INDEXER_SERVER_URL = process.env.INDEXER_URL || process.env.NEXT_PUBLIC_INDEXER_API_URL || 'https://api.iln.example.com';
+
+/**
+ * Server-side API key for authenticated indexer calls (never expose to client).
+ * When set, enables higher rate limits vs. anonymous requests.
+ */
+export const INDEXER_API_KEY = process.env.INDEXER_API_KEY || '';
+
+/**
+ * Default timeout for indexer requests in milliseconds (#1107).
+ */
+export const INDEXER_DEFAULT_TIMEOUT_MS = 10_000;
+
+/**
+ * Maximum retry attempts for transient indexer failures (#1108).
+ */
+export const INDEXER_DEFAULT_RETRIES = 2;
+
+/**
+ * Base backoff in milliseconds for exponential retry (#1108).
+ */
+export const INDEXER_DEFAULT_BACKOFF_MS = 300;
+
+/**
+ * Maximum backoff cap in milliseconds for exponential retry (#1108).
+ */
+export const INDEXER_MAX_BACKOFF_MS = 2_000;
+

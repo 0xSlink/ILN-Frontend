@@ -97,6 +97,21 @@ describe('useContractEvents', () => {
     expect(result.current.connectionType).toBe('polling');
   });
 
+  it('falls back to the Horizon stream only once when the WebSocket reports several failures', () => {
+    let statusCallback: ((status: string) => void) | null = null;
+    mockConnectIndexerWebSocket.mockImplementation(({ onStatusChange }: any) => {
+      statusCallback = onStatusChange;
+      return { close: vi.fn() };
+    });
+
+    renderHook(() => useContractEvents(true));
+    // A dropped socket reports `disconnected`, then `error` from its pending reconnect.
+    act(() => statusCallback?.('disconnected'));
+    act(() => statusCallback?.('error'));
+
+    expect(mockConnectHorizonTransactionStream).toHaveBeenCalledTimes(1);
+  });
+
   it('closes the connection and sets streaming inactive on cleanup', () => {
     const mockClose = vi.fn();
     mockConnectIndexerWebSocket.mockReturnValue({ close: mockClose });
@@ -256,6 +271,33 @@ describe('useContractEvents', () => {
 
       expect(clearTimeoutSpy).toHaveBeenCalled();
       clearTimeoutSpy.mockRestore();
+    });
+
+    it('closes a failed stream and ignores its later reports so retries never fan out', () => {
+      const { getPollStatusCallback } = connectWithFallbackToPolling();
+      const failedStream = mockConnectHorizonTransactionStream.mock.results[0].value;
+      const failedStreamStatus = getPollStatusCallback();
+
+      act(() => failedStreamStatus?.('disconnected'));
+      expect(failedStream.close).toHaveBeenCalled();
+
+      // Reports from the failed stream's own reconnect loop must not schedule more streams.
+      act(() => failedStreamStatus?.('disconnected'));
+      act(() => failedStreamStatus?.('disconnected'));
+      act(() => vi.advanceTimersByTime(30_000));
+
+      expect(mockConnectHorizonTransactionStream).toHaveBeenCalledTimes(2);
+    });
+
+    it('closes the retried stream on unmount', () => {
+      const { unmount, getPollStatusCallback } = connectWithFallbackToPolling();
+
+      act(() => getPollStatusCallback()?.('disconnected'));
+      act(() => vi.advanceTimersByTime(1000));
+      const retriedStream = mockConnectHorizonTransactionStream.mock.results[1].value;
+      unmount();
+
+      expect(retriedStream.close).toHaveBeenCalled();
     });
 
     it('patches invoices and resets error state on a polling event', () => {

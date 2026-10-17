@@ -1,6 +1,11 @@
-# These organizations support the ILN Frontend project
+# Funding channels for the ILN Frontend project.
+#
+# Resolves #450 — these are the canonical ways to support the ILN ecosystem:
+# the Invoice-Liquidity-Network GitHub organization and the Drips Network wave.
+
 github: [Invoice-Liquidity-Network]
 
 # Drips Network Wave funding
+# https://www.drips.network — streams funds to ecosystem maintainers.
 custom:
   - https://drips.network/waves

@@ -1,8 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import type { DecodedTransaction } from '@/utils/decodeTransaction';
+import {
+  findTransactionPatternMismatches,
+  type ExpectedTransactionAction,
+} from '@/utils/transactionPattern';
 
 interface TransactionPreviewModalProps {
   decoded: DecodedTransaction | null;
+  expectedAction?: ExpectedTransactionAction;
   rawXdr: string;
   onConfirm: () => void;
   onCancel: () => void;
@@ -20,6 +25,7 @@ function truncateValue(val: string): string {
 
 export default function TransactionPreviewModal({
   decoded,
+  expectedAction,
   rawXdr,
   onConfirm,
   onCancel,
@@ -40,6 +46,8 @@ export default function TransactionPreviewModal({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onCancel]);
+
+  const patternMismatches = findTransactionPatternMismatches(decoded, expectedAction);
 
   return (
     <div
@@ -70,6 +78,28 @@ export default function TransactionPreviewModal({
         </div>
 
         <div className="px-6 py-5 space-y-5">
+          {patternMismatches.length > 0 && (
+            <div
+              className="rounded-xl border-2 border-error/50 bg-error-container/70 px-4 py-3 flex items-start gap-3"
+              role="alert"
+            >
+              <span className="material-symbols-outlined text-error mt-0.5">warning</span>
+              <div>
+                <p className="text-sm font-bold text-on-error-container">
+                  Suspicious transaction pattern detected
+                </p>
+                <p className="text-xs text-on-error-container mt-1">
+                  This payload does not match the expected {expectedAction} action. Do not sign
+                  unless you understand every difference.
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-on-error-container">
+                  {patternMismatches.map((mismatch) => (
+                    <li key={mismatch}>{mismatch}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
           {!decoded && (
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 flex items-start gap-3">
               <span className="material-symbols-outlined text-amber-600 mt-0.5">warning</span>

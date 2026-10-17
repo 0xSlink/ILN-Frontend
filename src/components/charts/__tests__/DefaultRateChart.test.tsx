@@ -85,17 +85,16 @@ describe('DefaultRateChart', () => {
     await waitFor(() => expect(screen.getByText('→')).toBeInTheDocument());
   });
 
-  it('falls back to generated mock data when the fetch fails', async () => {
+  it('shows an honest unavailable notice when the fetch fails (indexer down)', async () => {
     fetchMock.mockRejectedValue(new Error('network down'));
     render(<DefaultRateChart />);
-    await waitFor(() => expect(screen.queryByText(/animate-spin/)).not.toBeInTheDocument());
-    // 12 months of mock data always render some current-rate percentage.
-    await waitFor(() => expect(screen.getByText('All-time')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/temporarily unavailable/i)).toBeInTheDocument());
+    expect(screen.getByRole('alert')).toBeInTheDocument();
   });
 
-  it('falls back to generated mock data when the response is not ok', async () => {
+  it('shows an honest unavailable notice when the response is not ok', async () => {
     fetchMock.mockResolvedValue({ ok: false, json: async () => ({}) });
     render(<DefaultRateChart />);
-    await waitFor(() => expect(screen.getByText('Current')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/temporarily unavailable/i)).toBeInTheDocument());
   });
 });

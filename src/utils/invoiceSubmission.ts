@@ -82,14 +82,14 @@ export function getMinimumDueDate(): string {
   return `${year}-${month}-${day}`;
 }
 
-export function formatAmountFromUnits(value: bigint, decimals = 7): string {
+export function formatAmountFromUnits(value: bigint, decimals = 7, locale = 'en-US'): string {
   const negative = value < 0n;
   const absoluteValue = negative ? value * -1n : value;
   const unitBase = 10n ** BigInt(decimals);
   const whole = absoluteValue / unitBase;
   const fraction = absoluteValue % unitBase;
   const formattedFraction = fraction.toString().padStart(decimals, '0').replace(/0+$/, '');
-  const formattedWhole = new Intl.NumberFormat('en-US').format(Number(whole));
+  const formattedWhole = new Intl.NumberFormat(locale).format(Number(whole));
   const amount = formattedFraction ? `${formattedWhole}.${formattedFraction}` : formattedWhole;
 
   return `${negative ? '-' : ''}${amount}`;
@@ -182,10 +182,10 @@ export function formatUsdcFromStroops(value: bigint): string {
   return formatAmountFromUnits(value, 6);
 }
 
-export function formatMoney(value: number | string): string {
+export function formatMoney(value: number | string, locale = 'en-US'): string {
   const normalized = typeof value === 'number' ? value.toFixed(2) : value;
   const [wholePart, decimalPart = '00'] = normalized.split('.');
   const sanitizedWhole = wholePart.replace(/,/g, '');
-  const formattedWhole = new Intl.NumberFormat('en-US').format(Number(sanitizedWhole || '0'));
+  const formattedWhole = new Intl.NumberFormat(locale).format(Number(sanitizedWhole || '0'));
   return `$${formattedWhole}.${decimalPart.padEnd(2, '0').slice(0, 2)}`;
 }

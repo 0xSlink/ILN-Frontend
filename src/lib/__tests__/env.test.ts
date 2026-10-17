@@ -36,12 +36,14 @@ describe('env validation', () => {
     process.env.NEXT_PUBLIC_INSURANCE_POOL_ENABLED = 'true';
     process.env.NEXT_PUBLIC_ORACLE_ENABLED = 'false';
     process.env.NEXT_PUBLIC_NFT_ENABLED = 'true';
+    process.env.NEXT_PUBLIC_MAINTENANCE_MODE = 'true';
 
     const { env } = await import('@/lib/env');
 
     expect(env.NEXT_PUBLIC_INSURANCE_POOL_ENABLED).toBe(true);
     expect(env.NEXT_PUBLIC_ORACLE_ENABLED).toBe(false);
     expect(env.NEXT_PUBLIC_NFT_ENABLED).toBe(true);
+    expect(env.NEXT_PUBLIC_MAINTENANCE_MODE).toBe(true);
   });
 
   it('should provide empty string for unset optional secrets', async () => {

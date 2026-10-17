@@ -2,7 +2,7 @@
 
 import { useWallet } from '@/context/WalletContext';
 import { useNotification } from '@/context/NotificationContext';
-import { useInvoices } from '@/hooks/useInvoices';
+import { useInvoices } from '@/hooks/queries';
 import { useNotificationEvents } from '@/hooks/useNotificationEvents';
 import { usePositionPolling } from '@/hooks/usePositionPolling';
 import { useToast } from '@/context/ToastContext';

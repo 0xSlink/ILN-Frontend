@@ -1,0 +1,120 @@
+name: Dark-Feature Flag-Flip Smoke Tests
+
+# Closes #40
+#
+# This workflow is MANUALLY triggered only. It is intentionally NOT wired to
+# push/PR events because the dark features are disabled in production and the
+# tests require a flag-enabled preview deployment as their target.
+#
+# When to run:
+#   - Before flipping a dark-feature flag on a staging/preview environment to
+#     confirm the feature surface renders and is error-free.
+#   - After a flag flip on staging, as a pre-promotion gate.
+#   - On demand during incident response to verify a rollback was successful
+#     (run with the feature you just disabled; tests should FAIL, confirming
+#     the component returned null as expected — see rollback runbook).
+#
+# See also:
+#   docs/dark-feature-dashboard.md
+#   docs/dark-feature-flag-rollback-runbook.md
+#   e2e/dark-feature-flag-flip-smoke.spec.ts
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Flag-enabled preview/staging URL to test against'
+        required: true
+        default: 'https://staging.iln.finance'
+      dark_feature:
+        description: 'Which feature to test (leave blank to test all three)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - insurance-pool
+          - oracle-badge
+          - invoice-nft
+      mainnet_contract_id:
+        description: 'Optional mainnet contract ID override for anti-drift check'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dark-feature-smoke:
+    name: Dark-Feature Smoke — ${{ inputs.dark_feature }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Dark-Feature Flag-Flip Smoke Tests
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ inputs.target_url }}
+          DARK_FEATURE_SMOKE_TARGET: ${{ inputs.dark_feature }}
+          MAINNET_CONTRACT_ID: ${{ inputs.mainnet_contract_id }}
+          NEXT_PUBLIC_API_MOCKING: disabled
+        run: |
+          echo "🚀 Running dark-feature smoke checks"
+          echo "   Target URL  : ${{ inputs.target_url }}"
+          echo "   Feature     : ${{ inputs.dark_feature }}"
+          pnpm exec playwright test e2e/dark-feature-flag-flip-smoke.spec.ts \
+            --project=mobile-375
+
+      - name: Post Smoke Test Summary
+        if: always()
+        run: |
+          {
+            echo "## 🌑 Dark-Feature Flag-Flip Smoke Test Results"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Target URL | \`${{ inputs.target_url }}\` |"
+            echo "| Feature tested | \`${{ inputs.dark_feature }}\` |"
+            echo "| Execution mode | Strictly Read-Only |"
+            echo "| Status | ${{ job.status == 'success' && '✅ PASSED' || '❌ FAILED' }} |"
+            echo ""
+            echo "### Next steps"
+            if [ "${{ job.status }}" = "success" ]; then
+              echo "All smoke checks passed. You may proceed with the flag flip per the"
+              echo "[dark-feature readiness dashboard](../../docs/dark-feature-dashboard.md)."
+            else
+              echo "One or more smoke checks failed. Do NOT flip the flag in production."
+              echo "Review the Playwright report artifact below and consult"
+              echo "[docs/dark-feature-dashboard.md](../../docs/dark-feature-dashboard.md)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Playwright Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dark-feature-smoke-playwright-report
+          path: playwright-report/
+          retention-days: 14

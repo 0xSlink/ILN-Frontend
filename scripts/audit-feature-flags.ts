@@ -232,7 +232,9 @@ function printReport(reports: FlagReport[]): void {
 
     console.error(`${icon}  ${report.name}`);
     console.error(
-      `    status        : ${report.status}${report.defaultValue ? ` (default: ${report.defaultValue})` : ''}`
+      `    status        : ${report.status}${
+        report.defaultValue ? ` (default: ${report.defaultValue})` : ''
+      }`
     );
     console.error(
       `    defined in env : ${report.defined ? 'yes' : 'no — consider adding to src/lib/env.ts'}`

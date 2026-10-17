@@ -72,7 +72,7 @@ function notifyGovernanceChange(
   addNotification: NotificationEventsOptions['addNotification']
 ) {
   if (!previousStatus || previousStatus === proposal.status) return;
-  if (!['Passed', 'Executed', 'Failed', 'Vetoed'].includes(proposal.status)) {
+  if (!['Passed', 'Executed', 'Rejected', 'Vetoed'].includes(proposal.status)) {
     return;
   }
 

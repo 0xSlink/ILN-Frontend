@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NEXT_PUBLIC_INSURANCE_POOL_ENABLED } from '@/constants';
+import { trackEvent } from '@/lib/analytics';
 import { useInsurance } from '@/hooks/useInsurance';
 import { useTransaction } from '@/hooks/useTransaction';
 import { useWallet } from '@/context/WalletContext';
@@ -16,6 +17,13 @@ export default function InsurancePoolPanel() {
 
   const isEnabled =
     NEXT_PUBLIC_INSURANCE_POOL_ENABLED || process.env.NEXT_PUBLIC_INSURANCE_POOL_ENABLED === 'true';
+
+  useEffect(() => {
+    if (isEnabled) {
+      trackEvent('insurance_panel_seen', { is_enrolled: isEnrolled });
+    }
+  }, [isEnabled, isEnrolled]);
+
   if (!isEnabled) return null;
 
   const handleEnroll = async () => {
@@ -31,7 +39,9 @@ export default function InsurancePoolPanel() {
       {
         title: 'Enrolling in Protection',
         successTitle: 'Enrolled Successfully',
-        successMessage: `You have deposited ${premiumAmount} ${defaultToken?.symbol ?? 'USDC'} into the insurance pool.`,
+        successMessage: `You have deposited ${premiumAmount} ${
+          defaultToken?.symbol ?? 'USDC'
+        } into the insurance pool.`,
       }
     );
     refresh();

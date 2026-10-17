@@ -46,7 +46,9 @@ export async function fetchRecentProtocolContractEvents(): Promise<ParsedContrac
     cacheKey,
     async () => {
       const base = getHorizonBaseUrl();
-      const url = `${base}/transactions?accounts=${encodeURIComponent(CONTRACT_ID)}&order=desc&limit=200`;
+      const url = `${base}/transactions?accounts=${encodeURIComponent(
+        CONTRACT_ID
+      )}&order=desc&limit=200`;
       const pageResp = await fetchTransactionsPage(url);
       const events: ParsedContractEvent[] = [];
 
@@ -75,7 +77,9 @@ export async function fetchProtocolContractEvents(
     async () => {
       const cutoffMs = Date.now() - lookbackDays * MS_PER_DAY;
       const base = getHorizonBaseUrl();
-      let url = `${base}/transactions?accounts=${encodeURIComponent(CONTRACT_ID)}&order=desc&limit=200`;
+      let url = `${base}/transactions?accounts=${encodeURIComponent(
+        CONTRACT_ID
+      )}&order=desc&limit=200`;
       const events: ParsedContractEvent[] = [];
 
       for (let page = 0; page < MAX_PAGES; page += 1) {
