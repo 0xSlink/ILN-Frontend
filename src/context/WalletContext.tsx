@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   isConnected,
@@ -12,7 +12,6 @@ import {
 } from '@stellar/freighter-api';
 import { NETWORK_NAME, NETWORK_PASSPHRASE } from '@/constants';
 import {
-  networksMatch,
   normalizeWalletNetwork,
   getMismatchDetails,
   getConfiguredStellarNetwork,
@@ -29,16 +28,18 @@ import {
 } from '@/utils/walletStorage';
 import WalletSelectionModal from '@/components/WalletSelectionModal';
 import { useToast } from './ToastContext';
+import { getWalletErrorCode, type AuthErrorCode } from '@/lib/auth/errors';
 
 type WalletProviderName = WalletProviderType;
 
-interface WalletContextType {
+export interface WalletContextType {
   address: string | null;
   isConnected: boolean;
   isInstalled: boolean;
   isReconnecting: boolean;
   preferredWalletProvider: WalletProviderName | null;
   error: string | null;
+  errorCode: AuthErrorCode | null;
   networkMismatch: boolean;
   rpcMismatch: boolean;
   mismatchDetails: MismatchDetails | null;
@@ -100,6 +101,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isInstalled, setIsInstalled] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<AuthErrorCode | null>(null);
   const [networkMismatch, setNetworkMismatch] = useState(false);
   const [rpcMismatch, setRpcMismatch] = useState(false);
   const [mismatchDetails, setMismatchDetails] = useState<MismatchDetails | null>(null);
@@ -111,6 +113,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isSelectingProvider, setIsSelectingProvider] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<WalletProviderName | null>(null);
   const [openWalletConnectByDefault, setOpenWalletConnectByDefault] = useState(false);
+  const checkingWalletRef = useRef(false);
 
   const checkNetwork = useCallback(async () => {
     try {
@@ -128,6 +131,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setMismatchDetails(details);
       setNetworkMismatch(details.walletMismatch);
       setRpcMismatch(details.rpcMismatch);
+      if (details.walletMismatch) {
+        setRoles([]);
+        setRolesLoading(false);
+      }
 
       return !details.walletMismatch;
     } catch (e) {
@@ -157,6 +164,57 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error('Check connection failed', e);
     }
   }, [checkNetwork]);
+
+  const checkActiveWallet = useCallback(async () => {
+    if (!address || checkingWalletRef.current) return;
+    checkingWalletRef.current = true;
+
+    try {
+      const installed = extractConnectionState(await isConnected());
+      setIsInstalled(installed);
+
+      const walletAddress = installed ? (await getAddress()).address : null;
+      if (!walletAddress) {
+        setAddress(null);
+        setWalletNetwork(null);
+        setNetworkMismatch(false);
+        setRpcMismatch(false);
+        setMismatchDetails(null);
+        setRoles([]);
+        setRolesLoading(false);
+        setError('Wallet connection is no longer available. Please reconnect.');
+        setErrorCode('wallet_not_connected');
+        clearWalletStorage();
+        setSelectedProvider(null);
+        return;
+      }
+
+      if (walletAddress !== address) {
+        clearWalletStorage();
+        localStorage.setItem(STORAGE_KEY, walletAddress);
+        setStoredWalletProvider('freighter');
+        setAddress(walletAddress);
+        setSelectedProvider('freighter');
+        setError('Connected wallet account changed.');
+        setErrorCode('wallet_identity_changed');
+      }
+
+      await checkNetwork();
+    } catch (walletError) {
+      console.error('Failed to verify active wallet identity', walletError);
+      setAddress(null);
+      setWalletNetwork(null);
+      setNetworkMismatch(false);
+      setRpcMismatch(false);
+      setMismatchDetails(null);
+      setError('Unable to verify the connected wallet. Please reconnect.');
+      setErrorCode(getWalletErrorCode(walletError));
+      clearWalletStorage();
+      setSelectedProvider(null);
+    } finally {
+      checkingWalletRef.current = false;
+    }
+  }, [address, checkNetwork]);
 
   const attemptSilentReconnect = useCallback(async () => {
     const savedProvider = getStoredWalletProvider();
@@ -197,11 +255,17 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [checkNetwork]);
 
   useEffect(() => {
-    attemptSilentReconnect();
+    const timeout = window.setTimeout(() => {
+      void attemptSilentReconnect();
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [attemptSilentReconnect]);
 
   useEffect(() => {
-    checkConnection();
+    const timeout = window.setTimeout(() => {
+      void checkConnection();
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [checkConnection]);
 
   useEffect(() => {
@@ -221,8 +285,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     if (!address || networkMismatch) {
-      setRoles([]);
-      setRolesLoading(false);
       return;
     }
 
@@ -235,15 +297,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (address) checkNetwork();
+      void checkActiveWallet();
     }, 5000);
     return () => clearInterval(interval);
-  }, [address, checkNetwork]);
+  }, [checkActiveWallet]);
 
   // Opening the wallet picker is what "Connect Wallet" now triggers (#2); the
   // actual per-provider connect runs once the user chooses.
   const connect = async () => {
     setError(null);
+    setErrorCode(null);
     setOpenWalletConnectByDefault(selectedProvider === 'walletconnect');
     setIsSelectingProvider(true);
   };
@@ -251,6 +314,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const connectFreighter = async () => {
     setIsSelectingProvider(false);
     setError(null);
+    setErrorCode(null);
     const toastId = addToast({ type: 'pending', title: 'Connecting to Freighter...' });
 
     try {
@@ -258,6 +322,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!installed) {
         const msg = 'Freighter not installed. Please install the extension.';
         setError(msg);
+        setErrorCode('wallet_unavailable');
         updateToast(toastId, { type: 'error', title: 'Connection Failed', message: msg });
         window.open('https://www.freighter.app/', '_blank');
         return;
@@ -269,6 +334,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         if (freighterError) {
           setError(freighterError);
+          setErrorCode(getWalletErrorCode(freighterError));
           updateToast(toastId, {
             type: 'error',
             title: 'Connection Failed',
@@ -287,6 +353,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (!isCorrectNetwork) {
             const networkMsg = `Please switch Freighter to ${NETWORK_NAME}`;
             setError(networkMsg);
+            setErrorCode('network_changed');
             updateToast(toastId, { type: 'error', title: 'Network Mismatch', message: networkMsg });
           } else {
             updateToast(toastId, {
@@ -300,12 +367,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       } else {
         const msg = 'Connection rejected by user.';
         setError(msg);
+        setErrorCode('wallet_rejected');
         updateToast(toastId, { type: 'error', title: 'Connection Failed', message: msg });
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('Connection error:', e);
-      const msg = e.message || 'Connection failed';
+      const msg = e instanceof Error ? e.message : 'Connection failed';
       setError(msg);
+      setErrorCode(getWalletErrorCode(e));
       updateToast(toastId, { type: 'error', title: 'Connection Failed', message: msg });
     }
   };
@@ -338,6 +407,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
     } catch (e) {
       console.error('Failed to switch network', e);
+      setErrorCode('network_changed');
       addToast({
         type: 'error',
         title: 'Switch Failed',
@@ -357,6 +427,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setSwitchingNetwork(false);
     setWalletNetwork(null);
     setError(null);
+    setErrorCode(null);
     setRoles([]);
     setRolesLoading(false);
     setIsSelectingProvider(false);
@@ -410,6 +481,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         isReconnecting,
         preferredWalletProvider: selectedProvider,
         error,
+        errorCode,
         networkMismatch,
         rpcMismatch,
         mismatchDetails,

@@ -78,6 +78,7 @@ export const env = {
 
   // Auth
   SEP10_SERVER_SECRET_KEY: process.env.SEP10_SERVER_SECRET_KEY || '',
+  SEP10_HOME_DOMAIN: process.env.SEP10_HOME_DOMAIN || '',
   JWT_SECRET_KEY: process.env.JWT_SECRET_KEY || '',
 
   // GitHub (feedback API)

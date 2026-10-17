@@ -144,9 +144,9 @@ API routes are used for server-only integration points:
 - `app/api/reminders/route.ts` reads Supabase reminder preferences and sends Resend emails when authorized by `CRON_SECRET`.
 - `app/api/reminders/unsubscribe/route.ts` updates reminder preferences.
 - `app/api/feedback/route.ts` can create GitHub issues from app feedback when GitHub credentials are configured.
-- `app/api/auth/challenge.ts` and `app/api/auth/verify.ts` support SEP-10-style auth helpers:
-  - `GET /api/auth/challenge?account=<public_key>` generates a timebounded, signed Stellar transaction challenge.
-  - `POST /api/auth/verify` validates the signed transaction payload and issues a 24-hour JWT authentication token.
+- `app/api/auth/challenge/route.ts` and `app/api/auth/verify/route.ts` implement SEP-10 authentication:
+  - `GET /api/auth/challenge?account=<public_key>` generates and persists a domain-bound, server-signed SEP-10 challenge.
+  - `POST /api/auth/verify` validates the wallet signature and consumes the challenge once before issuing a 15-minute wallet/network-bound JWT.
 - `app/api/notifications/[address]/route.ts` bridges notification reads by address.
 - Contributor references for these server integrations live in [docs/supabase-setup.md](supabase-setup.md), [docs/feature-flags.md](feature-flags.md), [docs/api-routes.md](api-routes.md), and [docs/testing.md](testing.md).
 
@@ -201,7 +201,7 @@ pnpm run env:check
 
 The CI workflow runs the same command, and `.env.local.example.allowlist` documents runtime-provided values such as `NODE_ENV`.
 
-Client-visible configuration uses `NEXT_PUBLIC_*`, including Stellar network settings, feature flags, indexer URLs, WalletConnect project ID, app URL/version, and contract version labels. Server-only secrets such as `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `CRON_SECRET`, `SEP10_SERVER_SECRET_KEY`, `JWT_SECRET_KEY`, and GitHub feedback credentials must never be exposed with a public prefix.
+Client-visible configuration uses `NEXT_PUBLIC_*`, including Stellar network settings, feature flags, indexer URLs, WalletConnect project ID, app URL/version, and contract version labels. Server-only secrets such as `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `CRON_SECRET`, `SEP10_SERVER_SECRET_KEY`, `JWT_SECRET_KEY`, and GitHub feedback credentials must never be exposed with a public prefix. See [SEP-10 deployment configuration](sep-10-auth.md) for required authentication setup and replay protection.
 
 ## Library Rationale
 

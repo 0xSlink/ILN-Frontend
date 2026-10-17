@@ -4,242 +4,54 @@ A React hook for wallet connection with Stellar SEP-10 authentication support.
 
 ## Overview
 
-The `useAuthenticatedWallet()` hook provides a clean, type-safe interface for:
+`useAuthenticatedWallet()` provides wallet connection, transaction signing, and SEP-10 authentication. It starts authentication after the wallet context reports an active address and network, and invalidates the in-memory JWT when either identity changes.
 
-- Connecting to Stellar wallets (Freighter, WalletConnect)
-- Performing SEP-10 authentication flow automatically on first connect
-- Managing authentication tokens (JWT) securely in memory
-- Signing transactions
-- Disconnecting and clearing sensitive data
-
-## Features
-
-✅ **SEP-10 Authentication**: Automatically triggers challenge/verify flow on first connect
-✅ **Secure Token Storage**: JWT stored in memory only, never in localStorage
-✅ **Automatic Cleanup**: JWT cleared immediately on disconnect
-✅ **Type-Safe**: Full TypeScript support with comprehensive types
-✅ **Error Handling**: Graceful error handling with retry capability
-✅ **Transaction Signing**: Direct wallet transaction signing
-
-## API
-
-### Return Type: `UseWalletReturn`
+## Return value
 
 ```typescript
-interface UseWalletReturn {
-  /** Wallet is currently connected */
+interface UseAuthenticatedWalletReturn {
   isConnected: boolean;
-
-  /** Public key of the connected wallet */
   publicKey: string | null;
-
-  /** Connect wallet and perform SEP-10 auth */
   connect: () => Promise<void>;
-
-  /** Disconnect wallet and clear JWT */
   disconnect: () => void;
-
-  /** Sign a transaction with the connected wallet */
   signTransaction: (txXdr: string) => Promise<string>;
-
-  /** Current JWT token (in memory only) */
   jwt: string | null;
+  authStatus: 'idle' | 'authenticating' | 'authenticated' | 'error';
+  authError: AuthErrorCode | null;
+  retryAuthentication: () => void;
 }
 ```
 
-## Usage
+`connect()` opens the wallet picker. The hook observes the connected wallet context and starts authentication once it has an address and a matching network. `authStatus` and `authError` expose loading, failure, and recovery state; `retryAuthentication()` repeats the flow for the current identity.
 
-### Basic Connection Flow
+## Security and lifecycle
 
-```typescript
-import { useAuthenticatedWallet } from "@/hooks/useAuthenticatedWallet";
+- The SEP-10 challenge is server-signed, bound to the configured home and web-auth domains, and bound to the configured Stellar network.
+- The challenge expires after five minutes and is atomically consumed once before a JWT is issued.
+- The JWT is held in hook memory only, expires after 15 minutes, and is bound to the wallet address and network.
+- The JWT is cleared on disconnect, address change, network change, expiry, refresh, or browser close.
+- SEP-41 token metadata, token balances, and wallet connection alone do not authenticate an identity.
 
-export function WalletStatus() {
-  const { isConnected, publicKey, connect, disconnect, jwt } = useAuthenticatedWallet();
+## Error handling
 
+Authentication errors use stable codes such as `wallet_rejected`, `challenge_expired`, `challenge_replayed`, `exchange_failed`, `session_expired`, `network_changed`, and `authorization_denied`. The complete taxonomy and recovery actions are in the [auth API reference](../../docs/api-routes.md#stable-authentication-codes).
+
+```tsx
+const { authStatus, authError, retryAuthentication } = useAuthenticatedWallet();
+
+if (authStatus === 'error') {
   return (
-    <div>
-      {isConnected ? (
-        <>
-          <p>Connected: {publicKey?.substring(0, 6)}...</p>
-          <p>Authenticated: {jwt ? "Yes" : "No"}</p>
-          <button onClick={disconnect}>Disconnect</button>
-        </>
-      ) : (
-        <button onClick={connect}>Connect Wallet</button>
-      )}
-    </div>
+    <button onClick={retryAuthentication}>Authentication failed ({authError}). Try again.</button>
   );
 }
 ```
 
-### Signing Transactions
+## Deployment configuration
 
-```typescript
-const { signTransaction, isConnected } = useAuthenticatedWallet();
+Configure `SEP10_HOME_DOMAIN`, `SEP10_SERVER_SECRET_KEY`, `JWT_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_APP_URL`, and the Stellar network passphrase. Apply [the SEP-10 challenge migration](../../supabase/migrations/002_sep10_auth_challenges.sql) before enabling the routes. Secrets must stay server-side and must not use a `NEXT_PUBLIC_` prefix.
 
-async function submitTransaction() {
-  if (!isConnected) {
-    alert('Please connect your wallet');
-    return;
-  }
-
-  try {
-    const signedTx = await signTransaction(transactionXdr);
-    // Submit signed transaction to network
-    await submitToNetwork(signedTx);
-  } catch (error) {
-    console.error('Failed to sign transaction:', error);
-  }
-}
-```
-
-### Using JWT Token for Authenticated Requests
-
-```typescript
-const { jwt } = useAuthenticatedWallet();
-
-async function fetchUserData() {
-  const response = await fetch('/api/user/profile', {
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-    },
-  });
-  return response.json();
-}
-```
-
-## SEP-10 Authentication Flow
-
-The hook automatically manages the complete SEP-10 authentication flow on first connect:
-
-```
-1. connect() called
-   ↓
-2. Wallet connection initiated via WalletProvider
-   ↓
-3. SEP-10 challenge fetched from /api/auth/challenge
-   ↓
-4. Challenge signed with user's wallet
-   ↓
-5. Signed challenge submitted to /api/auth/verify
-   ↓
-6. JWT received and stored in memory
-   ↓
-7. ready for authenticated API calls
-```
-
-### JWT Storage & Security
-
-- **Storage**: JWT is stored in memory only (`jwtToken` module variable)
-- **Persistence**: JWT is NOT persisted to localStorage or any other storage
-- **Lifetime**: JWT exists for the duration of the browser session
-- **Cleanup**: JWT is automatically cleared on disconnect, page refresh, or browser close
-
-## API Endpoints Required
-
-The hook expects these endpoints to be available:
-
-### GET /api/auth/challenge
-
-Generates a SEP-10 challenge transaction.
-
-**Query Parameters:**
-
-- `account` (required): Public key of the user's wallet
-
-**Response:**
-
-```json
-{
-  "challenge": "AAAAAgAAAAA..."
-}
-```
-
-### POST /api/auth/verify
-
-Verifies the signed challenge and returns a JWT token.
-
-**Request Body:**
-
-```json
-{
-  "account": "G...",
-  "transaction": "AAAAAwAAAAA..."
-}
-```
-
-**Response:**
-
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIs..."
-}
-```
-
-## Error Handling
-
-The hook provides comprehensive error handling:
-
-```typescript
-const { connect } = useAuthenticatedWallet();
-
-async function handleConnect() {
-  try {
-    await connect();
-  } catch (error) {
-    if (error.message.includes('challenge')) {
-      // SEP-10 authentication failed
-      console.error('Authentication failed:', error);
-    } else if (error.message.includes('not installed')) {
-      // Wallet not installed
-      console.error('Wallet not installed:', error);
-    } else {
-      // Other connection error
-      console.error('Connection failed:', error);
-    }
-  }
-}
-```
-
-## Requirements
-
-- React 16.8+ (for hooks)
-- `@stellar/freighter-api` for wallet integration
-- `@stellar/stellar-sdk` for Stellar operations
-- WalletProvider context wrapping your component tree
-
-## Constraints
-
-- Must be used within a `WalletProvider` component
-- JWT is per-session only (not persisted)
-- SEP-10 auth is attempted only once per wallet connection
-- Requires valid API endpoints for challenge/verify flow
-
-## Best Practices
-
-1. **Always check `isConnected`** before accessing `publicKey` or calling `signTransaction`
-2. **Handle JWT expiration** gracefully - implement token refresh if needed
-3. **Use `.substring(0, 6)`** when displaying public keys for UX
-4. **Catch errors from `connect()`** - network issues can occur
-5. **Clear sensitive data** - don't log or expose JWT tokens
-6. **Re-authenticate on page refresh** - JWT is cleared on reload
-
-## Environment Variables
-
-For API endpoints, set these in `.env.local`:
-
-```
-SEP10_SERVER_SECRET_KEY=your-server-secret-key
-JWT_SECRET_KEY=your-jwt-secret
-```
+See [SEP-10 deployment configuration](../../docs/sep-10-auth.md) for the `stellar.toml` boundary, endpoint setup, replay protection, and operational guidance.
 
 ## Testing
 
-See [useAuthenticatedWallet.test.ts](./__tests__/useAuthenticatedWallet.test.ts) for comprehensive test examples including:
-
-- Initial state validation
-- Connection flow with SEP-10
-- Disconnect and JWT cleanup
-- Error handling
-- JWT memory-only storage verification
+Focused hook coverage is in [useAuthenticatedWallet.test.tsx](./__tests__/useAuthenticatedWallet.test.tsx); route coverage is in [auth-api.test.ts](../../__tests__/auth-api.test.ts).
