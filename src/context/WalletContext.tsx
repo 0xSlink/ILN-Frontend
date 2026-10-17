@@ -27,6 +27,7 @@ import {
   WALLET_ADDRESS_STORAGE_KEY,
   type WalletProviderType,
 } from '@/utils/walletStorage';
+import { purgeExpiredWalletRecords } from '@/utils/walletRecordStore';
 import {
   connectWalletConnect,
   disconnectWalletConnect,
@@ -280,6 +281,12 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
   useEffect(() => {
     checkConnection();
   }, [checkConnection]);
+
+  // Drop expired or tampered wallet-linked records for every wallet/network,
+  // not just the one being reconnected (#1088 retention policy).
+  useEffect(() => {
+    purgeExpiredWalletRecords();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

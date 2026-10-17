@@ -13,11 +13,7 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import useAddressBook from '../useAddressBook';
-import {
-  deriveKeyFromWalletAddress,
-  encryptForStorage,
-  decryptFromStorage,
-} from '../../utils/addressBookCrypto';
+import { currentWalletRecordScope, walletRecordKey } from '@/utils/walletRecordStore';
 
 // vi.mock is hoisted above module-level consts, so the address is hoisted too.
 const { TEST_WALLET, OTHER_WALLET } = vi.hoisted(() => ({
@@ -47,6 +43,14 @@ function makeAddr(i: number): string {
   const c2 = String.fromCharCode(65 + (Math.floor(i / 26) % 26));
   const c3 = String.fromCharCode(65 + (i % 26));
   return 'G' + 'A'.repeat(52) + c1 + c2 + c3;
+}
+
+/** Entries persisted in the scoped, integrity-checked record (#1087/#1089). */
+function storedEntries(): { nickname: string }[] | null {
+  const raw = localStorage.getItem(
+    walletRecordKey('address-book', currentWalletRecordScope(TEST_WALLET))
+  );
+  return raw ? JSON.parse(raw).data : null;
 }
 
 describe('useAddressBook', () => {
