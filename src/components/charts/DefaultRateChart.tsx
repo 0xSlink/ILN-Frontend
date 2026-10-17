@@ -13,8 +13,11 @@ import {
   type TooltipProps,
 } from 'recharts';
 import {
+  fetchDefaultRateData,
+  type MonthlyDefaultBucket,
+} from '@/lib/indexerClient';
+import {
   calculateMovingAverage,
-  MonthlyDefaultBucket,
   MonthlyDefaultWithMA,
 } from '@/utils/defaultRate';
 import IndexerUnavailableNotice, {
@@ -105,14 +108,13 @@ export default function DefaultRateChart() {
     setLoading(true);
     setUnavailable(false);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
-      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
-      const res = await fetch(`${baseUrl}/analytics/defaults?period=12m`);
-      if (!res.ok) throw new Error('Failed to fetch');
-      const json = await res.json();
-      const withMA = calculateMovingAverage(json.monthly || json, 1);
+      // Use centralized indexer client - single authoritative boundary
+      // with explicit schema validation and typed response
+      const monthlyData = await fetchDefaultRateData();
+      const withMA = calculateMovingAverage(monthlyData, 1);
       setChartData(withMA);
-    } catch {
+    } catch (error) {
+      console.error('[DefaultRateChart] Failed to fetch data:', error);
       // Only substitute demo data in development; otherwise show an honest
       // "temporarily unavailable" state instead of fabricating metrics.
       if (shouldUseDevMockFallback()) {

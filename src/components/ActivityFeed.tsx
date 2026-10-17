@@ -7,6 +7,10 @@ import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
 } from '@/components/IndexerUnavailableNotice';
 import DataSourceCaption from '@/components/DataSourceCaption';
+import { 
+  fetchInvoiceEvents, 
+  type RawInvoiceEvent as IndexerRawInvoiceEvent 
+} from '@/lib/indexerClient';
 
 type InvoiceEventType =
   | 'submitted'
@@ -19,13 +23,11 @@ type InvoiceEventType =
   | 'dispute_resolved'
   | 'unknown';
 
-interface RawInvoiceEvent {
-  type?: string;
-  timestamp?: number | string;
-  actor?: string;
-  data?: Record<string, unknown>;
-  [key: string]: unknown;
+interface ActivityFeedProps {
+  invoiceId: bigint;
 }
+
+type RawInvoiceEvent = IndexerRawInvoiceEvent;
 
 interface InvoiceEvent {
   type: InvoiceEventType;
@@ -34,12 +36,6 @@ interface InvoiceEvent {
   data?: Record<string, unknown>;
   raw: RawInvoiceEvent;
 }
-
-interface ActivityFeedProps {
-  invoiceId: bigint;
-}
-
-const INDEXER_API_BASE = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
 
 const EVENT_TYPE_MAP: Record<string, InvoiceEventType> = {
   submitted: 'submitted',
@@ -284,15 +280,13 @@ export default function ActivityFeed({ invoiceId }: ActivityFeedProps) {
   const fetchEvents = useCallback(async () => {
     try {
       setLoading(true);
-      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
-      const res = await fetch(`${INDEXER_API_BASE}/invoice/${invoiceId}/events`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) throw new Error('Failed to fetch activity feed');
-      const rawEvents = (await res.json()) as RawInvoiceEvent[];
+      // Use centralized indexer client - single authoritative boundary
+      // with explicit schema validation and timeout handling
+      const rawEvents = await fetchInvoiceEvents(invoiceId);
       setEvents(rawEvents.map(parseInvoiceEvent));
+      setError(null);
     } catch (err) {
-      console.error(err);
+      console.error('[ActivityFeed] Failed to fetch events:', err);
       setEvents([]);
       setError('Unable to load activity feed.');
 

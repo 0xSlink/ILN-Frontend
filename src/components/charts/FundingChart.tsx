@@ -11,6 +11,11 @@ import {
   ResponsiveContainer,
   type TooltipProps,
 } from 'recharts';
+import {
+  fetchFundingData,
+  type DailyFundingBucket,
+  type TokenFunding,
+} from '@/lib/indexerClient';
 import { transformFundingData } from '@/utils/funding';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
@@ -20,20 +25,6 @@ import DataSourceCaption from '@/components/DataSourceCaption';
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type TimeRange = '7D' | '30D' | '90D' | 'All';
-
-export interface TokenFunding {
-  symbol: string;
-  amount: number; // Whole unit amount
-  color: string;
-}
-
-export interface DailyFundingBucket {
-  date: string;
-  label: string;
-  total_usdc_equiv: number;
-  invoices_funded: number;
-  tokens: TokenFunding[];
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -139,15 +130,14 @@ export default function FundingChart() {
     setLoading(true);
     setUnavailable(false);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
-      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
-      const res = await fetch(
-        `${baseUrl}/v1/analytics/funding?period=${selectedRange.toLowerCase()}`
-      );
-      if (!res.ok) throw new Error('Failed to fetch');
-      const json = await res.json();
-      setData(json.daily);
-    } catch {
+      // Use centralized indexer client - single authoritative boundary
+      // with explicit schema validation and typed response
+      const dailyData = await fetchFundingData({ 
+        period: selectedRange.toLowerCase() 
+      });
+      setData(dailyData);
+    } catch (error) {
+      console.error('[FundingChart] Failed to fetch data:', error);
       // Only substitute demo data in development; otherwise show an honest
       // "temporarily unavailable" state instead of fabricating volume.
       if (shouldUseDevMockFallback()) {
