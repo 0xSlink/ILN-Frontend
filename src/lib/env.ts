@@ -38,6 +38,7 @@ export const env = {
   NEXT_PUBLIC_RPC_URL: optionalEnv('NEXT_PUBLIC_RPC_URL', 'https://soroban-testnet.stellar.org'),
   NEXT_PUBLIC_NETWORK_NAME: optionalEnv('NEXT_PUBLIC_NETWORK_NAME', 'TESTNET'),
   NEXT_PUBLIC_STELLAR_NETWORK: optionalEnv('NEXT_PUBLIC_STELLAR_NETWORK', 'testnet'),
+  NEXT_PUBLIC_SEP10_HOME_DOMAIN: process.env.NEXT_PUBLIC_SEP10_HOME_DOMAIN || '',
 
   // Tokens
   NEXT_PUBLIC_TESTNET_USDC_TOKEN_ID: optionalEnv(

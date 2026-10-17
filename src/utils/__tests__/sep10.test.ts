@@ -1,47 +1,29 @@
-/**
- * @file sep10.test.ts
- *
- * Tests for the SEP-10 Stellar Web Authentication utilities:
- *   - fetchChallenge  (#1071)
- *   - signChallenge   (#1072)
- *   - exchangeToken   (#1073)
- */
+// @vitest-environment node
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchChallenge, signChallenge, exchangeToken } from '../sep10';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { Keypair, Networks, TransactionBuilder, WebAuth } from '@stellar/stellar-sdk';
+import {
+  __resetSep10State,
+  authenticatedFetch,
+  authenticateWithSep10,
+  Sep10Error,
+  type AuthenticateSep10Options,
+} from '../sep10';
 
-// Network passphrase must match the constant exported from @/constants.
-// We mock the module so tests run without a real .env.
-vi.mock('@/constants', () => ({
-  NETWORK_PASSPHRASE: 'Test SDF Network ; September 2015',
-}));
+const NETWORK = Networks.TESTNET;
+let serverKey: Keypair;
+let walletKey: Keypair;
+let challenge: string;
+let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 
-const HOME_DOMAIN = 'example.com';
-const PUBLIC_KEY = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-const CHALLENGE_XDR = 'AAAA...base64challengexdr...ZZZZ';
-const SIGNED_XDR = 'AAAA...base64signedxdr...ZZZZ';
-const JWT_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.sig';
-const NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
-const WRONG_PASSPHRASE = 'Public Global Stellar Network ; September 2015';
-const AUTH_ENDPOINT = 'https://auth.example.com';
-
-const STELLAR_TOML_OK = `
-NETWORK_PASSPHRASE="${NETWORK_PASSPHRASE}"
-WEB_AUTH_ENDPOINT="${AUTH_ENDPOINT}"
-`;
-
-const STELLAR_TOML_NO_AUTH = `
-NETWORK_PASSPHRASE="${NETWORK_PASSPHRASE}"
-`;
-
-function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
-  return vi.spyOn(globalThis, 'fetch').mockImplementation((url, init) =>
-    Promise.resolve(handler(String(url), init as RequestInit | undefined))
-  );
+function jwt(exp: number, subject = walletKey.publicKey()): string {
+  const encode = (value: unknown) =>
+    btoa(JSON.stringify(value)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode({ exp, sub: subject })}.signature`;
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+function response(body: unknown, status = 200): Response {
+  return new Response(typeof body === 'string' ? body : JSON.stringify(body), {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
