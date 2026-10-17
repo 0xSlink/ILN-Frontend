@@ -6,6 +6,7 @@ import Navbar from '@/components/Navbar';
 import VoteProgressBar from '@/components/VoteProgressBar';
 import QuorumProgressBar from '@/components/QuorumProgressBar';
 import TokenAllowlistPanel from '@/components/governance/TokenAllowlistPanel';
+import GovernanceMockStatusBanner from '@/components/governance/GovernanceMockStatusBanner';
 import VotingPowerDisplay from '@/components/VotingPowerDisplay';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import PageHeader from '@/components/PageHeader';
@@ -85,7 +86,7 @@ function ProposalCard({ proposal }: { proposal: Proposal }) {
   return (
     <Link
       href={`/governance/${proposal.id}`}
-      className="group block rounded-2xl border border-outline-variant/20 bg-surface-container-lowest hover:border-primary/40 hover:shadow-lg transition-all duration-200 p-6"
+      className="proposal-card group block rounded-2xl border border-outline-variant/20 bg-surface-container-lowest hover:border-primary/40 hover:shadow-lg transition-all duration-200 p-6"
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -288,6 +289,7 @@ export default function GovernancePage() {
           {/* Voting Power Display */}
           {isConnected && (
             <div className="mb-8">
+              <GovernanceMockStatusBanner action="getVotingPower" />
               <VotingPowerDisplay votingPower={votingPower} />
             </div>
           )}
@@ -312,7 +314,7 @@ export default function GovernancePage() {
                 ))}
               </div>
             ) : filtered.length === 0 ? (
-              <div className="text-center py-24">
+              <div className="proposal-empty text-center py-24">
                 <span className="material-symbols-outlined text-5xl text-on-surface-variant/30 block mb-4">
                   inbox
                 </span>

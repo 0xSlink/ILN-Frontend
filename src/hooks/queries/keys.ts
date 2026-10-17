@@ -28,6 +28,9 @@ export const statsKeys = {
 
 export const reputationKeys = {
   detail: (address: string) => ['reputation', address] as const,
+  payerScore: (address: string) => ['payer-score', address] as const,
+  payerScoresBatch: (addresses: string[]) =>
+    ['payer-scores-batch', ...addresses.slice().sort()] as const,
 };
 
 export const governanceKeys = {
@@ -63,8 +66,14 @@ export const QUERY_TIMINGS = {
   stats: { staleTime: 60_000, gcTime: 10 * 60_000 },
   /** Governance parameter updates — slow-moving. */
   parameterUpdates: { staleTime: 5 * 60_000, gcTime: 30 * 60_000 },
+  /** Reputation score — steady, updated periodically. */
+  reputation: { staleTime: 30_000, gcTime: 5 * 60_000 },
   /** Protocol status — critical for maintenance banner, poll frequently. */
   protocolStatus: { staleTime: 15_000, gcTime: 5 * 60_000 },
   /** Admin action history — moderate frequency. */
   adminActions: { staleTime: 30_000, gcTime: 5 * 60_000 },
+  /** Single payer score. */
+  payerScore: { staleTime: 30_000, gcTime: 5 * 60_000 },
+  /** Batch payer scores. */
+  payerScores: { staleTime: 30_000, gcTime: 5 * 60_000 },
 } as const;

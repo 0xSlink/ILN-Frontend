@@ -19,6 +19,7 @@ import {
 } from '@/utils/network';
 import { getWalletRoles, type WalletRole } from '@/utils/soroban';
 import { trackEvent } from '@/lib/analytics';
+import { journeyRecovery } from '@/lib/journey-recovery-slos';
 import {
   clearWalletStorage,
   getStoredWalletProvider,
@@ -26,16 +27,29 @@ import {
   setStoredWalletAddress,
   type WalletProviderType,
 } from '@/utils/walletStorage';
+import { purgeExpiredWalletRecords } from '@/utils/walletRecordStore';
 import {
   connectWalletConnect,
   disconnectWalletConnect,
   getWalletConnectAddress,
   signTransactionWithWalletConnect,
 } from '@/lib/walletConnect';
+import { getPendingTransactions, reconcilePendingTransactions } from '@/lib/pending-transactions';
+import { getSorobanTransactionStatus } from '@/utils/soroban';
+import { notifyTxSuccess } from '@/utils/txEvents';
 import WalletSelectionModal from '@/components/WalletSelectionModal';
 import { useToast } from './ToastContext';
 
 type WalletProviderName = WalletProviderType;
+
+interface FreighterExtension {
+  setNetwork?: (network: string) => Promise<void>;
+}
+
+interface FreighterWindow extends Window {
+  stellar?: { freighter?: FreighterExtension };
+  freighter?: FreighterExtension;
+}
 
 export const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 export const DEFAULT_WARNING_BEFORE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
@@ -158,6 +172,28 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
     }
   }, []);
 
+  /**
+   * Refresh locally-remembered submissions from RPC network truth (#1143).
+   * Runs after every reconnect and on page reload (via the silent-reconnect
+   * effect below). Only the network can settle an entry; `not_found` keeps it
+   * for the next pass instead of assuming a verdict.
+   */
+  const reconcileStaleTransactions = useCallback(async () => {
+    try {
+      if (getPendingTransactions().length === 0) return;
+      const summary = await reconcilePendingTransactions(async (hash) => {
+        const status = await getSorobanTransactionStatus(hash);
+        return status === 'not_found' ? 'confirming' : status;
+      });
+      if (summary.confirmed.length > 0) {
+        // Settled while we were away — let chain-derived views refresh.
+        notifyTxSuccess();
+      }
+    } catch (e) {
+      console.error('Pending transaction reconciliation failed', e);
+    }
+  }, []);
+
   const checkConnection = useCallback(async () => {
     try {
       const installed = extractConnectionState(await isConnected());
@@ -169,12 +205,14 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
           setAddress(address);
           setStoredWalletAddress(address);
           await checkNetwork();
+          // Background refresh: must not block connection setup.
+          void reconcileStaleTransactions();
         }
       }
     } catch (e) {
       console.error('Check connection failed', e);
     }
-  }, [checkNetwork]);
+  }, [checkNetwork, reconcileStaleTransactions]);
 
   const attemptSilentReconnect = useCallback(async () => {
     const savedProvider = getStoredWalletProvider();
@@ -183,7 +221,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
       const wcAddress = getWalletConnectAddress();
       if (wcAddress) {
         setAddress(wcAddress);
-        setStoredWalletAddress(wcAddress);
+        localStorage.setItem(STORAGE_KEY, wcAddress);
+        // Background refresh: must not block connection setup.
+        void reconcileStaleTransactions();
       }
       return;
     }
@@ -193,6 +233,9 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
     }
 
     setIsReconnecting(true);
+    // The stored session was interrupted (fresh load / extension reset); start
+    // measuring how long until it is restored (#1160).
+    journeyRecovery.markInterruption('wallet', 'silent_reconnect');
 
     try {
       const installed = extractConnectionState(await isConnected());
@@ -201,6 +244,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
       if (!installed) {
         clearWalletStorage();
         setSelectedProvider(null);
+        journeyRecovery.clear('wallet');
         return;
       }
 
@@ -208,20 +252,25 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
       if (!address) {
         clearWalletStorage();
         setSelectedProvider(null);
+        journeyRecovery.clear('wallet');
         return;
       }
 
       setAddress(address);
       setStoredWalletAddress(address);
       await checkNetwork();
+      // Background refresh: must not block reconnect timing.
+      void reconcileStaleTransactions();
+      journeyRecovery.markRecovered('wallet');
     } catch (e) {
       console.error('Silent reconnect failed', e);
       clearWalletStorage();
       setSelectedProvider(null);
+      journeyRecovery.clear('wallet');
     } finally {
       setIsReconnecting(false);
     }
-  }, [checkNetwork]);
+  }, [checkNetwork, reconcileStaleTransactions]);
 
   useEffect(() => {
     attemptSilentReconnect();
@@ -230,6 +279,12 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
   useEffect(() => {
     checkConnection();
   }, [checkConnection]);
+
+  // Drop expired or tampered wallet-linked records for every wallet/network,
+  // not just the one being reconnected (#1088 retention policy).
+  useEffect(() => {
+    purgeExpiredWalletRecords();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -413,6 +468,7 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
         const { address, error: freighterError } = await getAddress();
 
         if (freighterError) {
+          journeyRecovery.markInterruption('auth', 'access_error');
           setError(freighterError);
           updateToast(toastId, {
             type: 'error',
@@ -427,6 +483,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
           setStoredWalletAddress(address);
           setSelectedProvider('freighter');
           setStoredWalletProvider('freighter');
+          // Authorization now succeeds — close any earlier denial window (#1160).
+          journeyRecovery.markRecovered('auth');
 
           const isCorrectNetwork = await checkNetwork();
           if (!isCorrectNetwork) {
@@ -443,12 +501,14 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
           }
         }
       } else {
+        journeyRecovery.markInterruption('auth', 'access_denied');
         const msg = 'Connection rejected by user.';
         setError(msg);
         updateToast(toastId, { type: 'error', title: 'Connection Failed', message: msg });
       }
     } catch (e: any) {
       console.error('Connection error:', e);
+      journeyRecovery.markInterruption('auth', 'access_error');
       const msg = e.message || 'Connection failed';
       setError(msg);
       updateToast(toastId, { type: 'error', title: 'Connection Failed', message: msg });
@@ -488,7 +548,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
     try {
       const targetNetwork = getConfiguredStellarNetwork() === 'mainnet' ? 'PUBLIC' : 'TESTNET';
 
-      const extension = (window as any).stellar?.freighter || (window as any).freighter;
+      const freighterWindow = window as unknown as FreighterWindow;
+      const extension = freighterWindow.stellar?.freighter || freighterWindow.freighter;
       if (extension?.setNetwork) {
         await extension.setNetwork(targetNetwork);
         await checkNetwork();
@@ -540,6 +601,14 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
 
     if (typeof signed === 'string') {
       return signed;
+    }
+
+    // Wallet closed / dismissed without returning a payload: treat as an
+    // explicit cancellation without touching local UI state (#1144).
+    if (!signed || typeof signed !== 'object') {
+      throw new Error(
+        'USER_REJECTED: Wallet closed before signing completed. No changes were made.'
+      );
     }
 
     if (signed.error) {

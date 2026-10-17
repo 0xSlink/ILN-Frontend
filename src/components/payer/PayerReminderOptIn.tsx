@@ -45,6 +45,7 @@ export default function PayerReminderOptIn() {
 
     setSaving(true);
     try {
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
       const response = await fetch('/api/reminders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

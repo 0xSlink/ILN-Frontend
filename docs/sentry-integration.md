@@ -138,3 +138,45 @@ For the alert rules, verify by triggering a test alert from Sentry's _Alerts_ â†
 - [Incident Response Process](./incident-response.md)
 - [Game-Day Exercise Report](./game-day-exercise-report.md)
 - [Compromised Dependency Playbook](./compromised-dependency-playbook.md)
+
+---
+
+## Admin Audit Logging (Issue #918)
+
+Every privileged action on `/admin` and `/admin/flags` is emitted as a Sentry event via `src/lib/auditLog.ts`. This provides a queryable, accountable trail for incident investigation.
+
+### What is logged
+
+| Surface | Event | Trigger point |
+|---|---|---|
+| `/admin` | `protocol.pause_requested` | Admin clicks Pause/Unpause button |
+| `/admin` | `protocol.pause_confirmed` | Admin confirms in the dialog |
+| `/admin` | `protocol.pause_succeeded` / `_failed` | Contract call resolves |
+| `/admin` | `protocol.unpause_*` | Same lifecycle for unpause |
+| `/admin` | `governance.execute_requested` / `_confirmed` / `_succeeded` / `_failed` | Execute ready proposals flow |
+| `/admin` | `token.approve_submitted` / `_succeeded` / `_failed` | Approve token form submission |
+| `/admin` | `token.remove_requested` / `_confirmed` / `_succeeded` / `_failed` | Remove token flow |
+| `/admin/flags` | `flags.viewed` | Admin wallet mounts the flags panel |
+
+### Querying in Sentry
+
+All events carry three custom tags queryable in **Discover** or the Issues search bar:
+
+```
+admin_audit.action:protocol.pause_confirmed
+admin_audit.actor:G<wallet-address>
+admin_audit.page:/admin
+```
+
+Example Discover query to pull a full admin session audit trail:
+
+```
+admin_audit.actor:G<ADDRESS> AND admin_audit.action:*
+```
+
+### Design constraints
+
+- **Fire-and-forget**: `logAdminAction` never throws. A Sentry failure produces a `console.warn` but never blocks or crashes the UI.
+- **No secrets**: the `actor` field is the admin wallet address (public on-chain identity). Private keys, API tokens, and env var values are never included.
+- **Fingerprinting**: events fingerprint on `[admin_audit, action]` so repeated identical events group in Sentry rather than flooding the issue list.
+- **Level `info`**: admin audit events are not errors. They use `level: 'info'` so they appear in Discover/Performance but do not trigger P1/P2 error-rate alerts.

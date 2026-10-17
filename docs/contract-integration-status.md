@@ -3,6 +3,10 @@
 This document tracks the integration status of Soroban smart contracts within the ILN Frontend codebase. It serves as a visibility guide for contributors and maintainers to know which features are fully backed by live on-chain contracts versus those that are currently stubbed, derived, or deferred.
 
 > Interface source of truth: `Invoice-Liquidity-Network/ILN-Smart-Contract` (branch `dev`), `contracts/invoice_liquidity/src/lib.rs`.
+>
+> 🤖 **Automated Living Inventory:** For an auto-generated, machine-verifiable report of all real, derived, deferred, and mock-backed code paths and pattern signatures across the frontend repository, see **[docs/mock-inventory.md](mock-inventory.md)** (generated via `pnpm run docs:mock-inventory`).
+
+Governance action indicators read `GOVERNANCE_INTEGRATION_STATUS` in `src/utils/governance.ts`. Keep that map aligned with this table: changing an action to `Real` automatically removes its "Not yet live" banner.
 
 ## Integration Status Summary
 
@@ -61,6 +65,7 @@ There is no `list_invoices_by_payer` entry point in the current ABI. The direct 
 Stubs in `src/utils/governance.ts` marked with `TODO` comments:
 
 - `castVote` (line 264)
+- `getVotingPower` - returns a fixed mock balance until ILN token contract integration.
 - `delegateVotingPower` (line 286)
 - `getGovTokenBalance` (line 326)
 - `getQuorumThreshold` (line 427)

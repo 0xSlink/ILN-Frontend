@@ -24,6 +24,19 @@ Other tracked budgets:
 - Best Practices Score: ≥ 80
 - SEO Score: ≥ 80
 
+### Soft-warning trend detection (distinct from hard gate)
+
+Even when all hard gates pass, `scripts/lighthouse-trend.mjs` compares the current run's medians against the **rolling median of the last 5 runs** (stored in `.lighthouseci-history/trend-history.json`). If a meaningful regression is detected, it emits a **soft-warning** that does not fail CI but is surfaced prominently:
+
+| Metric            | Soft-warning threshold             | Meaning                   |
+| ----------------- | ---------------------------------- | ------------------------- |
+| Performance score | drop > 5 points (0.05) vs baseline | overall regression        |
+| LCP               | +250ms vs baseline                 | content render slowed     |
+| CLS               | +0.02 vs baseline                  | layout shifted more       |
+| TBT               | +50ms vs baseline                  | more main-thread blocking |
+
+Thresholds are tunable via env (`LHCI_TREND_PERF_DELTA`, `LHCI_TREND_LCP_DELTA_MS`, `LHCI_TREND_CLS_DELTA`, `LHCI_TREND_TBT_DELTA_MS`, `LHCI_TREND_WINDOW`). To gate on them (future), run `node scripts/lighthouse-trend.mjs --strict`.
+
 ## Tested Pages
 
 Lighthouse CI audits the following pages:
@@ -37,9 +50,16 @@ Lighthouse CI audits the following pages:
 
 1. On each push/PR to `main`, `dev`, or `develop`, the GitHub Actions workflow runs
 2. The Next.js app is built in production mode
-3. Lighthouse CI runs 3 audits for each URL and averages the results
-4. Results are compared against the budget thresholds
-5. Reports are uploaded as GitHub Actions artifacts (retained for 30 days)
+3. Previous trend history is restored from the `actions/cache` cache (`lhci-history-*`) — on cache miss (first run), the current run seeds the history
+4. Lighthouse CI runs 3 audits for each URL and averages the results
+5. Results are compared against the hard budget thresholds (fail) and the soft trend thresholds (warn)
+6. `scripts/lighthouse-trend.mjs` writes `.lighthouseci/trend-report.json` + `.lighthouseci/trend-report.md` and appends the current medians to `.lighthouseci-history/trend-history.json` (capped at 100 entries per URL) plus a CSV for charting
+7. Reports and trend history are uploaded as GitHub Actions artifacts (reports: 30 days, trend history: 90 days) and the trend report is posted as a PR comment
+
+### Historical storage
+
+- **Without an LHCI server**: history lives in the `actions/cache` cache and the `lighthouse-trend-history` artifact. This is lightweight and requires no server. The workflow restores with `lhci-history-<ref>-<sha>` and falls back to `lhci-history-main-` so feature branches inherit the main baseline.
+- **With an LHCI server** (optional): set `LHCI_SERVER_BASE_URL` and `LHCI_TOKEN` and change `.lighthouserc.json:ci.upload.target` to `lhci` per the [Lighthouse CI server docs](https://github.com/GoogleChrome/lighthouse-ci/blob/main/docs/configuration.md). The filesystem history and trend script remain compatible and act as a local complement.
 
 ## Reviewing Lighthouse Reports
 
@@ -48,25 +68,42 @@ Lighthouse CI audits the following pages:
 1. Go to the **Actions** tab in the GitHub repository
 2. Click on the failed or successful workflow run
 3. Scroll to the **Artifacts** section at the bottom
-4. Download the `lighthouse-reports` artifact
-5. Extract the ZIP file and open the HTML reports in your browser
+4. Download the `lighthouse-reports` artifact (HTML/JSON reports) and `lighthouse-trend-history` (trend data + `trend-report.md`/`.json`)
 
-### Via Local Testing
+### Via Trend View
+
+#### On a PR
+
+The workflow posts the trend report as a PR comment (marked `<!-- lhci-trend-report -->`) with a per-URL table and any soft-warning regressions. Subsequent pushes update the same comment. Review it alongside the Checks summary — a ⚠️ there means performance crept even though the hard gate still passed.
+
+#### Historical trend
+
+1. Download the `lighthouse-trend-history` artifact from any recent workflow run on `main`
+2. Open `.lighthouseci-history/trend-history.csv` in a spreadsheet or plot `performance` over `timestamp` grouped by `url` — a downward slope across 5–10 runs signals creep
+3. Or inspect `.lighthouseci-history/trend-history.json` for structured data to build a custom chart (e.g. in Grafana or a static site)
+4. With an LHCI server, open the server's dashboard URL (configured via `LHCI_SERVER_BASE_URL`) for the richer built-in trend view — LHCI server charts are the preferred long-term view when available
+
+#### Via Local Testing
 
 To run Lighthouse CI locally:
 
 ```bash
 # Build the app
-npm run build
+pnpm run build
 
 # Start the production server
-npm start
+pnpm start
 
 # In another terminal, run Lighthouse CI
-npx @lhci/cli autorun
+pnpm dlx @lhci/cli autorun
+
+# Check trend against local history (seeds history on first run)
+node scripts/lighthouse-trend.mjs
+cat .lighthouseci/trend-report.md
+cat .lighthouseci-history/trend-history.csv
 ```
 
-The reports will be saved in the `.lighthouseci/` directory.
+The reports will be saved in the `.lighthouseci/` directory and history in `.lighthouseci-history/`.
 
 ### Understanding the Reports
 
@@ -76,6 +113,8 @@ Each HTML report shows:
 - **Core Web Vitals**: LCP, FID, CLS with pass/fail status
 - **Opportunities**: Suggestions to improve performance
 - **Diagnostics**: Detailed metrics and resource analysis
+
+The trend report (`trend-report.md`/`.json`) additionally shows per-URL medians vs the rolling baseline and flags soft-warning deltas.
 
 ## Troubleshooting Failed Budgets
 
@@ -90,13 +129,23 @@ If CI fails due to performance budget violations:
    - Improve server response times
 4. **Test locally** before pushing to verify the fix
 
+### Addressing a soft-warning trend regression
+
+A soft warning means "still green, but meaningfully worse than recent history." Treat it as a prompt to investigate before it becomes a hard failure:
+
+1. Open the PR trend comment or `trend-report.md` to see which URL/metric regressed
+2. Compare `trend-history.csv` — is the slope gradual (creep) or a single jump (one PR)?
+3. Bisect: check which recent PR introduced larger JS bundles, images, or blocking scripts (`total-byte-weight`, `unused-javascript` warnings often correlate)
+4. Fix or accept: if the regression is intentional (e.g. new feature), update the baseline by merging; otherwise optimize and re-run
+
 ## Configuration
 
 Lighthouse CI is configured in `.lighthouserc.json`:
 
 - `ci.collect.url`: Pages to audit
-- `ci.assert.assertions`: Budget thresholds and severity levels
-- `ci.upload`: Report storage settings
+- `ci.assert.assertMatrix`: Per-URL budget thresholds and severity levels, keyed by `matchingUrlPattern` (`error` = hard-fail, `warn` = soft). The `.*` entry holds the global performance budgets; each representative route has its own entry for the blocking accessibility budget. Lighthouse CI does not allow `assertMatrix` to be combined with a flat `ci.assert.assertions` block.
+- `ci.upload`: Report storage settings (filesystem by default; swap to `lhci` when using a server)
+- Trend detection: `scripts/lighthouse-trend.mjs` + `.lighthouseci-history/` (cache + artifacts)
 
 The CI workflow is defined in `.github/workflows/lighthouse.yml`.
 
@@ -143,6 +192,7 @@ its (more lenient) alerting thresholds, and how to review the field data.
 ## Resources
 
 - [Lighthouse CI Documentation](https://github.com/GoogleChrome/lighthouse-ci)
+- [Lighthouse CI Server](https://github.com/GoogleChrome/lighthouse-ci/blob/main/docs/server.md)
 - [Core Web Vitals](https://web.dev/vitals/)
 - [Web Performance Optimization](https://web.dev/fast/)
 - [Real-User Performance Monitoring](./performance-monitoring.md)

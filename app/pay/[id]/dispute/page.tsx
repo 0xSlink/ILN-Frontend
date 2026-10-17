@@ -90,6 +90,7 @@ export default function DisputePage({ params }: { params: Promise<{ id: string }
       form.append('reason', reason.trim());
       files.forEach((f) => form.append('evidence', f, f.name));
 
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
       const res = await fetch('/dispute', { method: 'POST', body: form });
       if (!res.ok) {
         const body = await res.text();

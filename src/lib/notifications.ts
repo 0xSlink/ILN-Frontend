@@ -1,6 +1,6 @@
 export interface WalletNotification {
   id: string;
-  category: 'invoice' | 'lp' | 'governance' | 'reputation';
+  category: 'invoice' | 'lp' | 'governance' | 'reputation' | 'admin';
   type: string;
   title: string;
   message: string;

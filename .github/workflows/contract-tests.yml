@@ -38,6 +38,8 @@ jobs:
         # documentation in docs/contract-fixtures.md). Fails when the pin is
         # missing/malformed, or is a placeholder while claiming to be verified.
         run: node scripts/verify-contract-pin.mjs
+        # ABI drift response and cross-repository handoff:
+        # docs/cross-repo-incident-coordination.md#contract-abi-drift
 
       - name: Note pinned contract build in job summary
         run: |

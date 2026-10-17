@@ -14,6 +14,9 @@ jobs:
   lighthouse:
     name: Lighthouse CI
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
 
@@ -30,6 +33,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Restore Lighthouse history cache
+        uses: actions/cache@v4
+        with:
+          path: .lighthouseci-history
+          key: lhci-history-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            lhci-history-${{ github.ref }}-
+            lhci-history-main-
+            lhci-history-
+
       - name: Build Next.js app
         run: pnpm run build
         env:
@@ -41,6 +54,23 @@ jobs:
         env:
           LHCI_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Run Lighthouse trend check (soft-warning)
+        if: always()
+        run: node scripts/lighthouse-trend.mjs
+        env:
+          LHCI_TREND_PERF_DELTA: '0.05'
+          LHCI_TREND_LCP_DELTA_MS: '250'
+          LHCI_TREND_CLS_DELTA: '0.02'
+          LHCI_TREND_TBT_DELTA_MS: '50'
+          LHCI_TREND_WINDOW: '5'
+
+      - name: Save Lighthouse history cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .lighthouseci-history
+          key: lhci-history-${{ github.ref }}-${{ github.sha }}
+
       - name: Upload Lighthouse reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -48,3 +78,47 @@ jobs:
           name: lighthouse-reports
           path: .lighthouseci/
           retention-days: 30
+
+      - name: Upload Lighthouse trend history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-trend-history
+          path: |
+            .lighthouseci-history/
+            .lighthouseci/trend-report.*
+          retention-days: 90
+
+      - name: Comment trend report on PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const mdPath = '.lighthouseci/trend-report.md';
+            if (!fs.existsSync(mdPath)) return;
+            const body = fs.readFileSync(mdPath, 'utf8');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const BOT_MARKER = '<!-- lhci-trend-report -->';
+            const fullBody = `${BOT_MARKER}\n${body}`;
+            const existing = comments.find(c => c.body && c.body.includes(BOT_MARKER));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: fullBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: fullBody,
+              });
+            }
+        continue-on-error: true

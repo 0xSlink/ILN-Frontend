@@ -18,6 +18,7 @@ import {
   type ProtocolHealth,
 } from '@/utils/admin-health';
 import AdminActionHistoryPanel from '@/components/AdminActionHistoryPanel';
+import { logAdminAction } from '@/lib/auditLog';
 
 const REFRESH_INTERVAL_MS = 30_000;
 
@@ -153,20 +154,45 @@ export default function AdminHealthDashboard() {
 
   const requestPauseToggle = () => {
     if (!health) return;
+    const action = health.paused ? 'protocol.unpause_requested' : 'protocol.pause_requested';
+    logAdminAction({ action, actor: address ?? 'unknown', page: '/admin', timestamp: Math.floor(Date.now() / 1000) });
     setPendingConfirmation({ type: 'pause' });
   };
 
   const performPauseToggle = async () => {
     if (!address || !health) return;
     const nextPaused = !health.paused;
+    const ts = () => Math.floor(Date.now() / 1000);
+
+    logAdminAction({
+      action: nextPaused ? 'protocol.pause_confirmed' : 'protocol.unpause_confirmed',
+      actor: address,
+      page: '/admin',
+      timestamp: ts(),
+    });
 
     setActionBusy('pause');
     setActionMessage(null);
     try {
       await setProtocolPaused(nextPaused, address, signTx);
+      logAdminAction({
+        action: nextPaused ? 'protocol.pause_succeeded' : 'protocol.unpause_succeeded',
+        actor: address,
+        page: '/admin',
+        timestamp: ts(),
+      });
       setActionMessage(`Protocol ${nextPaused ? 'paused' : 'unpaused'} successfully.`);
       await loadHealth();
     } catch (actionError) {
+      logAdminAction({
+        action: nextPaused ? 'protocol.pause_failed' : 'protocol.unpause_failed',
+        actor: address,
+        page: '/admin',
+        timestamp: ts(),
+        metadata: {
+          error: actionError instanceof Error ? actionError.message : String(actionError),
+        },
+      });
       setActionMessage(
         actionError instanceof Error ? actionError.message : 'Protocol status update failed.'
       );
@@ -177,19 +203,52 @@ export default function AdminHealthDashboard() {
 
   const requestExecuteReady = () => {
     if (!health || health.readyProposals.length === 0) return;
+    logAdminAction({
+      action: 'governance.execute_requested',
+      actor: address ?? 'unknown',
+      page: '/admin',
+      timestamp: Math.floor(Date.now() / 1000),
+      metadata: { proposal_count: health.readyProposals.length },
+    });
     setPendingConfirmation({ type: 'execute' });
   };
 
   const performExecuteReady = async () => {
     if (!address || !health || health.readyProposals.length === 0) return;
+    const ts = () => Math.floor(Date.now() / 1000);
+
+    logAdminAction({
+      action: 'governance.execute_confirmed',
+      actor: address,
+      page: '/admin',
+      timestamp: ts(),
+      metadata: { proposal_count: health.readyProposals.length },
+    });
 
     setActionBusy('execute');
     setActionMessage(null);
     try {
       await executeReadyProposals(health.readyProposals, address, signTx);
+      logAdminAction({
+        action: 'governance.execute_succeeded',
+        actor: address,
+        page: '/admin',
+        timestamp: ts(),
+        metadata: { proposal_count: health.readyProposals.length },
+      });
       setActionMessage('Ready governance proposals executed.');
       await loadHealth();
     } catch (actionError) {
+      logAdminAction({
+        action: 'governance.execute_failed',
+        actor: address,
+        page: '/admin',
+        timestamp: ts(),
+        metadata: {
+          proposal_count: health.readyProposals.length,
+          error: actionError instanceof Error ? actionError.message : String(actionError),
+        },
+      });
       setActionMessage(
         actionError instanceof Error ? actionError.message : 'Proposal execution failed.'
       );
@@ -210,11 +269,38 @@ export default function AdminHealthDashboard() {
     setTokenAddressError(null);
     setTokenActionBusy('approve');
     setTokenActionMessage(null);
+    const ts = () => Math.floor(Date.now() / 1000);
+
+    logAdminAction({
+      action: 'token.approve_submitted',
+      actor: address,
+      page: '/admin',
+      timestamp: ts(),
+      metadata: { token_id_prefix: tokenId.slice(0, 8) },
+    });
+
     try {
       await approveToken(address, tokenId, signTx);
+      logAdminAction({
+        action: 'token.approve_succeeded',
+        actor: address,
+        page: '/admin',
+        timestamp: ts(),
+        metadata: { token_id_prefix: tokenId.slice(0, 8) },
+      });
       setTokenActionMessage(`Token ${tokenId.slice(0, 8)}… approved successfully.`);
       setNewTokenAddress('');
     } catch (err) {
+      logAdminAction({
+        action: 'token.approve_failed',
+        actor: address,
+        page: '/admin',
+        timestamp: ts(),
+        metadata: {
+          token_id_prefix: tokenId.slice(0, 8),
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
       setTokenActionMessage(err instanceof Error ? err.message : 'Token approval failed.');
     } finally {
       setTokenActionBusy(null);
@@ -222,18 +308,52 @@ export default function AdminHealthDashboard() {
   };
 
   const requestRemoveToken = (tokenId: string, symbol: string) => {
+    logAdminAction({
+      action: 'token.remove_requested',
+      actor: address ?? 'unknown',
+      page: '/admin',
+      timestamp: Math.floor(Date.now() / 1000),
+      metadata: { token_symbol: symbol, token_id_prefix: tokenId.slice(0, 8) },
+    });
     setPendingConfirmation({ type: 'remove-token', tokenId, symbol });
   };
 
   const performRemoveToken = async (tokenId: string, symbol: string) => {
     if (!address) return;
+    const ts = () => Math.floor(Date.now() / 1000);
+
+    logAdminAction({
+      action: 'token.remove_confirmed',
+      actor: address,
+      page: '/admin',
+      timestamp: ts(),
+      metadata: { token_symbol: symbol, token_id_prefix: tokenId.slice(0, 8) },
+    });
 
     setTokenActionBusy(`remove-${tokenId}`);
     setTokenActionMessage(null);
     try {
       await removeToken(address, tokenId, signTx);
+      logAdminAction({
+        action: 'token.remove_succeeded',
+        actor: address,
+        page: '/admin',
+        timestamp: ts(),
+        metadata: { token_symbol: symbol, token_id_prefix: tokenId.slice(0, 8) },
+      });
       setTokenActionMessage(`Token ${symbol} removed successfully.`);
     } catch (err) {
+      logAdminAction({
+        action: 'token.remove_failed',
+        actor: address,
+        page: '/admin',
+        timestamp: ts(),
+        metadata: {
+          token_symbol: symbol,
+          token_id_prefix: tokenId.slice(0, 8),
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
       setTokenActionMessage(err instanceof Error ? err.message : 'Token removal failed.');
     } finally {
       setTokenActionBusy(null);

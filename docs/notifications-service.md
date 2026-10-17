@@ -24,6 +24,25 @@ client-side store. See
 [route-map.md](./route-map.md#notifications-route-data-source) for the route's
 full data flow, including how read/unread state is persisted.
 
+## Categories and filtering
+
+Every notification carries a `category`: `invoice`, `lp`, `governance`,
+`reputation` or `admin`. The `/notifications` page shows a filter bar (All plus
+one button per category, with total and unread counts) so users can narrow the
+feed instead of reading one undifferentiated stream.
+
+`NotificationBell` resolves each incoming item's category with
+`resolveNotificationCategory` (`src/utils/notificationHelpers.ts`): a known
+`category` from the service is kept; a missing or unknown one is inferred from
+`type` (`proposal` → `governance`, `reputation` → `reputation`, admin action
+types such as `protocol_paused`, `signer_rotation`, `parameter_update` →
+`admin`), and falls back to `invoice`. The backend should send
+`category: "admin"` for user-facing admin actions. The admin audit log
+(`src/lib/auditLog.ts`) is Sentry-only and never reaches this feed.
+
+See the [notifications surface readiness report](./notifications-surface-readiness-report.md)
+for the category's overall status and accepted risks.
+
 ## Failure modes
 
 | Kind           | HTTP signal             | Meaning                                                              | Frontend behavior                                                                 |

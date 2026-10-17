@@ -96,6 +96,59 @@ With `seedN = 10_000` on `/dashboard` table mode:
 - **After:** 50 `<tr>` mounted initially; "Load more" reveals 50 at a time;
   TTI and scrolling remain flat across `N`.
 
+## High-volume notifications list
+
+**Issue:** [Invoice-Liquidity-Network/ILN-Frontend#943](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/issues/943)
+
+An active LP with a long invoice/governance history can build up many
+notifications. This section records how the notification surfaces behave at
+that volume.
+
+### Audit: behavior before this change
+
+| Surface                                     | Bounding before                                                                      | Status    |
+| ------------------------------------------- | ------------------------------------------------------------------------------------ | --------- |
+| `NotificationContext` writes                | `addNotification` / `setNotifications` capped at `MAX_NOTIFICATIONS` (50)            | OK        |
+| `NotificationContext` load from storage     | **Uncapped**: a stored list from an older build or another writer was loaded in full | **Fixed** |
+| `/notifications` page (`NotificationsPage`) | **Every** item in context mounted, re-sorted on every render                         | **Fixed** |
+| Notification drawer (`NotificationDrawer`)  | **Every** item in context mounted, re-sorted on every render                         | **Fixed** |
+| `NotificationBell` dropdown                 | Sorted and sliced to `MAX_NOTIFICATIONS`                                             | OK        |
+
+### Approach
+
+The same bounded "Load more" window as the invoice tables above, again with no
+virtualization dependency:
+
+- The page and drawer render through `useVisibleWindow` with
+  `NOTIFICATIONS_PAGE_SIZE` (20) rows, plus a "Load more (N remaining)" button.
+  They emit `list:visible-window` analytics as `notifications-page` and
+  `notification-drawer`.
+- The newest-first sort moved into `sortNotificationsNewestFirst`
+  (`src/utils/notificationHelpers.ts`) and is memoized, so it no longer runs on
+  every render.
+- `NotificationContext` now caps the stored list at `MAX_NOTIFICATIONS` when it
+  loads, not only when it writes.
+
+### Performance tests
+
+- `src/screens/__tests__/NotificationsPage.test.tsx` and
+  `src/components/__tests__/NotificationDrawer.highVolume.test.tsx` render a
+  simulated 5,000-notification account. They assert that only
+  `NOTIFICATIONS_PAGE_SIZE` rows are mounted, newest first, that "Load more"
+  reveals the next page, and that the initial render stays inside a generous
+  time budget.
+- `src/context/__tests__/NotificationContext.test.tsx` seeds 5,000 stored
+  notifications and a 5,000-item bulk replace, and asserts both are capped at
+  `MAX_NOTIFICATIONS`.
+
+### Residual and accepted risk
+
+- History is still kept client-side and capped at `MAX_NOTIFICATIONS` (50), so
+  older events drop off. Full history needs server-side pagination on
+  `GET /api/notifications/[address]`; that is out of scope here.
+- The timing checks run in jsdom. They catch a regression back to unbounded
+  rendering, but they do not measure real browser paint or scroll cost.
+
 ## Multi-incident load simulation (status surfaces)
 
 **Issue:** [Invoice-Liquidity-Network/ILN-Frontend#939](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/issues/939)

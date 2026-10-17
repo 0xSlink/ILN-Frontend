@@ -5,6 +5,7 @@ import { isValidStellarAddress } from '@/utils/governance';
 import { resolveFederatedAddress } from '@/utils/federation';
 import { useWallet } from '@/context/WalletContext';
 import { useTransaction } from '@/hooks/useTransaction';
+import GovernanceMockStatusBanner from '@/components/governance/GovernanceMockStatusBanner';
 import {
   Users,
   UserPlus,
@@ -73,7 +74,10 @@ export const DelegationPanel: React.FC = () => {
 
     // In a real app, this would build a Soroban transaction
     // Mock: execute(delegateVotesTx)
-    const success = await execute({} as any, `Delegating votes to ${resolvedDelegate}`);
+    const success = await execute(
+      async () => `mock-tx-delegation-${Date.now()}`,
+      `Delegating votes to ${resolvedDelegate}`
+    );
     if (success) {
       setCurrentDelegation(resolvedDelegate);
       setDelegateAddress('');
@@ -82,7 +86,10 @@ export const DelegationPanel: React.FC = () => {
   };
 
   const handleUndelegate = async () => {
-    const success = await execute({} as any, 'Removing vote delegation');
+    const success = await execute(
+      async () => `mock-tx-undelegation-${Date.now()}`,
+      'Removing vote delegation'
+    );
     if (success) {
       setCurrentDelegation(null);
     }

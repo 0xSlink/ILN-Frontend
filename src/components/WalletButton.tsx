@@ -5,6 +5,7 @@ import { useApprovedTokens } from '@/hooks/useApprovedTokens';
 import { useBalances } from '@/hooks/useBalances';
 import { useWallet } from '@/context/WalletContext';
 import { TokenAmount } from './TokenSelector';
+import { WalletPrivacyControls } from './WalletPrivacyControls';
 import { formatAddress, formatTokenAmount } from '@/utils/format';
 import { NETWORK_NAME } from '@/constants';
 import TestnetFaucetButton from './TestnetFaucetButton';
@@ -26,7 +27,6 @@ export default function WalletButton() {
   // Auto-refreshes every 30s and on each successful transaction; tokens that
   // fail to load surface via `unavailable` for the "Add Trustline" prompt.
   const { balances, unavailable, isLoading: isLoadingBalances } = useBalances(tokens);
-  const [copied, setCopied] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -39,17 +39,6 @@ export default function WalletButton() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const handleCopyAddress = async () => {
-    if (!address) return;
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard unavailable — nothing actionable to surface.
-    }
-  };
 
   if (isConnected) {
     return (
@@ -139,27 +128,13 @@ export default function WalletButton() {
 
             <div className="flex flex-col gap-1 border-t border-outline-variant/10 p-2">
               <TestnetFaucetButton />
-              <button
-                onClick={() => {
-                  void handleCopyAddress();
-                }}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-container-highest text-sm text-on-surface w-full text-left transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">
-                  {copied ? 'check' : 'content_copy'}
-                </span>
-                {copied ? 'Copied!' : 'Copy Address'}
-              </button>
-              <button
-                onClick={() => {
+              <WalletPrivacyControls
+                address={address!}
+                onDisconnect={() => {
                   disconnect();
                   setDropdownOpen(false);
                 }}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-error-container hover:text-on-error-container text-error text-sm w-full text-left transition-colors"
-              >
-                <span className="material-symbols-outlined text-[16px]">logout</span>
-                Disconnect
-              </button>
+              />
             </div>
           </div>
         )}

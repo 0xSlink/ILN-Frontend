@@ -23,6 +23,7 @@ import { Button } from '@/components/Button';
 import { Select } from '@/components/Select';
 import { Textarea } from '@/components/Textarea';
 import FieldTooltip from '@/components/FieldTooltip';
+import GovernanceMockStatusBanner from '@/components/governance/GovernanceMockStatusBanner';
 import { Loader2 } from 'lucide-react';
 
 interface FormData {
@@ -327,6 +328,8 @@ IPFS Hash: ${ipfsHash}`,
 
   return (
     <main className="container mx-auto p-6 max-w-3xl">
+      <GovernanceMockStatusBanner action="createProposal" />
+
       <h1 className="text-3xl font-bold mb-6">Create New Governance Proposal</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">

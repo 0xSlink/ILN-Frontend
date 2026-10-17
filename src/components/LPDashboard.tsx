@@ -11,7 +11,7 @@ import { TokenAmount } from './TokenSelector';
 import InvoiceFilterBar from './InvoiceFilterBar';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
 import { applyInvoiceFilters, useInvoiceFilters } from '@/hooks/useInvoiceFilters';
-import { useInvoices } from '@/hooks/useInvoices';
+import { useInvoices } from '@/hooks/queries';
 import SkeletonRow, { LP_DISCOVERY_COLUMNS } from './SkeletonRow';
 import LPRiskSummaryPanel from './LPRiskSummaryPanel';
 

@@ -1,2 +1,3 @@
 # One repository-relative glob per line for files that cannot be optimized.
 # Keep entries narrowly scoped and justify each exception in the pull request.
+pnpm-lock.yaml

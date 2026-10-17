@@ -1,10 +1,4 @@
-export interface MonthlyDefaultBucket {
-  date: string;
-  label: string;
-  defaulted: number;
-  funded: number;
-  defaultRate: number;
-}
+import { type MonthlyDefaultBucket } from '@/lib/indexerClient';
 
 export interface MonthlyDefaultWithMA extends MonthlyDefaultBucket {
   movingAverage: number;

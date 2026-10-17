@@ -83,6 +83,29 @@ describe('NotificationBell', () => {
     expect(screen.queryByTestId('notification-service-unavailable')).not.toBeInTheDocument();
   });
 
+  it('categorizes incoming admin and governance events for the category filters', async () => {
+    const base = { title: 't', message: 'm', createdAt: '2026-01-01T00:00:00Z', read: false };
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => [
+        { ...base, id: 'a1', category: 'admin', type: 'info' },
+        { ...base, id: 'a2', type: 'signer_rotation' },
+        { ...base, id: 'g1', type: 'proposal' },
+        { ...base, id: 'i1', category: 'not-a-category', type: 'funded' },
+      ],
+    });
+
+    render(<NotificationBell />);
+    await flush();
+
+    const updater = notificationState.setNotifications.mock.calls[0][0] as (
+      previous: unknown[]
+    ) => Array<{ id: string; category: string }>;
+    const merged = Object.fromEntries(updater([]).map((n) => [n.id, n.category]));
+    expect(merged).toEqual({ a1: 'admin', a2: 'admin', g1: 'governance', i1: 'invoice' });
+  });
+
   it('keeps cached state and signals degradation on a 503 (circuit open), never clearing notifications', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 503 });
 

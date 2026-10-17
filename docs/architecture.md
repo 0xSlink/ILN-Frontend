@@ -21,9 +21,11 @@ Reviewed 2026-08-26. Every setting confirmed intentional for production builds.
 
 ---
 
-## React Query Caching Audit
+## Data-Fetching Architecture & React Query Caching
 
-Reviewed 2026-08-26. All contract/Horizon queries use centralised key factories (`src/hooks/queries/keys.ts`) and configured timings (`QUERY_TIMINGS`).
+All remote asynchronous data-fetching in the frontend is consolidated into custom React Query hooks under `src/hooks/queries/` and `src/hooks/`. For the complete architecture guidelines, query key rules, mutation patterns, and exception criteria, see the dedicated **[Data-Fetching Architecture Guide](data-fetching-architecture.md)**.
+
+Reviewed 2026-08-26 (updated 2026-09-25). All contract/Horizon queries use centralised key factories (`src/hooks/queries/keys.ts`) and configured timings (`QUERY_TIMINGS`).
 
 | Query             | Key                               | staleTime | gcTime  | Notes                    |
 | ----------------- | --------------------------------- | --------- | ------- | ------------------------ |
@@ -32,12 +34,14 @@ Reviewed 2026-08-26. All contract/Horizon queries use centralised key factories 
 | Invoice count     | `invoiceKeys.count`               | 30s       | 5m      | Homepage ticker          |
 | Protocol stats    | `statsKeys.all`                   | 60s       | 10m     | Expensive to compute     |
 | Parameter updates | `governanceKeys.parameterUpdates` | 5m        | 30m     | Slow-moving              |
+| Protocol status   | `protocolKeys.status`             | 15s       | 5m      | Polled every 30s         |
+| Admin actions     | `adminKeys.actionHistory`         | 30s       | 5m      | Audit log                |
 | Protocol feed     | `PROTOCOL_FEED_QUERY_KEY`         | 55s       | default | Polling-based            |
 | Referral stats    | `['referral-stats', code]`        | default   | default | Per-user, low volume     |
 
 **Findings:**
 
-- All queries use `invoiceKeys.*` / `statsKeys.*` / `governanceKeys.*` factories — no orphaned inline keys
+- All queries use `invoiceKeys.*` / `statsKeys.*` / `governanceKeys.*` / `protocolKeys.*` / `adminKeys.*` factories — no orphaned inline keys
 - `QUERY_TIMINGS` centralises staleTime/gcTime — no hardcoded timings outside hooks
 - React Query's built-in deduplication handles sibling components sharing the same key
 - `useReferralStats` is the only hook without explicit timings (acceptable for low-frequency per-user data)
@@ -101,6 +105,10 @@ graph TD
 The primary route tree lives in `app/`. `/analytics` is the authenticated freelancer analytics workspace, while `/stats` is the public protocol-wide reporting page; `/leaderboard` is the canonical public cross-role ranking page. For the complete overview of canonical routes, purposes, primary consumers, and active redirects, refer to the [Route Map](route-map.md).
 
 A small legacy `src/app/` tree still exists for older route experiments/tests and should be treated carefully when moving code.
+
+Admin authorization (`/admin`, `/admin/flags` gated on the governance admin wallet, `/admin/actions` intentionally public) is enforced client-side with on-chain contract enforcement for writes; the full mechanism and its boundary are documented in the [Route Map](route-map.md) ("Admin Route Authorization"), with regression tests described in [testing.md](testing.md).
+
+Type-safety posture for the codebase (before/after `as any` metrics, strictness flags, lint gate) is consolidated in the [type-safety report](type-safety-report.md).
 
 ```
 app/
@@ -277,19 +285,19 @@ Client-visible configuration uses `NEXT_PUBLIC_*`, including Stellar network set
 
 The frontend depends on multiple backend services with varying criticality levels. This map documents each dependency, its purpose, impact of degradation, and resilience strategy.
 
-| Service                   | Purpose                                                                | Criticality             | Degradation Impact                                                             | Resilience Strategy                                                                                           | Cross-Reference                                  |
-| ------------------------- | ---------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| **Soroban RPC**           | Smart contract reads and writes, transaction simulation and submission | **Blocking**            | Core functionality unavailable, no transactions possible                       | Retry with exponential backoff, user-visible error states, fallback to cached data for reads where applicable | docs/troubleshooting.md                          |
-| **Horizon**               | Account balances, transaction history, asset information               | **Blocking**            | Balance displays fail, transaction tracking unavailable                        | Retry logic, cached balance display with staleness indicator                                                  | docs/troubleshooting.md                          |
-| **Indexer (REST API)**    | Aggregated protocol stats, invoice listings, leaderboard data          | **Degraded-gracefully** | Stats and marketplace show stale data or empty states, leaderboard unavailable | React Query cache serves stale data, empty state UI with retry option, IndexerUnavailableNotice banner        | docs/indexer-downtime.md                         |
+| Service                   | Purpose                                                                | Criticality             | Degradation Impact                                                             | Resilience Strategy                                                                                           | Cross-Reference                             |
+| ------------------------- | ---------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **Soroban RPC**           | Smart contract reads and writes, transaction simulation and submission | **Blocking**            | Core functionality unavailable, no transactions possible                       | Retry with exponential backoff, user-visible error states, fallback to cached data for reads where applicable | docs/troubleshooting.md                     |
+| **Horizon**               | Account balances, transaction history, asset information               | **Blocking**            | Balance displays fail, transaction tracking unavailable                        | Retry logic, cached balance display with staleness indicator                                                  | docs/troubleshooting.md                     |
+| **Indexer (REST API)**    | Aggregated protocol stats, invoice listings, leaderboard data          | **Degraded-gracefully** | Stats and marketplace show stale data or empty states, leaderboard unavailable | React Query cache serves stale data, empty state UI with retry option, IndexerUnavailableNotice banner        | docs/indexer-downtime.md                    |
 | **Indexer (GraphQL)**     | Deferred until after mainnet; no current frontend consumer             | **Out of scope**        | No runtime dependency                                                          | Revisit only with an approved use case and migration plan                                                     | docs/graphql-query-guidelines.md, Issue 929 |
-| **Indexer (WebSocket)**   | Real-time invoice updates, live protocol feed                          | **Degraded-gracefully** | Live updates stop, users see stale data until manual refresh                   | Falls back to polling, user can manually refresh                                                              | docs/protocol-feed.md                            |
-| **Notifications Service** | User notification preferences, notification history                    | **Degraded-gracefully** | Notification bell empty or errors, preferences not saved                       | Local notification display continues, preferences cached in localStorage                                      | docs/notifications-service.md                    |
-| **Supabase**              | Payer reminder preferences, user settings persistence                  | **Degraded-gracefully** | Reminder preferences unavailable, settings not persisted across sessions       | In-memory fallback for current session, retry on next interaction                                             | docs/supabase-setup.md                           |
-| **Resend**                | Transactional email delivery for payer reminders                       | **Degraded-gracefully** | Reminders not sent, no immediate user impact                                   | Email queue with retry, admin alerting on sustained failures                                                  | docs/api-routes.md                               |
-| **GitHub API**            | User feedback submission                                               | **Non-blocking**        | Feedback submission fails, users see error message                             | Graceful error handling, alternative feedback channels documented                                             | docs/api-routes.md                               |
-| **Freighter Wallet**      | Transaction signing, wallet connection                                 | **Blocking**            | No wallet interaction possible                                                 | Clear error messaging, alternative wallet options in modal                                                    | WalletSelectionModal                             |
-| **WalletConnect**         | Mobile wallet pairing                                                  | **Degraded-gracefully** | QR code pairing unavailable, direct connection still works                     | Fallback to direct Freighter connection                                                                       | WalletSelectionModal                             |
+| **Indexer (WebSocket)**   | Real-time invoice updates, live protocol feed                          | **Degraded-gracefully** | Live updates stop, users see stale data until manual refresh                   | Falls back to polling, user can manually refresh                                                              | docs/protocol-feed.md                       |
+| **Notifications Service** | User notification preferences, notification history                    | **Degraded-gracefully** | Notification bell empty or errors, preferences not saved                       | Local notification display continues, preferences cached in localStorage                                      | docs/notifications-service.md               |
+| **Supabase**              | Payer reminder preferences, user settings persistence                  | **Degraded-gracefully** | Reminder preferences unavailable, settings not persisted across sessions       | In-memory fallback for current session, retry on next interaction                                             | docs/supabase-setup.md                      |
+| **Resend**                | Transactional email delivery for payer reminders                       | **Degraded-gracefully** | Reminders not sent, no immediate user impact                                   | Email queue with retry, admin alerting on sustained failures                                                  | docs/api-routes.md                          |
+| **GitHub API**            | User feedback submission                                               | **Non-blocking**        | Feedback submission fails, users see error message                             | Graceful error handling, alternative feedback channels documented                                             | docs/api-routes.md                          |
+| **Freighter Wallet**      | Transaction signing, wallet connection                                 | **Blocking**            | No wallet interaction possible                                                 | Clear error messaging, alternative wallet options in modal                                                    | WalletSelectionModal                        |
+| **WalletConnect**         | Mobile wallet pairing                                                  | **Degraded-gracefully** | QR code pairing unavailable, direct connection still works                     | Fallback to direct Freighter connection                                                                       | WalletSelectionModal                        |
 
 ### Service Health Monitoring
 

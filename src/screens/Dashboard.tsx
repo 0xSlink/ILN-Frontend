@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+// eslint-disable-next-line no-restricted-imports -- Legacy dashboard query client exception
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import Footer from '@/components/Footer';
@@ -13,7 +14,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useToast } from '@/context/ToastContext';
 import { formatAddress, formatDate, formatUSDC, tokenAmountToNumber } from '@/utils/format';
 import { type Invoice } from '@/utils/soroban';
-import { useInvoices } from '@/hooks/useInvoices';
+import { useInvoices } from '@/hooks/queries';
 import InvoiceStatusBadge from '@/components/InvoiceStatusBadge';
 import LastUpdated from '@/components/LastUpdated';
 import BulkActionBar from '../components/BulkActionBar';
@@ -542,7 +543,9 @@ export default function DashboardPage() {
       <BulkActionBar
         selectedInvoices={selectedInvoices}
         onClearSelection={() => setSelectedIds(new Set())}
-        onRefresh={refetch as any}
+        onRefresh={() => {
+          void refetch();
+        }}
       />
 
       <Footer />

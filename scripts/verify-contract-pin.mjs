@@ -28,6 +28,9 @@ const relPinPath = path.relative(root, pinPath);
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
+  console.error(
+    'If the deployed entry points or argument types may have drifted, follow docs/cross-repo-incident-coordination.md#contract-abi-drift.'
+  );
   process.exit(1);
 }
 

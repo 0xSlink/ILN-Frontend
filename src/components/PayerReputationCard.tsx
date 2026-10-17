@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getReputation, type ReputationScore } from '@/utils/soroban';
+import { useReputation } from '@/hooks/queries';
 import Skeleton from '@/components/ui/Skeleton';
 
 interface PayerReputationCardProps {
@@ -11,28 +11,28 @@ interface PayerReputationCardProps {
 }
 
 export default function PayerReputationCard({ address, refreshTrigger }: PayerReputationCardProps) {
-  const [reputation, setReputation] = useState<ReputationScore | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: reputation, isLoading, isError, error, refetch } = useReputation(address);
   const [showTooltip, setShowTooltip] = useState(false);
-
-  const loadReputation = useCallback(async () => {
-    if (!address) return;
-    setLoading(true);
-    try {
-      const data = await getReputation(address);
-      setReputation(data);
-    } catch (err) {
-      console.error('Failed to load reputation:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [address]);
+  const prevRefreshTrigger = React.useRef(refreshTrigger);
 
   useEffect(() => {
-    void loadReputation();
-  }, [loadReputation, refreshTrigger]);
+    if (
+      refreshTrigger !== undefined &&
+      prevRefreshTrigger.current !== undefined &&
+      refreshTrigger !== prevRefreshTrigger.current
+    ) {
+      void refetch();
+    }
+    prevRefreshTrigger.current = refreshTrigger;
+  }, [refreshTrigger, refetch]);
 
-  if (loading && !reputation) {
+  useEffect(() => {
+    if (isError && error) {
+      console.error('Failed to load reputation:', error);
+    }
+  }, [isError, error]);
+
+  if (isLoading && !reputation) {
     return (
       <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6 shadow-sm">
         <Skeleton className="h-6 w-32" />

@@ -101,7 +101,7 @@ The app is a single Next.js project (App Router) that talks directly to Soroban 
 └── e2e/                        # Playwright end-to-end specs
 ```
 
-> `src/app/` is a legacy tree kept around for older route experiments and is **not** what Next.js actually serves — `app/` at the repository root is the live route tree. See [Frontend Architecture Overview](docs/architecture.md) for the full explanation and directory-by-directory breakdown.
+> `src/app/` is a legacy tree kept around for older route experiments and is **not** what Next.js actually serves — `app/` at the repository root is the live route tree. See [Frontend Architecture Overview](docs/architecture.md) for the full explanation and directory-by-directory breakdown..
 
 ### Core Component Layers
 
@@ -228,8 +228,9 @@ Open [http://localhost:3000](http://localhost:3000). To use a funded testnet wal
 | `pnpm run db:dry-run`              | Generate transactional up/down SQL for Supabase schema migrations     |
 | `pnpm test`                        | Run the Vitest unit/integration suite once                            |
 | `pnpm run test:watch`              | Run Vitest in watch mode                                              |
+| `pnpm run coverage:trend`          | Print the per-directory coverage table for the enforced scope         |
 | `pnpm run test:e2e`                | Run the Playwright end-to-end suite                                   |
-| `pnpm run test:mainnet-smoke`      | Run read-only Playwright smoke test against live mainnet deployment    |
+| `pnpm run test:mainnet-smoke`      | Run read-only Playwright smoke test against live mainnet deployment   |
 | `pnpm run test:mutation`           | Run Stryker mutation testing                                          |
 | `pnpm run verify`                  | Lint + env:check + format:check + typecheck + unit tests, in one shot |
 | `pnpm run storybook`               | Start Storybook locally on port 6006                                  |
@@ -270,15 +271,15 @@ pnpm run verify        # everything CI checks, in one command
 
 ### Reference
 
-| Doc                                              | What it covers                                            |
-| ------------------------------------------------ | --------------------------------------------------------- |
-| [Route Map](docs/route-map.md)                   | Every canonical route, its purpose, and active redirects. |
-| [Feature Flags Reference](docs/feature-flags.md) | Every `NEXT_PUBLIC_*` flag and what it gates.             |
-| [API Routes](docs/api-routes.md)                 | Request/response shapes for the app's own API routes.     |
-| [Error Codes Reference](docs/error-codes.md)     | Mapped contract error codes and remediation guidance.     |
-| [i18n Setup Guide](docs/i18n.md)                 | Locale architecture and how to add a new locale.          |
+| Doc                                                                                | What it covers                                                   |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [Route Map](docs/route-map.md)                                                     | Every canonical route, its purpose, and active redirects.        |
+| [Feature Flags Reference](docs/feature-flags.md)                                   | Every `NEXT_PUBLIC_*` flag and what it gates.                    |
+| [API Routes](docs/api-routes.md)                                                   | Request/response shapes for the app's own API routes.            |
+| [Error Codes Reference](docs/error-codes.md)                                       | Mapped contract error codes and remediation guidance.            |
+| [i18n Setup Guide](docs/i18n.md)                                                   | Locale architecture and how to add a new locale.                 |
 | [Accessibility Conformance Statement](docs/accessibility-conformance-statement.md) | WCAG 2.1 AA target, verification summary, and known limitations. |
-| [Supabase Setup](docs/supabase-setup.md)         | Schema and setup for the payer reminder flow.             |
+| [Supabase Setup](docs/supabase-setup.md)                                           | Schema and setup for the payer reminder flow.                    |
 
 ## 🔗 Useful Links & Documentation
 

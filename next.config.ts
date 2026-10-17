@@ -6,6 +6,9 @@ const nextConfig: NextConfig & { allowedDevOrigins?: string[] } = {
   reactStrictMode: true,
   turbopack: {},
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  // instrumentationHook moved out of experimental in Next 15+
+  // (removing stale flag that caused TS2353; instrumentation.ts is still picked up automatically)
+  experimental: {},
   async headers() {
     return [
       {

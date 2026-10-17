@@ -94,6 +94,7 @@ export async function reportComponentStatus(params: {
   status: 'OPERATIONAL' | 'UNDERMAINTENANCE' | 'MAJOROUTAGE' | 'PARTIALOUTAGE';
   incidentName?: string;
   message: string;
+  openIncidentId?: string;
 }): Promise<{ ok: boolean; incidentId?: string; error?: string }> {
   const apiKey = process.env.INSTATUS_API_KEY;
   const pageId = process.env.INSTATUS_PAGE_ID;
@@ -103,8 +104,8 @@ export async function reportComponentStatus(params: {
 
   try {
     if (params.status === 'OPERATIONAL') {
-      // Recovery: resolve the open canary incident for this component, if any.
-      const openIncidentId = process.env.INSTATUS_OPEN_CANARY_INCIDENT_ID;
+      // Recovery: resolve the open incident for this component, if any.
+      const openIncidentId = params.openIncidentId ?? process.env.INSTATUS_OPEN_CANARY_INCIDENT_ID;
       if (!openIncidentId) {
         return { ok: true }; // nothing open to resolve
       }

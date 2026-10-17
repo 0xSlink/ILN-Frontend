@@ -1,6 +1,6 @@
 # ILN Frontend Mainnet Launch Notes
 
-**Date:** [To be filled at launch]
+**Date:** Not applicable yet (pending mainnet deployment)
 **Version:** 1.0.0
 
 ---
@@ -90,8 +90,8 @@ This section is the plain-language "are we ready?" story behind the [Frontend Ma
 
 ### Admin Surface Hardening
 
-- **In place:** sensitive admin actions now go through an accessible in-page confirmation dialog instead of `window.confirm`, and `/admin` is gated to the configured governance admin address. The admin audit log shows on-chain multisig signer rotations (flagged as security-sensitive) and parameter updates.
-- **Not yet launch-ready:** pausing/unpausing the protocol and executing ready proposals do not call the contract. Approving or removing an accepted token asks the admin wallet to sign but never submits the transaction, yet the UI reports success. None of these actions are audit-log event sources (walkthrough findings F2–F4, F8). Until fixed, protocol-level admin operations must be performed directly against the contract with the multisig, not through the frontend.
+- **In place:** sensitive admin actions go through an accessible in-page confirmation dialog instead of `window.confirm`, `/admin` and `/admin/flags` are gated to the configured governance admin address, every privileged action emits a structured Sentry audit event (`src/lib/auditLog.ts`), and the admin surface has elevated test coverage thresholds enforced in `vitest.config.ts`. See [admin-surface-security-review.md](admin-surface-security-review.md) for the full category closing report.
+- **Not yet launch-ready:** pausing/unpausing the protocol and executing ready proposals do not call the contract. Approving or removing an accepted token asks the admin wallet to sign but never submits the transaction. None of these actions are on-chain audit-log event sources (walkthrough findings F2–F4, F8). Until fixed, protocol-level admin operations must be performed directly against the contract with the multisig, not through the frontend.
 
 ### Performance
 
@@ -174,8 +174,8 @@ If you suspect a security issue:
 ### Community
 
 - **GitHub Issues**: Report bugs and feature requests at [github.com/Invoice-Liquidity-Network/ILN-Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend)
-- **Discord**: [To be added] - Join for community support and updates
-- **Twitter**: [To be added] - Follow for announcements
+- **Discord**: Not applicable yet (tracked by backend support channels issue)
+- **Twitter**: Not applicable yet (tracked by backend support channels issue)
 
 ---
 
@@ -186,6 +186,51 @@ If you suspect a security issue:
 3. **Verify the network** indicator shows mainnet
 4. **Start small**—test with small amounts if you're new
 5. **Provide feedback** via GitHub issues or community channels
+
+---
+
+---
+
+## Dark-Feature Re-enablement Readiness Sign-off
+
+This section is the **closing gate** for the dark-feature re-enablement category (#881). Before the launch notes can claim readiness for any dark feature, every row in the table below must be **Complete** and the maintainer sign-off must be recorded.
+
+The three features shipping dark at launch are gated by build-time environment flags (see [Feature Flags](feature-flags.md)). Enabling one means changing the flag and redeploying — there is no runtime toggle. The readiness package for each feature must exist and be current before that flag is flipped.
+
+### Required readiness artifacts
+
+Each dark feature requires the following artifacts before its flag is cleared for mainnet:
+
+1. **Smoke-test coverage** — at least one mainnet-smoke test exercises the feature surface after the flag is on (`e2e/dark-feature-flag-flip-smoke.spec.ts`).
+2. **Visual baseline** — a Chromatic story baseline capturing the enabled state exists and is current (`pnpm run chromatic`).
+3. **Rollback runbook step** — [docs/dark-feature-flag-rollback-runbook.md](dark-feature-flag-rollback-runbook.md) contains an explicit, per-feature section for disabling the feature (flipping the flag back to `false` and redeploying).
+4. **Feature flag review** — the flag's entry in [docs/feature-flags.md](feature-flags.md) is current and the production default is confirmed `false`.
+
+The consolidated go/no-go surface for all four artifacts across all three features is maintained in [docs/dark-feature-dashboard.md](dark-feature-dashboard.md).
+
+### Per-feature readiness dashboard
+
+| Feature        | Flag                                 | Smoke test                                                    | Visual baseline                                                                    | Rollback step                                                                        | Flag review                                                          | Status                             |
+| -------------- | ------------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------- | ---------------------------------- |
+| Insurance Pool | `NEXT_PUBLIC_INSURANCE_POOL_ENABLED` | ✅ `e2e/dark-feature-flag-flip-smoke.spec.ts` §Insurance Pool | ✅ `InsurancePoolPanel.stories.tsx` — `FlagEnabled` + `FlagEnabledLoading` stories | ✅ [dark-feature-flag-rollback-runbook.md §1](dark-feature-flag-rollback-runbook.md) | ✅ Confirmed `false` default in [feature-flags.md](feature-flags.md) | ⏳ **Pending maintainer sign-off** |
+| Oracle Badge   | `NEXT_PUBLIC_ORACLE_ENABLED`         | ✅ `e2e/dark-feature-flag-flip-smoke.spec.ts` §Oracle Badge   | ✅ `OracleBadge.stories.tsx` — `FlagEnabled*` stories (5 states)                   | ✅ [dark-feature-flag-rollback-runbook.md §2](dark-feature-flag-rollback-runbook.md) | ✅ Confirmed `false` default in [feature-flags.md](feature-flags.md) | ⏳ **Pending maintainer sign-off** |
+| Invoice NFT    | `NEXT_PUBLIC_NFT_ENABLED`            | ✅ `e2e/dark-feature-flag-flip-smoke.spec.ts` §Invoice NFT    | ✅ `InvoiceNftCard.stories.tsx` — `FlagEnabled*` stories (4 states)                | ✅ [dark-feature-flag-rollback-runbook.md §3](dark-feature-flag-rollback-runbook.md) | ✅ Confirmed `false` default in [feature-flags.md](feature-flags.md) | ⏳ **Pending maintainer sign-off** |
+
+**Overall status: All four required artifacts are now in place for each feature.** The consolidated readiness dashboard is at [dark-feature-dashboard.md](dark-feature-dashboard.md). Each feature is eligible for maintainer sign-off; the table above will advance to **Ready** once sign-off is recorded in the dashboard. The table above is the go/no-go surface; update each cell when the artifact changes.
+
+### Backend checklist cross-link
+
+The smart-contract repository's [mainnet launch checklist](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/dev/docs/mainnet-launch-checklist.md) carries a parallel set of dark-feature readiness gates for the contract side (contract audit status, address confirmation, and multisig signer verification for each dark contract). Both sides must be **Complete** before a flag is flipped. The coordination record for the two-way link is in [backend-checklist-cross-link-coordination.md](backend-checklist-cross-link-coordination.md).
+
+### Maintainer sign-off
+
+Fill this table after walking the dashboard above and confirming every artifact row that is needed for a flag flip is complete. One row per attending maintainer.
+
+| Maintainer (GitHub handle) | Date | Build / commit reviewed | Insurance Pool ready | Oracle Badge ready | Invoice NFT ready | Signed off | Notes |
+| -------------------------- | ---- | ----------------------- | -------------------- | ------------------ | ----------------- | ---------- | ----- |
+|                            |      |                         |                      |                    |                   |            |       |
+
+Sign-off is complete only when at least one maintainer has signed off **and** every feature that is being enabled has a **Complete** row in the dashboard above. A feature may proceed to canary rollout independently once its own row is complete; all three do not need to be ready simultaneously.
 
 ---
 

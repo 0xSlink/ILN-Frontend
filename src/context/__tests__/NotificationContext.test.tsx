@@ -1,6 +1,7 @@
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { NotificationProvider, useNotification } from '../NotificationContext';
+import { MAX_NOTIFICATIONS } from '@/utils/notificationHelpers';
 
 vi.mock('@/context/WalletContext', () => ({
   useWallet: () => ({ address: 'GTESTWALLET123' }),
@@ -173,5 +174,42 @@ describe('NotificationContext', () => {
     expect(result.current.isRead('n1')).toBe(true);
     expect(result.current.notifications.find((n) => n.id === 'n1')?.read).toBe(true);
     expect(result.current.unreadCount).toBe(1);
+  });
+
+  it('caps an oversized stored history on load so the in-memory list stays bounded', async () => {
+    seedNotifications(Array.from({ length: 5000 }, (_, index) => `n-${index}`));
+
+    const { result } = renderHook(() => useNotification(), {
+      wrapper: NotificationProvider,
+    });
+
+    await waitFor(() => expect(result.current.notifications.length).toBeGreaterThan(0));
+    expect(result.current.notifications).toHaveLength(MAX_NOTIFICATIONS);
+    expect(result.current.unreadCount).toBe(MAX_NOTIFICATIONS);
+  });
+
+  it('caps a high-volume bulk replace at MAX_NOTIFICATIONS', () => {
+    const { result } = renderHook(() => useNotification(), {
+      wrapper: NotificationProvider,
+    });
+
+    act(() => {
+      result.current.setNotifications(
+        Array.from({ length: 5000 }, (_, index) => ({
+          id: `bulk-${index}`,
+          category: 'lp' as const,
+          type: 'info' as const,
+          title: `Bulk ${index}`,
+          message: 'LP event',
+          href: '/lp',
+          createdAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(),
+          read: false,
+        }))
+      );
+    });
+
+    expect(result.current.notifications).toHaveLength(MAX_NOTIFICATIONS);
+    const persisted = JSON.parse(localStorage.getItem(notificationsKey) ?? '[]');
+    expect(persisted).toHaveLength(MAX_NOTIFICATIONS);
   });
 });

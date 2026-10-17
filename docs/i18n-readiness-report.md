@@ -2,6 +2,8 @@
 
 Status: category close-out · 2026-09-24
 
+This report is the consolidated implementation record for the i18n and GraphQL readiness issues in this category.
+
 This report consolidates the frontend internationalization decisions and the remaining work required before expanding the locale set.
 
 ## Executive summary

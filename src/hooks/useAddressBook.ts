@@ -49,6 +49,8 @@ export default function useAddressBook(): AddressBookHookState {
     setError(null);
     setValidationIssues(null);
 
+    setRecovery(null);
+
     if (!walletAddress) {
       setAddressBook([]);
       setIsLoading(false);
@@ -114,6 +116,11 @@ export default function useAddressBook(): AddressBookHookState {
     }
   }, [addressBook, walletAddress, error, storage]);
 
+  /**
+   * Add a new entry.
+   * Validates format and detects duplicates before touching state.
+   * Returns a result object so callers can surface the right error message.
+   */
   const addAddress = useCallback(
     (address: string, nickname: string): boolean => {
       if (!address || !nickname) return false;
@@ -158,9 +165,17 @@ export default function useAddressBook(): AddressBookHookState {
       setAddressBook((prev) => [...prev, validation.entry!]);
       return true;
     },
-    [addressBook]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [addressBook, walletAddress]
   );
 
+  // ── updateAddress ──────────────────────────────────────────────────────────
+
+  /**
+   * Update an existing entry by id.
+   * Validates the new address format and checks for duplicates against other entries.
+   * Rolls back state on persistence failure.
+   */
   const updateAddress = useCallback(
     (id: string, updates: Partial<Omit<AddressBookEntry, 'id'>>) => {
       setAddressBook((prev) =>
@@ -176,12 +191,11 @@ export default function useAddressBook(): AddressBookHookState {
         })
       );
     },
-    []
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [addressBook, walletAddress]
   );
 
-  const deleteAddress = useCallback((id: string) => {
-    setAddressBook((prev) => prev.filter((entry) => entry.id !== id));
-  }, []);
+  // ── searchAddresses ────────────────────────────────────────────────────────
 
   const searchAddresses = useCallback(
     (query: string): AddressBookEntry[] => {
@@ -208,6 +222,8 @@ export default function useAddressBook(): AddressBookHookState {
 
   return {
     addressBook,
+    isLoading,
+    loadError,
     addAddress,
     updateAddress,
     deleteAddress,

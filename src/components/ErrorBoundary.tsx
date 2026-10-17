@@ -16,7 +16,7 @@ interface ErrorBoundaryState {
 }
 
 export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  state: ErrorBoundaryState = {
+  override state: ErrorBoundaryState = {
     error: null,
     componentStack: null,
     resetVersion: 0,
@@ -27,7 +27,7 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
     return { error, copied: false };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+  override componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error(error);
     this.setState({ componentStack: info.componentStack ?? null });
   }
@@ -78,7 +78,7 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
     return `/?feedback=true&category=Bug&description=${summary}`;
   };
 
-  render() {
+  override render() {
     const { error, componentStack, copied } = this.state;
     const isDev = process.env.NODE_ENV === 'development';
 

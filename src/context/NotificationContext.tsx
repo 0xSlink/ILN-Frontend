@@ -17,7 +17,13 @@ import {
   readStateStorageKey,
 } from '@/utils/notificationHelpers';
 
-export type NotificationCategory = 'invoice' | 'lp' | 'governance' | 'reputation';
+/**
+ * Feed categories the /notifications page can filter by. `admin` covers
+ * protocol-level admin actions surfaced to users (pauses, signer rotations,
+ * parameter updates); the admin audit log itself is Sentry-only and never
+ * reaches this inbox. See docs/notifications-service.md.
+ */
+export type NotificationCategory = 'invoice' | 'lp' | 'governance' | 'reputation' | 'admin';
 
 export type NotificationType =
   | 'funded'
@@ -102,7 +108,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       const stored = localStorage.getItem(storageKey);
       if (stored) {
         const parsed = JSON.parse(stored) as NotificationItem[];
-        setNotificationsState(applyReadState(parsed, storedReads));
+        // Writes are capped, but a stored list from an older build or another
+        // writer may not be; cap on load too so the in-memory list stays bounded.
+        const bounded = Array.isArray(parsed) ? parsed.slice(0, MAX_NOTIFICATIONS) : [];
+        setNotificationsState(applyReadState(bounded, storedReads));
       } else {
         setNotificationsState([]);
       }

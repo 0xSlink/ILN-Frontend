@@ -64,6 +64,7 @@ export default function TopFundersWidget() {
           }
         }
 
+        // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
         const response = await fetch('/api/leaderboard?type=lp&period=30d&limit=10', {
           cache: 'no-store',
         });

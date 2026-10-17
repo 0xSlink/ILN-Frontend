@@ -25,6 +25,12 @@ Add the following row to the `Documentation` section table:
 | Frontend readiness checklist cross-linked | Point maintainers at the frontend repository's consolidated mainnet readiness checklist so launch readiness is reviewable from either entry point. | Docs lead | In progress | [ILN-Frontend readiness checklist](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/dev/docs/mainnet-frontend-readiness-checklist.md) |
 ```
 
+Also add a row for the dark-feature readiness sign-off so the backend checklist surface includes the frontend dark-feature gate (ILN-Frontend issue #881):
+
+```
+| Frontend dark-feature re-enablement sign-off | Confirms that every dark feature (Insurance Pool, Oracle Badge, Invoice NFT) has a complete readiness package (smoke tests, visual baseline, rollback step, flag default) before its flag is cleared for mainnet. | Docs lead | In progress | [Dark-Feature Sign-off](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/dev/docs/mainnet-launch-notes.md#dark-feature-re-enablement-readiness-sign-off) |
+```
+
 Formatting notes:
 
 - The row matches the backend checklist's five-column table (`Item | Description | Owner | Status | Link`) and its `Not started`, `In progress`, `Blocked`, `Complete` status legend.
@@ -49,6 +55,7 @@ Formatting notes:
 ## Acceptance criteria
 
 - [x] Frontend readiness checklist exists at `docs/mainnet-frontend-readiness-checklist.md` (ILN-Frontend issue #955, delivered together with this record).
-- [ ] Backend checklist contains the cross-link row on its default branch (backend PR or issue delivered per the options above).
+- [x] Dark-feature re-enablement readiness sign-off section exists at `docs/mainnet-launch-notes.md#dark-feature-re-enablement-readiness-sign-off` with per-feature dashboard and maintainer sign-off table (ILN-Frontend issue #881).
+- [ ] Backend checklist contains the cross-link row and dark-feature sign-off row on its default branch (backend PR or issue delivered per the options above).
 - [ ] Both documents resolve to each other with no broken links.
 - [ ] The backend row uses the backend checklist's status legend so org-wide status reporting stays consistent.

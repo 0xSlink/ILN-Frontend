@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { http, HttpResponse } from 'msw';
+import { rpc, nativeToScVal } from '@stellar/stellar-sdk';
 import { server } from '@/mocks/server';
 
 import {
@@ -34,6 +35,11 @@ import {
   type CreateProposalPayload,
   type Proposal,
 } from '@/utils/governance';
+import {
+  combineRecorders,
+  detectMockBacking,
+  expectMockBackingStatus,
+} from '@/test-utils/mock-detection';
 
 const SIGNER = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const mockSignTx = vi.fn(async (_xdr: string) => 'signedXDR');
@@ -148,36 +154,69 @@ describe('governance – lookupToken', () => {
     await expect(lookupToken('')).rejects.toThrow('Invalid Stellar address');
   });
 
-  it('rejects address that does not start with G', async () => {
-    await expect(
-      lookupToken('CABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCD')
-    ).rejects.toThrow('Invalid Stellar address');
+  it('rejects address that does not start with G or C', async () => {
+    await expect(lookupToken('X' + 'A'.repeat(55))).rejects.toThrow('Invalid Stellar address');
   });
 
-  it('returns Unknown Token for valid G-address not in known set', async () => {
-    vi.useFakeTimers();
-    // Valid G-address (G + 55 base32 chars) not in accepted or known tokens
-    const promise = lookupToken('GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBVN');
-    vi.runAllTimers();
-    const token = await promise;
-    expect(token.name).toBe('Unknown Token');
-  });
-
-  it('returns Unknown Token with truncated symbol for unknown valid G-address', async () => {
-    vi.useFakeTimers();
-    const promise = lookupToken('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF');
-    vi.runAllTimers();
-    const token = await promise;
-    expect(token.symbol).toBe('GAAA');
-    expect(token.name).toBe('Unknown Token');
-  });
-
-  it('rejects C-prefixed token contract addresses as invalid', async () => {
-    // Token contract IDs on Stellar start with C, not G
-    // lookupToken validates for G-prefix, so C-prefixed addresses are rejected
+  it('rejects already accepted tokens', async () => {
     await expect(
       lookupToken('CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75')
-    ).rejects.toThrow('Invalid Stellar address');
+    ).rejects.toThrow('already an accepted token');
+  });
+
+  it('simulates Soroban read calls and returns token name and symbol on success', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData:
+          {} as unknown as rpc.Api.SimulateTransactionSuccessResponse['transactionData'],
+        minResourceFee: '100',
+        events: [],
+        result: {
+          retval: nativeToScVal('Wrapped Bitcoin'),
+        },
+      } as unknown as rpc.Api.SimulateTransactionResponse)
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData:
+          {} as unknown as rpc.Api.SimulateTransactionSuccessResponse['transactionData'],
+        minResourceFee: '100',
+        events: [],
+        result: {
+          retval: nativeToScVal('wBTC'),
+        },
+      } as unknown as rpc.Api.SimulateTransactionResponse);
+
+    const token = await lookupToken('CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC');
+    expect(token.name).toBe('Wrapped Bitcoin');
+    expect(token.symbol).toBe('wBTC');
+    expect(token.address).toBe('CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC');
+    mockSimulate.mockRestore();
+  });
+
+  it('throws an error without mock fallback if token simulation fails', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: 'Contract error: FeeOnTransferToken',
+        transactionData:
+          {} as unknown as rpc.Api.SimulateTransactionSuccessResponse['transactionData'],
+        minResourceFee: '100',
+        events: [],
+      } as unknown as rpc.Api.SimulateTransactionResponse)
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData:
+          {} as unknown as rpc.Api.SimulateTransactionSuccessResponse['transactionData'],
+        minResourceFee: '100',
+        events: [],
+      } as unknown as rpc.Api.SimulateTransactionResponse);
+
+    await expect(
+      lookupToken('CD3TE3IAHM737P236XZL2OYU275ZKD6MN7YH7PYYAXYIGEH55OPEWYJC')
+    ).rejects.toThrow('FeeOnTransferToken');
+    mockSimulate.mockRestore();
   });
 });
 
@@ -776,5 +815,51 @@ describe('governance – fetchSignerRotations', () => {
     expect(rotations[0].newSigner).toBe('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF');
     expect(rotations[0].reason).toBe('Quarterly rotation');
     expect(rotations[0].securityLevel).toBe('critical');
+  });
+});
+
+// ─── Mock-backing detection (#857) ────────────────────────────────────────────
+//
+// See the matching block in governance.test.ts for how the recorded status
+// works. Flip 'mock' → 'real' once the linked issue's implementation lands.
+
+describe('governance – mock-backing detection (extended)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function settle<T>(promise: Promise<T>): Promise<T> {
+    await vi.runAllTimersAsync();
+    return promise;
+  }
+
+  it('executeProposal (#840): tx hash provenance and signTx usage', async () => {
+    vi.useFakeTimers();
+    const signTx = vi.fn(async (_xdr: string) => 'signedXDR');
+    const report = await detectMockBacking({
+      run: () => settle(executeProposal(6, SIGNER, signTx)),
+      boundaries: { signTx },
+    });
+    expectMockBackingStatus('executeProposal', report, 'mock');
+  });
+
+  it('lookupToken (#845): reaches Soroban RPC or the network', async () => {
+    vi.useFakeTimers();
+    const simulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValue(new Error('offline'));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+    const report = await detectMockBacking({
+      // Not an accepted or hard-coded "known" token, so a real lookup is required.
+      run: () =>
+        settle(
+          lookupToken('GBQD2MXHXD2SRHRQZRZ5JZ4UNLMTMLZNNDJHCQXIJXE2ANBV5IDWB2XK').catch(
+            () => undefined
+          )
+        ),
+      identify: () => undefined,
+      boundaries: { network: combineRecorders(simulate, fetchSpy) },
+    });
+    expectMockBackingStatus('lookupToken', report, 'mock');
   });
 });
