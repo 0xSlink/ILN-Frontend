@@ -2,11 +2,10 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useWallet } from '@/context/WalletContext';
 import { isValidStellarAddress } from '@/utils/governance';
 import {
-  currentWalletRecordScope,
-  readWalletRecord,
-  writeWalletRecord,
-  type WalletRecordRejection,
-} from '@/utils/walletRecordStore';
+  deriveKeyFromWalletAddress,
+  encryptForStorage,
+  decryptFromStorage,
+} from '@/utils/addressBookCrypto';
 
 export interface AddressBookEntry {
   id: string;
@@ -19,7 +18,8 @@ export type AddressBookError =
   | 'INVALID_ADDRESS'
   | 'DUPLICATE_ADDRESS'
   | 'MISSING_FIELDS'
-  | 'PERSIST_FAILED';
+  | 'PERSIST_FAILED'
+  | 'DECRYPT_FAILED';
 
 /** Discriminated result from operations that can fail. */
 export type AddressBookResult = { ok: true } | { ok: false; error: AddressBookError };
@@ -78,6 +78,8 @@ export default function useAddressBook() {
   // mounted empty state never overwrites what is already in localStorage.
   const skipNextSaveRef = useRef(true);
 
+  // ── Load (with decryption) ─────────────────────────────────────────────────
+
   useEffect(() => {
     skipNextSaveRef.current = true;
 
@@ -117,6 +119,12 @@ export default function useAddressBook() {
         setStatus('unavailable');
         break;
     }
+
+    loadAndDecrypt();
+
+    return () => {
+      cancelled = true;
+    };
   }, [walletAddress]);
 
   useEffect(() => {
@@ -128,13 +136,30 @@ export default function useAddressBook() {
     // so that callers receive a failure signal when the write fails.
   }, [addressBook, walletAddress]);
 
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  /**
+   * Obtain the current CryptoKey, deriving it on demand if not yet available.
+   * Returns null when there is no connected wallet.
+   */
+  async function getKey(): Promise<CryptoKey | null> {
+    if (!walletAddress) return null;
+    if (currentWalletRef.current !== walletAddress || !cryptoKeyRef.current) {
+      cryptoKeyRef.current = await deriveKeyFromWalletAddress(walletAddress);
+      currentWalletRef.current = walletAddress;
+    }
+    return cryptoKeyRef.current;
+  }
+
+  // ── addAddress ─────────────────────────────────────────────────────────────
+
   /**
    * Add a new entry.
    * Validates format and detects duplicates before touching state.
    * Returns a result object so callers can surface the right error message.
    */
   const addAddress = useCallback(
-    (address: string, nickname: string): AddressBookResult => {
+    async (address: string, nickname: string): Promise<AddressBookResult> => {
       if (!address || !nickname) return { ok: false, error: 'MISSING_FIELDS' };
 
       if (!isValidStellarAddress(address)) return { ok: false, error: 'INVALID_ADDRESS' };
@@ -159,8 +184,11 @@ export default function useAddressBook() {
       setAddressBook(next);
       return { ok: true };
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [addressBook, walletAddress]
   );
+
+  // ── updateAddress ──────────────────────────────────────────────────────────
 
   /**
    * Update an existing entry by id.
@@ -168,7 +196,7 @@ export default function useAddressBook() {
    * Rolls back state on persistence failure.
    */
   const updateAddress = useCallback(
-    (id: string, updates: Partial<Omit<AddressBookEntry, 'id'>>): AddressBookResult => {
+    async (id: string, updates: Partial<Omit<AddressBookEntry, 'id'>>): Promise<AddressBookResult> => {
       if (updates.address !== undefined) {
         if (!isValidStellarAddress(updates.address)) {
           return { ok: false, error: 'INVALID_ADDRESS' };
@@ -189,8 +217,11 @@ export default function useAddressBook() {
       setAddressBook(next);
       return { ok: true };
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [addressBook, walletAddress]
   );
+
+  // ── deleteAddress ──────────────────────────────────────────────────────────
 
   const deleteAddress = useCallback(
     (id: string) => {
@@ -199,11 +230,14 @@ export default function useAddressBook() {
         if (walletAddress) {
           tryPersist(walletAddress, next);
         }
-        return next;
-      });
+      }
+      setAddressBook(next);
     },
-    [walletAddress]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [addressBook, walletAddress]
   );
+
+  // ── searchAddresses ────────────────────────────────────────────────────────
 
   const searchAddresses = useCallback(
     (query: string) => {
@@ -222,9 +256,8 @@ export default function useAddressBook() {
 
   return {
     addressBook,
-    status,
-    recovery,
-    dismissRecovery,
+    isLoading,
+    loadError,
     addAddress,
     updateAddress,
     deleteAddress,
