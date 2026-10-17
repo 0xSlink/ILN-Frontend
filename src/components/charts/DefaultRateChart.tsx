@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   LineChart,
   Line,
@@ -17,6 +17,11 @@ import {
   MonthlyDefaultBucket,
   MonthlyDefaultWithMA,
 } from '@/utils/defaultRate';
+import { fetchDefaultRate } from '@/lib/indexer';
+import IndexerUnavailableNotice, {
+  shouldUseDevMockFallback,
+} from '@/components/IndexerUnavailableNotice';
+import DataSourceCaption from '@/components/DataSourceCaption';
 
 const CHART_TICK_STYLE = {
   fill: 'var(--color-on-surface-variant, #94a3b8)',
@@ -94,28 +99,40 @@ function generateMockDefaults(): MonthlyDefaultBucket[] {
 export default function DefaultRateChart() {
   const [chartData, setChartData] = useState<MonthlyDefaultWithMA[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [requestId, setRequestId] = useState(0);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const baseUrl = process.env.NEXT_PUBLIC_INDEXER_API_URL ?? 'https://api.iln.example.com';
-        const res = await fetch(`${baseUrl}/analytics/defaults?period=12m`);
-        if (!res.ok) throw new Error('Failed to fetch');
-        const json = await res.json();
-        const withMA = calculateMovingAverage(json.monthly || json, 1);
-        setChartData(withMA);
-      } catch {
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setUnavailable(false);
+    try {
+      const result = await fetchDefaultRate('12m');
+      if (result.unavailable || result.error || !result.data) {
+        throw new Error('Failed to fetch default rate');
+      }
+      const json = result.data;
+      const withMA = calculateMovingAverage(json.monthly || json, 1);
+      setChartData(withMA);
+    } catch {
+      // Only substitute demo data in development; otherwise show an honest
+      // "temporarily unavailable" state instead of fabricating metrics.
+      if (shouldUseDevMockFallback()) {
         const mockData = generateMockDefaults();
         const withMA = calculateMovingAverage(mockData, 1);
         setChartData(withMA);
-      } finally {
-        setLoading(false);
+      } else {
+        setChartData([]);
+        setUnavailable(true);
       }
-    };
-
-    fetchData();
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: initial chart load on mount/retry.
+    void fetchData();
+  }, [requestId, fetchData]);
 
   const currentRate = useMemo(() => {
     if (chartData.length === 0) return 0;
@@ -149,6 +166,7 @@ export default function DefaultRateChart() {
         <div>
           <h3 className="font-headline text-xl font-bold text-on-surface">Default Rate Trend</h3>
           <p className="text-sm text-on-surface-variant">Protocol health indicator</p>
+          <DataSourceCaption metric="default-rate" />
         </div>
       </div>
 
@@ -184,7 +202,14 @@ export default function DefaultRateChart() {
           </div>
         )}
 
-        {chartData.length === 0 && !loading ? (
+        {unavailable ? (
+          <div className="flex h-full items-center">
+            <IndexerUnavailableNotice
+              dataSource="Default-rate history"
+              onRetry={() => setRequestId((id) => id + 1)}
+            />
+          </div>
+        ) : chartData.length === 0 && !loading ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-outline-variant/20">
             <span className="material-symbols-outlined text-outline-variant/40 text-4xl">
               bar_chart

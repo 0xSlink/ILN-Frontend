@@ -33,7 +33,10 @@ test.describe('Live testnet governance vote journey', () => {
     await expect(main).toBeVisible({ timeout: 20000 });
 
     // Check for governance/proposal headings
-    const heading = page.locator('h1, h2').filter({ hasText: /governance|proposal/i }).first();
+    const heading = page
+      .locator('h1, h2')
+      .filter({ hasText: /governance|proposal/i })
+      .first();
     await expect(heading).toBeVisible({ timeout: 15000 });
 
     // Verify list of proposals or empty state is displayed
@@ -49,7 +52,10 @@ test.describe('Live testnet governance vote journey', () => {
     await page.waitForTimeout(2000);
 
     // Find and click a proposal link
-    const proposalLink = page.locator('a').filter({ hasText: /proposal|vote|voting/i }).first();
+    const proposalLink = page
+      .locator('a')
+      .filter({ hasText: /proposal|vote|voting/i })
+      .first();
     const linkPresent = await proposalLink.isVisible({ timeout: 5000 }).catch(() => false);
 
     if (linkPresent) {
@@ -77,7 +83,10 @@ test.describe('Live testnet governance vote journey', () => {
     await page.waitForTimeout(2000);
 
     // Navigate to a proposal
-    const proposalLink = page.locator('a').filter({ hasText: /proposal|vote/i }).first();
+    const proposalLink = page
+      .locator('a')
+      .filter({ hasText: /proposal|vote/i })
+      .first();
     const linkPresent = await proposalLink.isVisible({ timeout: 5000 }).catch(() => false);
 
     if (!linkPresent) {
@@ -122,7 +131,10 @@ test.describe('Live testnet governance vote journey', () => {
     await page.waitForTimeout(2000);
 
     // Try to find a vote button
-    const voteButton = page.locator('button').filter({ hasText: /vote|for|against/i }).first();
+    const voteButton = page
+      .locator('button')
+      .filter({ hasText: /vote|for|against/i })
+      .first();
     const isVoteButtonVisible = await voteButton.isVisible({ timeout: 5000 }).catch(() => false);
 
     if (isVoteButtonVisible) {
@@ -169,7 +181,6 @@ test.describe('Live testnet governance vote journey', () => {
 
     // Should not crash or show browser errors
     const errors = await page.evaluate(() => {
-      // @ts-expect-error - Playwright test environment doesn't have full window interface
       return window.__NEXT_DATA__?.props?.pageProps?.error || null;
     });
 

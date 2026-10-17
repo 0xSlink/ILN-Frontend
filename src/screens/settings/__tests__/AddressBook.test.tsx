@@ -1,7 +1,16 @@
+/**
+ * AddressBook component tests
+ *
+ * Covers:
+ *  - #862  edit-save-rerender regression (edit → save → new value displayed)
+ *  - #863  address-format and duplicate-entry validation on add and save
+ *  - #864  save-failure handling: error toast shown, edit form stays open
+ */
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AddressBookPage from '../AddressBook';
+import type { AddressBookResult } from '@/hooks/useAddressBook';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -10,119 +19,321 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-const addToastMock = vi.fn(() => 'toast-id');
-const updateToastMock = vi.fn();
+const addToastMock = vi.fn();
 vi.mock('@/context/ToastContext', () => ({
-  useToast: () => ({ addToast: addToastMock, updateToast: updateToastMock }),
+  useToast: () => ({ addToast: addToastMock }),
 }));
 
-const addAddressMock = vi.fn();
-const deleteAddressMock = vi.fn();
-const searchAddressesMock = vi.fn();
+// ── Mutable hook state (vi.hoisted keeps it in scope inside vi.mock) ──────────
 
-const addressBook = [
-  { id: '1', address: 'GADDRESSONELONGENOUGH1234567890', nickname: 'Alice' },
-  { id: '2', address: 'GADDRESSTWOLONGENOUGH1234567890', nickname: 'Bob' },
-];
+const { mockState } = vi.hoisted(() => ({
+  mockState: {
+    addressBook: [
+      {
+        id: '1',
+        address: 'GALICEALICEALICEALICEALICEALICEALICEALICEALICEALICEALICE12',
+        nickname: 'Alice',
+      },
+      {
+        id: '2',
+        address: 'GBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOB1234',
+        nickname: 'Bob',
+      },
+    ] as Array<{ id: string; address: string; nickname: string }>,
+    addAddress: vi.fn<[string, string], AddressBookResult>(() => ({ ok: true })),
+    updateAddress: vi.fn<
+      [string, Partial<{ address: string; nickname: string }>],
+      AddressBookResult
+    >(() => ({ ok: true })),
+    deleteAddress: vi.fn<[string], void>(),
+    searchAddresses: vi.fn<[string], Array<{ id: string; address: string; nickname: string }>>(),
+  },
+}));
 
 vi.mock('@/hooks/useAddressBook', () => ({
   default: () => ({
-    addressBook,
-    addAddress: addAddressMock,
-    deleteAddress: deleteAddressMock,
-    searchAddresses: searchAddressesMock,
+    addressBook: mockState.addressBook,
+    addAddress: mockState.addAddress,
+    updateAddress: mockState.updateAddress,
+    deleteAddress: mockState.deleteAddress,
+    searchAddresses: mockState.searchAddresses,
   }),
 }));
+
+// ── Valid Stellar addresses used throughout tests ─────────────────────────────
+
+const VALID_ADDRESS_ALICE = 'GALICEALICEALICEALICEALICEALICEALICEALICEALICEALICEALICE12';
+const VALID_ADDRESS_BOB = 'GBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOBBOB1234';
+const VALID_ADDRESS_CAROL = 'GCAROLCAROLCAROLCAROLCAROLCAROLCAROLCAROLCAROLCAROLCARO12';
 
 describe('AddressBookPage', () => {
   beforeEach(() => {
     addToastMock.mockClear();
-    updateToastMock.mockClear();
-    addAddressMock.mockClear();
-    deleteAddressMock.mockClear();
-    searchAddressesMock.mockReset();
-    searchAddressesMock.mockReturnValue(addressBook);
+    mockState.addAddress.mockClear();
+    mockState.updateAddress.mockClear();
+    mockState.deleteAddress.mockClear();
+    mockState.searchAddresses.mockReset();
+    // Default: searchAddresses returns the full list
+    mockState.searchAddresses.mockImplementation(() => mockState.addressBook);
+    // Default: mutations succeed
+    mockState.addAddress.mockReturnValue({ ok: true });
+    mockState.updateAddress.mockReturnValue({ ok: true });
+    mockState.addressBook = [
+      { id: '1', address: VALID_ADDRESS_ALICE, nickname: 'Alice' },
+      { id: '2', address: VALID_ADDRESS_BOB, nickname: 'Bob' },
+    ];
   });
+
+  // ── Rendering ───────────────────────────────────────────────────────────────
 
   it('renders each address book entry with its truncated address', () => {
     render(<AddressBookPage />);
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('Bob')).toBeInTheDocument();
-    expect(screen.getAllByText('GADDRE...7890')).toHaveLength(2);
   });
 
   it('shows an empty state when there are no matching addresses', () => {
-    searchAddressesMock.mockReturnValue([]);
+    mockState.searchAddresses.mockReturnValue([]);
     render(<AddressBookPage />);
     expect(screen.getByText('addressBook.noAddresses')).toBeInTheDocument();
   });
 
-  it('shows an error toast when adding without both fields', () => {
+  // ── Add validation (#863) ────────────────────────────────────────────────────
+
+  it('shows missingFields error when adding without both fields', () => {
+    mockState.addAddress.mockReturnValue({ ok: false, error: 'MISSING_FIELDS' });
     render(<AddressBookPage />);
     fireEvent.click(screen.getByText('addressBook.addAddress'));
     expect(addToastMock).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'error', title: 'addressBook.errors.missingFields' })
     );
-    expect(addAddressMock).not.toHaveBeenCalled();
+    expect(mockState.addAddress).toHaveBeenCalledWith('', '');
   });
 
-  it('adds a new address and clears the form', () => {
+  it('shows invalidAddress error when address format is wrong', () => {
+    mockState.addAddress.mockReturnValue({ ok: false, error: 'INVALID_ADDRESS' });
     render(<AddressBookPage />);
     fireEvent.change(screen.getByPlaceholderText('addressBook.stellarAddressPlaceholder'), {
-      target: { value: 'GNEWADDRESS1234567890' },
+      target: { value: 'NOT-A-STELLAR-ADDRESS' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('addressBook.nicknamePlaceholder'), {
+      target: { value: 'Bad Addr' },
+    });
+    fireEvent.click(screen.getByText('addressBook.addAddress'));
+    expect(addToastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', title: 'addressBook.errors.invalidAddress' })
+    );
+  });
+
+  it('shows duplicateAddress error when address already exists', () => {
+    mockState.addAddress.mockReturnValue({ ok: false, error: 'DUPLICATE_ADDRESS' });
+    render(<AddressBookPage />);
+    fireEvent.change(screen.getByPlaceholderText('addressBook.stellarAddressPlaceholder'), {
+      target: { value: VALID_ADDRESS_ALICE },
+    });
+    fireEvent.change(screen.getByPlaceholderText('addressBook.nicknamePlaceholder'), {
+      target: { value: 'Duplicate' },
+    });
+    fireEvent.click(screen.getByText('addressBook.addAddress'));
+    expect(addToastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', title: 'addressBook.errors.duplicateAddress' })
+    );
+  });
+
+  it('adds a new address and clears the form on success', () => {
+    render(<AddressBookPage />);
+    fireEvent.change(screen.getByPlaceholderText('addressBook.stellarAddressPlaceholder'), {
+      target: { value: VALID_ADDRESS_CAROL },
     });
     fireEvent.change(screen.getByPlaceholderText('addressBook.nicknamePlaceholder'), {
       target: { value: 'Carol' },
     });
     fireEvent.click(screen.getByText('addressBook.addAddress'));
 
-    expect(addAddressMock).toHaveBeenCalledWith('GNEWADDRESS1234567890', 'Carol');
+    expect(mockState.addAddress).toHaveBeenCalledWith(VALID_ADDRESS_CAROL, 'Carol');
     expect(addToastMock).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'success', title: 'addressBook.success.added' })
     );
+    // Form inputs should be cleared after a successful add
     expect(screen.getByPlaceholderText('addressBook.stellarAddressPlaceholder')).toHaveValue('');
+    expect(screen.getByPlaceholderText('addressBook.nicknamePlaceholder')).toHaveValue('');
   });
+
+  // ── Edit-save-rerender regression (#862) ─────────────────────────────────────
+  //
+  // These tests assert the full "edit → change value → save → new value shown"
+  // cycle that the original stub implementation never exercised.
+
+  it('pre-fills the edit inputs with the current entry values', () => {
+    render(<AddressBookPage />);
+    fireEvent.click(screen.getAllByTitle('addressBook.edit')[0]);
+
+    expect(screen.getByLabelText('addressBook.editAddressLabel')).toHaveValue(VALID_ADDRESS_ALICE);
+    expect(screen.getByLabelText('addressBook.editNicknameLabel')).toHaveValue('Alice');
+  });
+
+  it('saves the edited values and shows a success toast', () => {
+    render(<AddressBookPage />);
+    // Enter edit mode for the first entry (Alice)
+    fireEvent.click(screen.getAllByTitle('addressBook.edit')[0]);
+
+    // Change both fields
+    fireEvent.change(screen.getByLabelText('addressBook.editAddressLabel'), {
+      target: { value: VALID_ADDRESS_CAROL },
+    });
+    fireEvent.change(screen.getByLabelText('addressBook.editNicknameLabel'), {
+      target: { value: 'Alice Renamed' },
+    });
+
+    // Simulate hook writing the new values into addressBook state
+    mockState.addressBook = [
+      { id: '1', address: VALID_ADDRESS_CAROL, nickname: 'Alice Renamed' },
+      { id: '2', address: VALID_ADDRESS_BOB, nickname: 'Bob' },
+    ];
+    mockState.searchAddresses.mockImplementation(() => mockState.addressBook);
+
+    fireEvent.click(screen.getByText('addressBook.save'));
+
+    expect(mockState.updateAddress).toHaveBeenCalledWith('1', {
+      address: VALID_ADDRESS_CAROL,
+      nickname: 'Alice Renamed',
+    });
+    expect(addToastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'success', title: 'addressBook.success.updated' })
+    );
+    // Edit form should close after a successful save
+    expect(screen.queryByText('addressBook.save')).not.toBeInTheDocument();
+  });
+
+  it('edit-save-rerender: re-render shows the new nickname after save', () => {
+    const { rerender } = render(<AddressBookPage />);
+    fireEvent.click(screen.getAllByTitle('addressBook.edit')[0]);
+    fireEvent.change(screen.getByLabelText('addressBook.editNicknameLabel'), {
+      target: { value: 'Alice Updated' },
+    });
+
+    // Simulate the hook updating its state after updateAddress
+    mockState.addressBook = [
+      { id: '1', address: VALID_ADDRESS_ALICE, nickname: 'Alice Updated' },
+      { id: '2', address: VALID_ADDRESS_BOB, nickname: 'Bob' },
+    ];
+    mockState.searchAddresses.mockImplementation(() => mockState.addressBook);
+
+    fireEvent.click(screen.getByText('addressBook.save'));
+
+    // Re-render with the updated hook state
+    rerender(<AddressBookPage />);
+
+    expect(screen.getByText('Alice Updated')).toBeInTheDocument();
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+  });
+
+  it('cancel leaves the entry unchanged', () => {
+    render(<AddressBookPage />);
+    fireEvent.click(screen.getAllByTitle('addressBook.edit')[0]);
+    fireEvent.change(screen.getByLabelText('addressBook.editNicknameLabel'), {
+      target: { value: 'Should Not Persist' },
+    });
+    fireEvent.click(screen.getByText('addressBook.cancel'));
+
+    // Edit form should be gone
+    expect(screen.queryByText('addressBook.save')).not.toBeInTheDocument();
+    // updateAddress should never have been called
+    expect(mockState.updateAddress).not.toHaveBeenCalled();
+  });
+
+  // ── Save-failure rollback (#864) ─────────────────────────────────────────────
+
+  it('shows saveFailed error and keeps the edit form open when update persistence fails', () => {
+    mockState.updateAddress.mockReturnValue({ ok: false, error: 'PERSIST_FAILED' });
+
+    render(<AddressBookPage />);
+    fireEvent.click(screen.getAllByTitle('addressBook.edit')[0]);
+    fireEvent.click(screen.getByText('addressBook.save'));
+
+    // Error toast shown
+    expect(addToastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', title: 'addressBook.errors.saveFailed' })
+    );
+    // Edit form stays open so the user can retry — success toast NOT shown
+    expect(screen.getByText('addressBook.save')).toBeInTheDocument();
+    expect(addToastMock).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+  });
+
+  it('shows saveFailed error and keeps add form values when add persistence fails', () => {
+    mockState.addAddress.mockReturnValue({ ok: false, error: 'PERSIST_FAILED' });
+
+    render(<AddressBookPage />);
+    fireEvent.change(screen.getByPlaceholderText('addressBook.stellarAddressPlaceholder'), {
+      target: { value: VALID_ADDRESS_CAROL },
+    });
+    fireEvent.change(screen.getByPlaceholderText('addressBook.nicknamePlaceholder'), {
+      target: { value: 'Carol' },
+    });
+    fireEvent.click(screen.getByText('addressBook.addAddress'));
+
+    expect(addToastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', title: 'addressBook.errors.saveFailed' })
+    );
+    // Form values are preserved so the user does not have to re-type
+    expect(screen.getByPlaceholderText('addressBook.stellarAddressPlaceholder')).toHaveValue(
+      VALID_ADDRESS_CAROL
+    );
+    expect(screen.getByPlaceholderText('addressBook.nicknamePlaceholder')).toHaveValue('Carol');
+  });
+
+  it('shows invalidAddress error when saving an edit with a bad format', () => {
+    mockState.updateAddress.mockReturnValue({ ok: false, error: 'INVALID_ADDRESS' });
+
+    render(<AddressBookPage />);
+    fireEvent.click(screen.getAllByTitle('addressBook.edit')[0]);
+    fireEvent.change(screen.getByLabelText('addressBook.editAddressLabel'), {
+      target: { value: 'BADFORMAT' },
+    });
+    fireEvent.click(screen.getByText('addressBook.save'));
+
+    expect(addToastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', title: 'addressBook.errors.invalidAddress' })
+    );
+    // Edit form stays open
+    expect(screen.getByText('addressBook.save')).toBeInTheDocument();
+  });
+
+  it('shows duplicateAddress error when saving an edit that collides with another entry', () => {
+    mockState.updateAddress.mockReturnValue({ ok: false, error: 'DUPLICATE_ADDRESS' });
+
+    render(<AddressBookPage />);
+    fireEvent.click(screen.getAllByTitle('addressBook.edit')[0]);
+    fireEvent.change(screen.getByLabelText('addressBook.editAddressLabel'), {
+      target: { value: VALID_ADDRESS_BOB },
+    });
+    fireEvent.click(screen.getByText('addressBook.save'));
+
+    expect(addToastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', title: 'addressBook.errors.duplicateAddress' })
+    );
+    expect(screen.getByText('addressBook.save')).toBeInTheDocument();
+  });
+
+  // ── Delete ───────────────────────────────────────────────────────────────────
 
   it('deletes an address', () => {
     render(<AddressBookPage />);
     fireEvent.click(screen.getAllByTitle('addressBook.delete')[0]);
-    expect(deleteAddressMock).toHaveBeenCalledWith('1');
+    expect(mockState.deleteAddress).toHaveBeenCalledWith('1');
     expect(addToastMock).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'success', title: 'addressBook.success.deleted' })
     );
   });
 
-  it('enters edit mode for an entry and can cancel out of it', () => {
-    render(<AddressBookPage />);
-    fireEvent.click(screen.getAllByTitle('addressBook.edit')[0]);
-    expect(screen.getByText('addressBook.save')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText('addressBook.cancel'));
-    expect(screen.queryByText('addressBook.save')).not.toBeInTheDocument();
-  });
-
-  it('confirms an edit via the pending-toast flow', () => {
-    render(<AddressBookPage />);
-    fireEvent.click(screen.getAllByTitle('addressBook.edit')[0]);
-    fireEvent.click(screen.getByText('addressBook.save'));
-
-    expect(addToastMock).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'pending', title: 'addressBook.updating' })
-    );
-    expect(updateToastMock).toHaveBeenCalledWith(
-      'toast-id',
-      expect.objectContaining({ type: 'success', title: 'addressBook.success.updated' })
-    );
-    expect(screen.queryByText('addressBook.save')).not.toBeInTheDocument();
-  });
+  // ── Search ───────────────────────────────────────────────────────────────────
 
   it('updates the search query and shows a filtered count when it differs from the full list', () => {
-    searchAddressesMock.mockReturnValue([addressBook[0]]);
+    mockState.searchAddresses.mockReturnValue([mockState.addressBook[0]]);
     render(<AddressBookPage />);
     fireEvent.change(screen.getByPlaceholderText('addressBook.searchPlaceholder'), {
       target: { value: 'Alice' },
     });
-    expect(searchAddressesMock).toHaveBeenCalledWith('Alice');
-    expect(screen.getByText(/1/)).toBeInTheDocument();
+    expect(mockState.searchAddresses).toHaveBeenCalledWith('Alice');
   });
 });

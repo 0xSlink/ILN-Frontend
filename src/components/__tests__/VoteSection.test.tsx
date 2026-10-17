@@ -17,7 +17,6 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     votingEndsAt: 0,
     votesFor: 100,
     votesAgainst: 20,
-    votesAbstain: 5,
     quorumRequired: 1000,
     ...overrides,
   } as Proposal;
@@ -73,10 +72,7 @@ describe('VoteSection', () => {
 
   it('shows quorum reached when total votes meet the requirement', () => {
     render(
-      <VoteSection
-        {...baseProps}
-        proposal={proposal({ votesFor: 800, votesAgainst: 150, votesAbstain: 50 })}
-      />
+      <VoteSection {...baseProps} proposal={proposal({ votesFor: 800, votesAgainst: 250 })} />
     );
     expect(screen.getAllByText(/^Quorum reached/).length).toBeGreaterThan(0);
   });
@@ -109,14 +105,14 @@ describe('VoteSection', () => {
     const onVote = vi.fn();
     render(<VoteSection {...baseProps} onVote={onVote} />);
 
-    fireEvent.click(getVoteButton('Abstain'));
+    fireEvent.click(getVoteButton('Against'));
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('heading', { name: 'Confirm Vote' })).not.toBeInTheDocument();
     expect(onVote).not.toHaveBeenCalled();
 
-    fireEvent.click(getVoteButton('Abstain'));
+    fireEvent.click(getVoteButton('Against'));
     fireEvent.keyDown(window, { key: 'Enter' });
-    expect(onVote).toHaveBeenCalledWith('Abstain');
+    expect(onVote).toHaveBeenCalledWith('Against');
     expect(screen.queryByRole('heading', { name: 'Confirm Vote' })).not.toBeInTheDocument();
   });
 
@@ -126,7 +122,6 @@ describe('VoteSection', () => {
     expect(screen.getByText('Your vote has been recorded.')).toBeInTheDocument();
     expect(getVoteButton('For')).toBeDisabled();
     expect(getVoteButton('Against')).toBeDisabled();
-    expect(getVoteButton('Abstain')).toBeDisabled();
   });
 
   it('shows a loading label on unselected buttons while voting is in flight', () => {
@@ -135,7 +130,7 @@ describe('VoteSection', () => {
     const votingButtons = screen
       .getAllByRole('button')
       .filter((btn) => btn.className.includes('active:scale-95'));
-    expect(votingButtons.length).toBe(3);
+    expect(votingButtons.length).toBe(2);
     expect(votingButtons[0]).toBeDisabled();
   });
 });

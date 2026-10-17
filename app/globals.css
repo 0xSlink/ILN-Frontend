@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -59,9 +59,9 @@
   --radius-full: 9999px;
 
   /* Fonts */
-  --font-headline: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
-  --font-body: "Avenir Next", Manrope, "Segoe UI", sans-serif;
-  --font-label: "Avenir Next", Manrope, "Segoe UI", sans-serif;
+  --font-headline: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  --font-body: 'Avenir Next', Manrope, 'Segoe UI', sans-serif;
+  --font-label: 'Avenir Next', Manrope, 'Segoe UI', sans-serif;
 }
 
 /* z-index layers:
@@ -96,26 +96,33 @@ body {
 
 @media (max-width: 640px) {
   button,
-  input:not([type="hidden"]),
+  input:not([type='hidden']),
   select,
   textarea,
-  [role="button"] {
+  [role='button'] {
     min-height: 44px;
     min-width: 44px;
   }
 
   button,
-  [role="button"] {
+  [role='button'] {
     min-width: 44px;
   }
 }
 
-h1, h2, h3, .serif {
+h1,
+h2,
+h3,
+.serif {
   font-family: var(--font-headline);
 }
 
 .material-symbols-outlined {
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
 }
 
 :root.dark,
@@ -144,19 +151,23 @@ h1, h2, h3, .serif {
 
 /* ─── Skeleton shimmer ────────────────────────────────────────────────────── */
 @keyframes shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position:  400px 0; }
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
 }
 
 .skeleton-cell {
   border-radius: 6px;
   background: linear-gradient(
     90deg,
-    var(--color-surface-container-low)  20%,
-    var(--color-surface-container)      40%,
+    var(--color-surface-container-low) 20%,
+    var(--color-surface-container) 40%,
     var(--color-surface-container-high) 50%,
-    var(--color-surface-container)      60%,
-    var(--color-surface-container-low)  80%
+    var(--color-surface-container) 60%,
+    var(--color-surface-container-low) 80%
   );
   background-size: 800px 100%;
   animation: shimmer 1.5s ease-in-out infinite;
@@ -169,9 +180,29 @@ h1, h2, h3, .serif {
   }
 }
 
+/* ─── Global reduced-motion neutraliser ────────────────────────────────────
+ * Beyond the JS-driven animations handled by the useReducedMotion hook, the
+ * app uses many CSS transitions (Tailwind `transition-*`) and keyframe
+ * animations (e.g. pulse-fast, donut-grow, check-pop). Under the
+ * prefers-reduced-motion preference we collapse all animation/transition
+ * durations to (near) zero so motion-sensitive users get a static UI without
+ * having to opt each utility class out individually.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Pulse animation for urgent countdown timers */
 @keyframes pulse-fast {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -184,8 +215,14 @@ h1, h2, h3, .serif {
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* InvoiceStateDonut entrance animation (800ms, ease-out, respects prefers-reduced-motion via motion-safe: variant) */
@@ -206,9 +243,17 @@ h1, h2, h3, .serif {
 
 /* ─── Checkmark pop animation for copy buttons ───────────────────────────── */
 @keyframes check-pop {
-  0%   { transform: scale(0); opacity: 0; }
-  50%  { transform: scale(1.2); }
-  100% { transform: scale(1); opacity: 1; }
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .animate-check-pop {

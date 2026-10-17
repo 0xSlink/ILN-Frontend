@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useToast } from '@/context/ToastContext';
+import IndexerUnavailableNotice from '@/components/IndexerUnavailableNotice';
 
 type Funder = {
   address: string;
@@ -45,10 +46,14 @@ export default function TopFundersWidget() {
   const { addToast } = useToast();
   const [rows, setRows] = useState<Funder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
+  const [requestId, setRequestId] = useState(0);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
     const run = async () => {
       try {
+        setUnavailable(false);
         const cachedRaw = localStorage.getItem(CACHE_KEY);
         if (cachedRaw) {
           const cached = JSON.parse(cachedRaw) as { savedAt: number; rows: Funder[] };
@@ -59,9 +64,15 @@ export default function TopFundersWidget() {
           }
         }
 
+        // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
         const response = await fetch('/api/leaderboard?type=lp&period=30d&limit=10', {
           cache: 'no-store',
         });
+        if (response.status === 503) {
+          setRows([]);
+          setUnavailable(true);
+          return;
+        }
         const data = (await response.json()) as unknown;
         const normalized = normalizeFunders(data);
         setRows(normalized);
@@ -74,7 +85,14 @@ export default function TopFundersWidget() {
     };
 
     run();
-  }, []);
+  }, [requestId]);
+
+  const retry = () => {
+    setRetrying(true);
+    setUnavailable(false);
+    setRequestId((id) => id + 1);
+    window.setTimeout(() => setRetrying(false), 600);
+  };
 
   const copyAddress = async (address: string) => {
     try {
@@ -112,7 +130,17 @@ export default function TopFundersWidget() {
 
       {loading && <p className="mt-3 text-sm text-on-surface-variant">Loading active LPs...</p>}
 
-      {!loading && rows.length === 0 && (
+      {!loading && unavailable && (
+        <div className="mt-4">
+          <IndexerUnavailableNotice
+            dataSource="The LP leaderboard"
+            onRetry={retry}
+            retrying={retrying}
+          />
+        </div>
+      )}
+
+      {!loading && !unavailable && rows.length === 0 && (
         <p className="mt-3 text-sm text-on-surface-variant">
           No active LP leaderboard data is available right now.
         </p>

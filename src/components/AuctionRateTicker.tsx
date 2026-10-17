@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import useReducedMotion from '@/hooks/useReducedMotion';
 
 export interface AuctionRateProps {
   startRate: number;
@@ -38,6 +39,7 @@ export default function AuctionRateTicker({
   );
   const [secondsLeft, setSecondsLeft] = useState(0);
   const rafRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     function tick() {
@@ -49,12 +51,20 @@ export default function AuctionRateTicker({
       setSecondsLeft(Math.max(0, Math.round((endTime - now) / 1000)));
     }
 
+    // When reduced motion is preferred, render a single static snapshot
+    // instead of starting a live, ticking countdown. The CSS transition on
+    // the progress bar is neutralised globally under prefers-reduced-motion.
+    if (reducedMotion) {
+      tick();
+      return;
+    }
+
     tick();
     rafRef.current = setInterval(tick, 1000);
     return () => {
       if (rafRef.current) clearInterval(rafRef.current);
     };
-  }, [startRate, minRate, auctionStartTime, auctionDurationSeconds]);
+  }, [startRate, minRate, auctionStartTime, auctionDurationSeconds, reducedMotion]);
 
   const progress = startRate === minRate ? 1 : (startRate - currentRate) / (startRate - minRate);
 

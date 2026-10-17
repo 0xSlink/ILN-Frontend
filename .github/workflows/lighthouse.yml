@@ -2,9 +2,9 @@ name: Lighthouse Performance Budget
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, dev, develop]
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev, develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

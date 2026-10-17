@@ -1,0 +1,76 @@
+name: Incident Contact Matrix Freshness
+
+on:
+  schedule:
+    # First day of each calendar quarter at 09:00 UTC.
+    - cron: '0 9 1 1,4,7,10 *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  create-review-reminder:
+    name: Create quarterly contact-matrix review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create review issue with CODEOWNERS cross-reference
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const incidentResponse = fs.readFileSync('docs/incident-response.md', 'utf8');
+            const codeowners = fs.readFileSync('.github/CODEOWNERS', 'utf8');
+            const now = new Date();
+            const quarter = Math.floor(now.getUTCMonth() / 3) + 1;
+            const marker = `incident-contact-matrix-review-${now.getUTCFullYear()}-q${quarter}`;
+            const title = `chore: review incident-response contact matrix (${now.getUTCFullYear()} Q${quarter})`;
+
+            const { data: existingIssues } = await github.rest.issues.listForRepo({
+              ...context.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            if (existingIssues.some((issue) => issue.body?.includes(marker))) {
+              core.info(`A review issue for ${marker} already exists.`);
+              return;
+            }
+
+            const contactRows = [...incidentResponse.matchAll(/^\| \*\*(.+?)\*\*\s+\|\s+(.+?)\s+\|/gm)]
+              .map(([, role, contact]) => `- **${role.trim()}**: ${contact.trim()}`)
+              .join('\n');
+            const ownerRows = codeowners
+              .split('\n')
+              .map((line) => line.trim())
+              .filter((line) => line && !line.startsWith('#'))
+              .map((line) => `- \`${line}\``)
+              .join('\n');
+
+            const body = [
+              `<!-- ${marker} -->`,
+              '## Quarterly incident-response contact review',
+              '',
+              'Confirm that the escalation contacts in `docs/incident-response.md` still reach active responders and that the ownership rules in `.github/CODEOWNERS` still route changes to the appropriate maintainers.',
+              '',
+              '### Contact matrix',
+              contactRows || '_No contact rows found; investigate immediately._',
+              '',
+              '### CODEOWNERS cross-reference',
+              ownerRows || '_No CODEOWNERS entries found; investigate immediately._',
+              '',
+              '### Review checklist',
+              '- [ ] Each contact role reaches an active primary or on-call rotation.',
+              '- [ ] Each role has a documented backup or escalation path.',
+              '- [ ] The Smart Contract Lead and Indexer/Notifications on-call references are current.',
+              '- [ ] `.github/CODEOWNERS` still identifies owners for frontend, documentation, workflows, and contract-integration code.',
+              '- [ ] Any drift has been corrected in the runbook and/or CODEOWNERS, with the related repository notified when necessary.',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              ...context.repo,
+              title,
+              body,
+            });

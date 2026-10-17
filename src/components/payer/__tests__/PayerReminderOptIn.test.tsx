@@ -92,7 +92,10 @@ describe('PayerReminderOptIn', () => {
   });
 
   it('saves preferences and shows a success toast', async () => {
-    fetchMock.mockResolvedValue({ ok: true });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ success: true, saved: true, delivery: 'ok' }),
+    });
     render(<PayerReminderOptIn />);
     await screen.findByPlaceholderText('your@email.com');
 
@@ -115,8 +118,52 @@ describe('PayerReminderOptIn', () => {
     );
   });
 
+  it('shows a warning (saved but degraded) when delivery is degraded, not a failed-save error', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, saved: true, delivery: 'degraded' }),
+    });
+    render(<PayerReminderOptIn />);
+    await screen.findByPlaceholderText('your@email.com');
+
+    fireEvent.change(screen.getByPlaceholderText('your@email.com'), {
+      target: { value: 'me@example.com' },
+    });
+    fireEvent.click(screen.getByText('Save Preferences'));
+
+    await waitFor(() =>
+      expect(addToastMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'warning',
+          title: 'Preference saved, delivery temporarily degraded',
+        })
+      )
+    );
+    // Distinct from a failed save: no error toast is shown.
+    expect(addToastMock.mock.calls.some((call) => call[0]?.type === 'error')).toBe(false);
+  });
+
+  it('shows a warning (rate limited) on 429 instead of a failed-save error', async () => {
+    fetchMock.mockResolvedValue({ status: 429, ok: false });
+    render(<PayerReminderOptIn />);
+    await screen.findByPlaceholderText('your@email.com');
+
+    fireEvent.change(screen.getByPlaceholderText('your@email.com'), {
+      target: { value: 'me@example.com' },
+    });
+    fireEvent.click(screen.getByText('Save Preferences'));
+
+    await waitFor(() =>
+      expect(addToastMock).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'warning', title: 'Too many attempts' })
+      )
+    );
+    expect(addToastMock.mock.calls.some((call) => call[0]?.type === 'error')).toBe(false);
+  });
+
   it('shows an error toast when saving fails', async () => {
-    fetchMock.mockResolvedValue({ ok: false });
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
     render(<PayerReminderOptIn />);
     await screen.findByPlaceholderText('your@email.com');
 

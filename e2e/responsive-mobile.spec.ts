@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 
 async function waitForHydration(page: Page) {
   await page.waitForFunction(
@@ -89,11 +89,72 @@ async function expectTouchTargets(page: Page) {
   expect(tooSmall).toEqual([]);
 }
 
+/**
+ * Opens the mobile navigation and then the wallet-connection modal, returning
+ * a locator scoped to the modal dialog. The sticky "mainnet is live" banner is
+ * dismissed first (its real dismiss button), otherwise it intercepts pointer
+ * events over the nav toggle exactly like it would for a real user.
+ */
+async function dismissMainnetBanner(page: Page) {
+  const dismiss = page.getByLabel('Dismiss announcement');
+  if (await dismiss.isVisible()) {
+    await dismiss.click();
+    await expect(dismiss).toBeHidden({ timeout: 5000 });
+  }
+}
+
+async function openWalletModal(page: Page): Promise<Locator> {
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await waitForHydration(page);
+  await dismissMainnetBanner(page);
+  await page
+    .getByLabel(/navigation menu/i)
+    .first()
+    .click({ force: true });
+  await expect(page.locator('#mobile-navigation')).toBeVisible({ timeout: 15000 });
+  await page
+    .locator('#mobile-navigation')
+    .getByRole('button', { name: /connect wallet/i })
+    .first()
+    .click();
+  const dialog = page.getByRole('dialog', { name: /select a wallet/i });
+  await expect(dialog).toBeVisible({ timeout: 10000 });
+  return dialog;
+}
+
+/** Asserts every visible interactive element inside the wallet modal is ≥ 44×44 px (WCAG AA). */
+async function expectWalletModalTouchTargets(dialog: Locator) {
+  const violations = await dialog
+    .locator('button:visible, a:visible, input:visible, [role="button"]:visible')
+    .evaluateAll((elements) =>
+      elements
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            label:
+              element.getAttribute('aria-label') ||
+              element.textContent?.trim().substring(0, 30) ||
+              element.tagName,
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          };
+        })
+        .filter((target) => target.width < 44 || target.height < 44)
+    );
+
+  if (violations.length > 0) {
+    console.error('Wallet modal touch target violations:', JSON.stringify(violations, null, 2));
+  }
+
+  expect(violations).toEqual([]);
+}
+
 test.describe('mobile responsive layout', () => {
   test.slow(); // Increases timeout for all tests in this describe
   test('navigation menu collapses and expands', async ({ page }, testInfo) => {
     await page.goto('/', { waitUntil: 'networkidle' });
     await waitForHydration(page);
+    await dismissMainnetBanner(page);
     await page
       .getByLabel(/navigation menu/i)
       .first()
@@ -137,24 +198,70 @@ test.describe('mobile responsive layout', () => {
     await screenshotPage(page, testInfo, 'dashboard-table');
   });
 
-  test('wallet connection modal opens from mobile menu', async ({ page }, testInfo) => {
-    await page.goto('/', { waitUntil: 'networkidle' });
-    await waitForHydration(page);
-    await page
-      .getByLabel(/navigation menu/i)
-      .first()
-      .click();
-    await expect(page.locator('#mobile-navigation')).toBeVisible({ timeout: 15000 });
-    await page
-      .locator('#mobile-navigation')
-      .getByRole('button', { name: /connect wallet/i })
-      .first()
-      .click();
-    await expect(page.getByRole('button', { name: /freighter/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /walletconnect/i })).toBeVisible();
-    await expectNoHorizontalOverflow(page);
-    await expectTouchTargets(page);
-    await screenshotPage(page, testInfo, 'wallet-modal');
+  test.describe('wallet connection modal mobile interaction', () => {
+    test.slow();
+
+    test('wallet connection modal opens from mobile menu', async ({ page }, testInfo) => {
+      const dialog = await openWalletModal(page);
+      // Real touch targets (not just presence): Freighter + WalletConnect entry
+      // points, plus the close affordance.
+      await expect(dialog.getByRole('button', { name: /freighter/i })).toBeVisible();
+      await expect(dialog.getByRole('button', { name: /walletconnect/i })).toBeVisible();
+      await expectWalletModalTouchTargets(dialog);
+      await expectNoHorizontalOverflow(page);
+      await screenshotPage(page, testInfo, 'wallet-modal');
+      // The modal must be dismissible on touch.
+      await dialog.getByRole('button', { name: /close/i }).click();
+      await expect(dialog).toBeHidden({ timeout: 10000 });
+    });
+
+    test('wallet modal touch targets meet 44x44 WCAG AA minimum on both viewports', async ({
+      page,
+    }) => {
+      const dialog = await openWalletModal(page);
+      await expectWalletModalTouchTargets(dialog);
+      await expectNoHorizontalOverflow(page);
+    });
+
+    test('wallet connect shows QR pairing code when a persisted walletconnect choice awaits pairing', async ({
+      page,
+    }, testInfo) => {
+      // Simulate a user who previously chose WalletConnect but has no live
+      // session yet (storage key from src/utils/walletStorage.ts). The app's
+      // silent-reconnect logic leaves them unconnected with the provider
+      // recorded, so opening the modal lands directly on the QR-pairing view.
+      await page.addInitScript(() => {
+        localStorage.setItem('iln_wallet_provider', 'walletconnect');
+        localStorage.removeItem('iln_walletconnect_session');
+      });
+      await page.goto('/', { waitUntil: 'networkidle' });
+      await waitForHydration(page);
+      await dismissMainnetBanner(page);
+      await page
+        .getByLabel(/navigation menu/i)
+        .first()
+        .click({ force: true });
+      await expect(page.locator('#mobile-navigation')).toBeVisible({ timeout: 15000 });
+      await page
+        .locator('#mobile-navigation')
+        .getByRole('button', { name: /connect wallet/i })
+        .first()
+        .click();
+      const dialog = page.getByRole('dialog', { name: /select a wallet/i });
+      await expect(dialog).toBeVisible({ timeout: 10000 });
+      await expect(dialog.getByText(/scan with a walletconnect wallet/i)).toBeVisible();
+      // QRCodeSVG renders a real <svg>; verify it is actually laid out at a
+      // scannable size rather than an empty placeholder.
+      const qr = dialog.locator('svg');
+      await expect(qr).toBeVisible();
+      const qrBox = await qr.boundingBox();
+      expect(qrBox).not.toBeNull();
+      expect(qrBox!.width).toBeGreaterThanOrEqual(120);
+      expect(qrBox!.height).toBeGreaterThanOrEqual(120);
+      await expectWalletModalTouchTargets(dialog);
+      await expectNoHorizontalOverflow(page);
+      await screenshotPage(page, testInfo, 'wallet-modal-qr');
+    });
   });
 
   test('governance page layout remains responsive', async ({ page }, testInfo) => {
@@ -216,6 +323,7 @@ test.describe('mobile responsive layout', () => {
       await page.goto(target.path, { waitUntil: 'domcontentloaded' });
       if (target.name === 'wallet') {
         await waitForHydration(page);
+        await dismissMainnetBanner(page);
         await page
           .getByLabel(/navigation menu/i)
           .first()

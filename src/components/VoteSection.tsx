@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Proposal, VoteChoice } from '@/utils/governance';
+import { trackFunnelStep } from '@/lib/funnel-tracking';
 import QuorumProgressBar from './QuorumProgressBar';
 import VoteProgressBar from './VoteProgressBar';
 import GovernanceMockStatusBanner from './governance/GovernanceMockStatusBanner';
@@ -28,11 +29,6 @@ const VOTE_STYLES: Record<VoteChoice, { base: string; active: string; icon: stri
     base: 'border-red-500/40 text-red-500 hover:bg-red-500/10',
     active: 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-500/20',
     icon: 'thumb_down',
-  },
-  Abstain: {
-    base: 'border-outline text-on-surface-variant hover:bg-surface-container-high',
-    active: 'bg-outline text-white border-outline shadow-lg',
-    icon: 'do_not_disturb',
   },
 };
 
@@ -82,27 +78,72 @@ export default function VoteSection({
   connect,
   votingPower,
 }: VoteSectionProps) {
-  const total = proposal.votesFor + proposal.votesAgainst + proposal.votesAbstain;
+  const total = proposal.votesFor + proposal.votesAgainst;
   const quorumReached = total >= proposal.quorumRequired;
   const voteDisabled = !canVote || voteLoading;
 
   const [pendingVote, setPendingVote] = useState<VoteChoice | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const lastTriggerRef = useRef<HTMLElement | null>(null);
+
+  // Opening the confirm dialog: remember what had focus so it can be
+  // restored on close, and move focus into the dialog so a keyboard/screen
+  // reader user isn't left on a button that's now hidden behind the overlay.
+  useEffect(() => {
+    if (pendingVote) {
+      lastTriggerRef.current = document.activeElement as HTMLElement | null;
+      cancelButtonRef.current?.focus();
+    } else {
+      lastTriggerRef.current?.focus();
+      lastTriggerRef.current = null;
+    }
+  }, [pendingVote]);
 
   useEffect(() => {
     if (!pendingVote) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape always closes, regardless of focus -- that's the standard,
+      // low-risk modal convention. Enter is scoped to focus actually being
+      // inside the dialog: a `window`-level Enter handler previously fired
+      // from anywhere on the page (e.g. tabbing past the dialog onto an
+      // unrelated link and pressing Enter there), silently casting an
+      // irreversible vote.
       if (e.key === 'Escape') {
         setPendingVote(null);
-      } else if (e.key === 'Enter') {
-        onVote(pendingVote);
-        setPendingVote(null);
+        return;
       }
+      if (e.key !== 'Enter') return;
+      if (!dialogRef.current?.contains(document.activeElement)) return;
+
+      onVote(pendingVote);
+      setPendingVote(null);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [pendingVote, onVote]);
+
+  function trapTabWithinDialog(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'Tab' || !dialogRef.current) return;
+
+    const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   return (
     <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6 space-y-6">
@@ -117,7 +158,9 @@ export default function VoteSection({
             </p>
           </div>
           <span
-            className={`text-xs font-semibold uppercase tracking-[0.22em] ${proposal.status === 'Active' ? 'text-emerald-500' : 'text-on-surface-variant'}`}
+            className={`text-xs font-semibold uppercase tracking-[0.22em] ${
+              proposal.status === 'Active' ? 'text-emerald-500' : 'text-on-surface-variant'
+            }`}
           >
             {proposal.status}
           </span>
@@ -139,7 +182,6 @@ export default function VoteSection({
         <VoteProgressBar
           votesFor={proposal.votesFor}
           votesAgainst={proposal.votesAgainst}
-          votesAbstain={proposal.votesAbstain}
           quorumRequired={proposal.quorumRequired}
         />
       </div>
@@ -165,15 +207,25 @@ export default function VoteSection({
             <p className="text-sm text-on-surface-variant">
               {alreadyVoted ? 'Your vote has been recorded.' : 'Select a stance below to vote.'}
             </p>
-            <div className="grid grid-cols-3 gap-2">
-              {(['For', 'Against', 'Abstain'] as VoteChoice[]).map((choice) => (
+            <div className="grid grid-cols-2 gap-2">
+              {(['For', 'Against'] as VoteChoice[]).map((choice) => (
                 <VoteButton
                   key={choice}
                   choice={choice}
                   selected={alreadyVoted && userVote === choice}
                   disabled={alreadyVoted || voteDisabled}
                   loading={voteLoading}
-                  onClick={() => setPendingVote(choice)}
+                  onClick={() => {
+                    trackFunnelStep('governance_voting', 'started', {
+                      proposalId: proposal.id,
+                      choice,
+                    });
+                    trackFunnelStep('governance_voting', 'choice_selected', {
+                      proposalId: proposal.id,
+                      choice,
+                    });
+                    setPendingVote(choice);
+                  }}
                 />
               ))}
             </div>
@@ -183,8 +235,17 @@ export default function VoteSection({
 
       {pendingVote && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-surface-container-lowest p-6 shadow-2xl">
-            <h3 className="mb-4 text-xl font-bold">Confirm Vote</h3>
+          <div
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="vote-confirm-heading"
+            onKeyDown={trapTabWithinDialog}
+            className="w-full max-w-md rounded-2xl bg-surface-container-lowest p-6 shadow-2xl"
+          >
+            <h3 id="vote-confirm-heading" className="mb-4 text-xl font-bold">
+              Confirm Vote
+            </h3>
             <div className="mb-6 space-y-4">
               <p className="text-sm text-on-surface-variant">
                 You are about to cast your vote for proposal <strong>#{proposal.id}</strong>.
@@ -199,7 +260,13 @@ export default function VoteSection({
                     {VOTE_STYLES[pendingVote].icon}
                   </span>
                   <span
-                    className={`font-bold ${pendingVote === 'For' ? 'text-emerald-500' : pendingVote === 'Against' ? 'text-red-500' : 'text-on-surface-variant'}`}
+                    className={`font-bold ${
+                      pendingVote === 'For'
+                        ? 'text-emerald-500'
+                        : pendingVote === 'Against'
+                          ? 'text-red-500'
+                          : 'text-on-surface-variant'
+                    }`}
                   >
                     {pendingVote}
                   </span>
@@ -209,8 +276,15 @@ export default function VoteSection({
             </div>
             <div className="flex gap-3">
               <button
+                ref={cancelButtonRef}
                 type="button"
-                onClick={() => setPendingVote(null)}
+                onClick={() => {
+                  trackFunnelStep('governance_voting', 'abandoned', {
+                    proposalId: proposal.id,
+                    choice: pendingVote,
+                  });
+                  setPendingVote(null);
+                }}
                 className="flex-1 rounded-xl border border-outline-variant py-3 text-sm font-bold hover:bg-surface-variant/50"
               >
                 Cancel
@@ -218,7 +292,15 @@ export default function VoteSection({
               <button
                 type="button"
                 onClick={() => {
+                  trackFunnelStep('governance_voting', 'sign_requested', {
+                    proposalId: proposal.id,
+                    choice: pendingVote,
+                  });
                   onVote(pendingVote);
+                  trackFunnelStep('governance_voting', 'completed', {
+                    proposalId: proposal.id,
+                    choice: pendingVote,
+                  });
                   setPendingVote(null);
                 }}
                 className="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white hover:bg-primary/90"

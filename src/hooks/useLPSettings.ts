@@ -23,6 +23,7 @@ const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
     lp: true,
     governance: true,
     reputation: true,
+    admin: true,
   },
   inAppEnabled: true,
   emailEnabled: false,

@@ -1,0 +1,44 @@
+name: Scheduled Testnet Contract Integration
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-testnet-contract
+  cancel-in-progress: false
+
+jobs:
+  contract-read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Simulate read-only contract call against Stellar testnet
+        id: contract
+        continue-on-error: true
+        env:
+          TESTNET_RPC_URL: ${{ vars.TESTNET_RPC_URL }}
+          TESTNET_INVOICE_CONTRACT_ID: ${{ vars.TESTNET_INVOICE_CONTRACT_ID }}
+        run: node scripts/testnet-contract-smoke.mjs
+      - name: Route canary result to shared alerts
+        if: always()
+        env:
+          ALERT_ROUTING_WEBHOOK_URL: ${{ secrets.ALERT_ROUTING_WEBHOOK_URL }}
+          ALERT_ROUTING_SECRET: ${{ secrets.ALERT_ROUTING_SECRET }}
+        run: pnpm exec tsx scripts/report-contract-canary-result.ts ${{ steps.contract.outcome == 'success' && '0' || '1' }}
+      - name: Fail when the contract smoke test failed
+        if: steps.contract.outcome != 'success'
+        run: exit 1

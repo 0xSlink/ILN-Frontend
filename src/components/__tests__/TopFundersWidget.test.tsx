@@ -53,6 +53,14 @@ describe('TopFundersWidget', () => {
     await screen.findByText('No active LP leaderboard data is available right now.');
   });
 
+  it('shows an honest unavailable notice when the indexer returns 503 (down)', async () => {
+    fetchMock.mockResolvedValue({ status: 503, json: async () => ({ error: 'unavailable' }) });
+    render(<TopFundersWidget />);
+    await screen.findByText(/temporarily unavailable/i);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByText('No active LP leaderboard data is available right now.')).toBeNull();
+  });
+
   it('serves from a fresh localStorage cache without refetching', async () => {
     window.localStorage.setItem(
       'iln_top_funders_30d',

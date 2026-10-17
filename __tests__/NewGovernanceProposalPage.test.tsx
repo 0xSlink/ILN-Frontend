@@ -200,7 +200,7 @@ describe('NewGovernanceProposalPage', () => {
 
     // The sentence is split across <span>s, so assert on the preview block.
     await waitFor(() => {
-      expect(screen.getByText('Live Preview').parentElement).toHaveTextContent(
+      expect(screen.getByText(/This proposal will change/i)).toHaveTextContent(
         'This proposal will change [FeeRate] from 50 (0.5%) to 100 (1%).'
       );
     });

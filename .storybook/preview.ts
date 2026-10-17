@@ -32,6 +32,12 @@ const preview: Preview = {
     a11y: {
       test: 'todo',
     },
+    chromatic: {
+      modes: [
+        { name: 'light', background: '#fff8f3', theme: 'light' },
+        { name: 'dark', background: '#1a1a1a', theme: 'dark' },
+      ],
+    },
   },
   globalTypes: {
     theme: {

@@ -140,7 +140,7 @@ export const roadmapItems: RoadmapItem[] = [
   {
     id: 'postlaunch-5',
     title: 'API and Integration Hub',
-    description: 'REST and GraphQL APIs for third-party integrations',
+    description: 'REST APIs for third-party integrations; GraphQL deferred until after mainnet',
     phase: 'Post-Launch',
     status: 'Planned',
   },

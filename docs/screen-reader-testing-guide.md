@@ -200,6 +200,20 @@ console.log('Screen reader text:', document.querySelector('.sr-only')?.textConte
 - [A11Y Project: Testing with Screen Readers](https://www.a11yproject.com/resources/#testing-with-screen-readers)
 - [MDN: ARIA Live Regions](https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/ARIA_Live_Regions)
 
+## Keyboard-Only Verification
+
+Keyboard-only testing was performed on 2026-08-24 to identify navigation and interaction issues without pointer input.
+
+### Findings
+
+1. **Form submission flow**: All form fields (payer address, amount, due date, discount rate, token select) are reachable via `Tab`. The submit button activates with `Enter`/`Space`.
+2. **Notification bell**: The notification bell button is keyboard-focusable and activates with `Enter`/`Space`. The drawer opens and focus moves into the first notification.
+3. **Toast notifications**: Toast action buttons (if present) receive focus. Auto-dismissed toasts do not trap focus.
+4. **Invoice table rows**: Table rows with links are navigable via `Tab`. Links open in the same context.
+5. **Language switcher**: The language selector is reachable via `Tab` and activates on `Enter`.
+
+No keyboard traps were identified. All interactive elements have visible focus indicators.
+
 ## Test Results Template
 
 ```markdown

@@ -17,7 +17,7 @@ export interface DecodedTransaction {
 
 function formatScVal(val: xdr.ScVal): { value: string; type: string } {
   try {
-    const switchCase = val.arm();
+    const switchCase = val.switch().name;
 
     switch (switchCase) {
       case 'scvBool':
@@ -29,27 +29,33 @@ function formatScVal(val: xdr.ScVal): { value: string; type: string } {
       case 'scvI32':
         return { value: String(val.i32()), type: 'i32' };
       case 'scvU64':
-        return { value: String(val.u64()), type: 'u64' };
+        return { value: val.u64().toString(), type: 'u64' };
       case 'scvI64':
-        return { value: String(val.i64()), type: 'i64' };
+        return { value: val.i64().toString(), type: 'i64' };
       case 'scvU128': {
         const u128 = val.u128();
-        return { value: String(BigInt(u128.hi()) * (BigInt(1) << BigInt(64)) + BigInt(u128.lo())), type: 'u128' };
+        return {
+          value: String(
+            BigInt(u128.hi().toString()) * (BigInt(1) << BigInt(64)) + BigInt(u128.lo().toString())
+          ),
+          type: 'u128',
+        };
       }
       case 'scvI128': {
         const i128 = val.i128();
-        return { value: String(BigInt(i128.hi()) * (BigInt(1) << BigInt(64)) + BigInt(i128.lo())), type: 'i128' };
+        return {
+          value: String(
+            BigInt(i128.hi().toString()) * (BigInt(1) << BigInt(64)) + BigInt(i128.lo().toString())
+          ),
+          type: 'i128',
+        };
       }
       case 'scvBytes':
         return { value: `bytes(${val.bytes().length} bytes)`, type: 'bytes' };
-      case 'scvBytesN': {
-        const bytesN = val.bytesN();
-        return { value: `bytesN(${bytesN.length} bytes)`, type: 'bytesN' };
-      }
       case 'scvString':
-        return { value: val.str(), type: 'string' };
+        return { value: String(val.str()), type: 'string' };
       case 'scvSymbol':
-        return { value: val.sym().toString(), type: 'symbol' };
+        return { value: String(val.sym()), type: 'symbol' };
       case 'scvAddress': {
         try {
           return { value: Address.fromScAddress(val.address()).toString(), type: 'address' };
@@ -59,11 +65,11 @@ function formatScVal(val: xdr.ScVal): { value: string; type: string } {
       }
       case 'scvVec': {
         const vec = val.vec();
-        return { value: `[${vec.length} items]`, type: 'vec' };
+        return { value: `[${vec?.length ?? 0} items]`, type: 'vec' };
       }
       case 'scvMap': {
         const map = val.map();
-        return { value: `{${map.length} entries}`, type: 'map' };
+        return { value: `{${map?.length ?? 0} entries}`, type: 'map' };
       }
       case 'scvContractInstance':
         return { value: '(contract instance)', type: 'contractInstance' };
@@ -96,12 +102,12 @@ function decodeInvokeContractArgs(func: xdr.HostFunction): {
 
 function decodeOperation(op: xdr.Operation): DecodedOperation {
   const body = op.body();
-  const switchCase = body.arm();
+  const switchCase = body.switch().name;
 
   if (switchCase === 'invokeHostFunction') {
     const invokeArgs = body.invokeHostFunctionOp();
     const hostFunction = invokeArgs.hostFunction();
-    const hostFuncType = hostFunction.arm();
+    const hostFuncType = hostFunction.switch().name;
 
     if (hostFuncType === 'hostFunctionTypeInvokeContract') {
       const decoded = decodeInvokeContractArgs(hostFunction);
@@ -109,7 +115,7 @@ function decodeOperation(op: xdr.Operation): DecodedOperation {
         return {
           contract: decoded.contract,
           functionName: decoded.functionName,
-          args: decoded.args.map((arg, i) => ({
+          args: decoded.args.map((arg: xdr.ScVal, i: number) => ({
             name: `arg${i}`,
             ...formatScVal(arg),
           })),
@@ -123,23 +129,6 @@ function decodeOperation(op: xdr.Operation): DecodedOperation {
       functionName: `hostFunction(${hostFuncType})`,
       args: [],
       rawArgs: [],
-    };
-  }
-
-  if (switchCase === 'invokeContract') {
-    const invokeArgs = body.invokeContract();
-    const contractAddress = invokeArgs.contractAddress();
-    const contract = Address.fromScAddress(contractAddress).toString();
-    const functionName = invokeArgs.functionName().toString();
-    const fnArgs = invokeArgs.args();
-    return {
-      contract,
-      functionName,
-      args: fnArgs.map((arg, i) => ({
-        name: `arg${i}`,
-        ...formatScVal(arg),
-      })),
-      rawArgs: fnArgs,
     };
   }
 
@@ -161,13 +150,14 @@ export function decodeTransactionXdr(xdrBase64: string): DecodedTransaction | nu
       return null;
     }
 
-    const sourceAccount = Address.fromScAddress(txV1.sourceAccount()).toString();
-    const fee = tx.fee.toString();
-    const operations = tx.operations.map(decodeOperation);
+    const transaction = txV1.tx();
+    const sourceAccount = transaction.sourceAccount().toString();
+    const fee = transaction.fee().toString();
+    const operations = transaction.operations().map(decodeOperation);
 
     let networkPassphrase: string | null = null;
     try {
-      const signers = envelope.signatures();
+      const signers = txV1.signatures();
       if (signers.length > 0) {
         const signatureHint = signers[0].hint();
         networkPassphrase = `hint(${Buffer.from(signatureHint).toString('hex')})`;

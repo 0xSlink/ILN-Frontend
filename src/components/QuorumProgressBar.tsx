@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import useReducedMotion from '@/hooks/useReducedMotion';
 
 interface QuorumProgressBarProps {
   votesCast: number;
@@ -20,12 +21,20 @@ export default function QuorumProgressBar({
   className = '',
 }: QuorumProgressBarProps) {
   const [mounted, setMounted] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
+    // Skip the mount animation when reduced motion is preferred and reveal
+    // the bar in its final state immediately.
+    if (reducedMotion) {
+      setMounted(true);
+      return;
+    }
+
     setMounted(false);
     const frame = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(frame);
-  }, [votesCast, quorumRequired]);
+  }, [votesCast, quorumRequired, reducedMotion]);
 
   const quorumMet = votesCast >= quorumRequired;
   const clampedVotes = Math.max(0, Math.min(votesCast, quorumRequired));
@@ -33,7 +42,11 @@ export default function QuorumProgressBar({
   const fillWidth = mounted ? pct : 0;
   const remainingVotes = Math.max(quorumRequired - votesCast, 0);
   const statusLabel = quorumMet ? 'Quorum met' : 'Quorum pending';
-  const screenReaderText = `${pct.toFixed(0)}% complete. ${statusLabel}. ${quorumMet ? 'Required quorum reached.' : `${formatVotes(remainingVotes)} remaining to reach quorum.`}`;
+  const screenReaderText = `${pct.toFixed(0)}% complete. ${statusLabel}. ${
+    quorumMet
+      ? 'Required quorum reached.'
+      : `${formatVotes(remainingVotes)} remaining to reach quorum.`
+  }`;
 
   return (
     <div className={`space-y-2 ${className}`} data-testid="quorum-progress-bar">

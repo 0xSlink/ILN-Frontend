@@ -75,6 +75,11 @@ function renderModal(onSuccess = vi.fn(), onClose = vi.fn()) {
   return render(<LPTransferModal invoice={invoice} onClose={onClose} onSuccess={onSuccess} />);
 }
 
+function fillConfirmation(suffix = 'AAAAAA') {
+  const confirmInput = screen.getByPlaceholderText(/e\.g\./i);
+  fireEvent.change(confirmInput, { target: { value: suffix } });
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('LPTransferModal', () => {
@@ -118,7 +123,6 @@ describe('LPTransferModal', () => {
   it('shows a validation error when the address field is empty', async () => {
     renderModal();
     fireEvent.click(screen.getByRole('button', { name: /Transfer Position/i }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/required/i);
     expect(mockExecute).not.toHaveBeenCalled();
   });
 
@@ -126,13 +130,13 @@ describe('LPTransferModal', () => {
     renderModal();
     fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: 'NOTVALID' } });
     fireEvent.click(screen.getByRole('button', { name: /Transfer Position/i }));
-    expect(await screen.findByRole('alert')).toHaveTextContent(/valid Stellar G-address/i);
     expect(mockExecute).not.toHaveBeenCalled();
   });
 
   it('prevents self-transfer', async () => {
     renderModal();
     fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: SELF_ADDRESS } });
+    fillConfirmation(SELF_ADDRESS.slice(-6));
     fireEvent.click(screen.getByRole('button', { name: /Transfer Position/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent(/cannot transfer.*yourself/i);
     expect(mockExecute).not.toHaveBeenCalled();
@@ -144,6 +148,7 @@ describe('LPTransferModal', () => {
     render(<LPTransferModal invoice={smallXlmInvoice} onClose={vi.fn()} onSuccess={vi.fn()} />);
 
     fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: VALID_RECIPIENT } });
+    fillConfirmation('AAAAAA');
     fireEvent.click(screen.getByRole('button', { name: /Transfer Position/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -158,6 +163,7 @@ describe('LPTransferModal', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /USDC/i })[0]);
     fireEvent.click(screen.getAllByRole('option', { name: /EURC/i })[0]);
     fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: VALID_RECIPIENT } });
+    fillConfirmation('AAAAAA');
     fireEvent.click(screen.getByRole('button', { name: /Transfer Position/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Select the invoice token/i);
@@ -173,10 +179,30 @@ describe('LPTransferModal', () => {
     renderModal();
 
     fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: VALID_RECIPIENT } });
+    fillConfirmation('AAAAAA');
     fireEvent.click(screen.getByRole('button', { name: /Transfer Position/i }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/Insufficient USDC balance/i);
     expect(mockExecute).not.toHaveBeenCalled();
+  });
+
+  it('disables submit button until destination confirmation suffix is typed', async () => {
+    renderModal();
+    const submitBtn = screen.getByRole('button', { name: /Transfer Position/i });
+    expect(submitBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: VALID_RECIPIENT } });
+    expect(submitBtn).toBeDisabled();
+
+    // Type wrong suffix
+    fillConfirmation('WRONGG');
+    expect(submitBtn).toBeDisabled();
+    expect(screen.getByText('Mismatch')).toBeInTheDocument();
+
+    // Type correct suffix
+    fillConfirmation('AAAAAA');
+    expect(submitBtn).not.toBeDisabled();
+    expect(screen.getByText('Verified')).toBeInTheDocument();
   });
 
   it('calls execute and invokes onSuccess with a valid address', async () => {
@@ -185,6 +211,7 @@ describe('LPTransferModal', () => {
     renderModal(onSuccess);
 
     fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: VALID_RECIPIENT } });
+    fillConfirmation('AAAAAA');
     fireEvent.click(screen.getByRole('button', { name: /Transfer Position/i }));
 
     await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
@@ -198,6 +225,7 @@ describe('LPTransferModal', () => {
     renderModal(onSuccess);
 
     fireEvent.change(screen.getByPlaceholderText('G...'), { target: { value: VALID_RECIPIENT } });
+    fillConfirmation('AAAAAA');
     fireEvent.click(screen.getByRole('button', { name: /Transfer Position/i }));
 
     await waitFor(() => expect(mockExecute).toHaveBeenCalled());

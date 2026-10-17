@@ -350,7 +350,9 @@ export default function DataTable<T>({
             </tr>
           </thead>
           <tbody
-            className={`divide-y divide-surface-dim bg-surface-container-lowest/50 ${bodyClassName || ''}`}
+            className={`divide-y divide-surface-dim bg-surface-container-lowest/50 ${
+              bodyClassName || ''
+            }`}
           >
             {isLoading ? (
               Array.from({ length: loadingRows }).map((_, i) => (

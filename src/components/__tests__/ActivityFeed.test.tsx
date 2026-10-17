@@ -90,14 +90,27 @@ describe('ActivityFeed', () => {
     expect(screen.getByRole('button', { name: 'Hide raw event data' })).toBeInTheDocument();
   });
 
-  it('should handle fetch error by showing mock data (in dev/demo mode)', async () => {
+  it('shows an honest unavailable notice when the indexer cannot be reached', async () => {
     (global.fetch as any).mockRejectedValue(new Error('Network error'));
 
     render(<ActivityFeed invoiceId={1n} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Invoice submitted by/)).toBeInTheDocument();
-      expect(screen.getByText(/Invoice funded by/)).toBeInTheDocument();
+      expect(screen.getByText(/temporarily unavailable/i)).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      // No fabricated audit-trail events should be shown when the indexer is down.
+      expect(screen.queryByText(/Invoice submitted by/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('does not show mock events when the indexer returns a non-ok response', async () => {
+    (global.fetch as any).mockResolvedValue({ ok: false, json: async () => [] });
+
+    render(<ActivityFeed invoiceId={1n} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/temporarily unavailable/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Invoice funded by/)).not.toBeInTheDocument();
     });
   });
 });

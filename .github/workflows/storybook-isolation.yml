@@ -1,0 +1,111 @@
+name: Storybook Production-Build Isolation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'next.config.ts'
+      - '.gitignore'
+      - '.storybook/**'
+      - 'src/**'
+      - 'app/**'
+      - '.github/workflows/storybook-isolation.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  storybook-isolation:
+    name: Verify Storybook is isolated from production build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ── Static checks (fast, no build required) ─────────────────────────────
+
+      - name: Check storybook-static is in .gitignore
+        run: |
+          if grep -qE "^/?storybook-static" .gitignore; then
+            echo "✅ storybook-static is excluded from git via .gitignore"
+          else
+            echo "❌ storybook-static is NOT in .gitignore — Storybook artifacts could be committed"
+            exit 1
+          fi
+
+      - name: Check next.config.ts has no storybook references
+        run: |
+          if grep -qiE "storybook" next.config.ts 2>/dev/null || grep -qiE "storybook" next.config.js 2>/dev/null; then
+            echo "❌ next.config references 'storybook' — verify Storybook build paths are not included in the production output"
+            exit 1
+          else
+            echo "✅ next.config does not reference Storybook"
+          fi
+
+      - name: Check package.json build script does not invoke storybook
+        run: |
+          BUILD_CMD=$(node -e "const p=require('./package.json'); console.log(p.scripts?.build || '')")
+          if echo "$BUILD_CMD" | grep -qi "storybook"; then
+            echo "❌ The 'build' npm script invokes storybook — this would bundle Storybook into the production artifact"
+            exit 1
+          else
+            echo "✅ Production 'build' script does not invoke Storybook: $BUILD_CMD"
+          fi
+
+      # ── Build-time check (confirms no storybook-static leaks into .next/) ───
+
+      - name: Build Next.js production app
+        run: pnpm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+
+      - name: Verify storybook-static is absent from .next/ output
+        run: |
+          echo "Scanning .next/ for any Storybook-related artifacts..."
+          MATCHES=$(find .next -type f \( \
+            -name "*.stories.js" \
+            -o -name "*.stories.jsx" \
+            -o -name "*.stories.ts" \
+            -o -name "*.stories.tsx" \
+            -o -path "*/storybook-static/*" \
+            -o -name "storybook*" \
+          \) 2>/dev/null || true)
+
+          if [ -n "$MATCHES" ]; then
+            echo "❌ Storybook artifacts found inside .next/:"
+            echo "$MATCHES"
+            echo ""
+            echo "This means Storybook output leaked into the production bundle."
+            echo "Check next.config.ts, outputFileTracingIncludes, and pnpm build scripts."
+            exit 1
+          else
+            echo "✅ No Storybook artifacts found in .next/ — production build is clean"
+          fi
+
+      - name: Verify storybook-static directory was not created by Next.js build
+        run: |
+          if [ -d "storybook-static" ]; then
+            echo "❌ storybook-static/ directory exists after running 'pnpm build'"
+            echo "The production build must never produce the Storybook static export."
+            echo "Ensure 'build-storybook' is not called as part of the main build pipeline."
+            exit 1
+          else
+            echo "✅ storybook-static/ was not created by the production build"
+          fi

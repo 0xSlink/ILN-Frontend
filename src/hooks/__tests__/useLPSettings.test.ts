@@ -35,7 +35,7 @@ describe('useLPSettings', () => {
     expect(result.current.isLoaded).toBe(true);
     expect(result.current.settings.minReputation).toBe(0);
     expect(result.current.settings.notificationPreferences).toEqual({
-      categories: { invoice: true, lp: true, governance: true, reputation: true },
+      categories: { invoice: true, lp: true, governance: true, reputation: true, admin: true },
       inAppEnabled: true,
       emailEnabled: false,
       email: '',

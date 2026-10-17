@@ -128,7 +128,9 @@ export default function LPRiskSummaryPanel({ invoices, onFilterByRisk }: LPRiskS
         {/* Positions at Risk */}
         <button
           onClick={() => onFilterByRisk('at-risk')}
-          className={`p-4 rounded-xl border-2 transition-all hover:shadow-md text-left ${getRiskColor(positionRiskLevel)}`}
+          className={`p-4 rounded-xl border-2 transition-all hover:shadow-md text-left ${getRiskColor(
+            positionRiskLevel
+          )}`}
         >
           <div className="flex items-center justify-between mb-2">
             <span className="material-symbols-outlined text-2xl">
@@ -149,7 +151,9 @@ export default function LPRiskSummaryPanel({ invoices, onFilterByRisk }: LPRiskS
         {/* Capital at Risk */}
         <button
           onClick={() => onFilterByRisk('at-risk')}
-          className={`p-4 rounded-xl border-2 transition-all hover:shadow-md text-left ${getRiskColor(capitalRiskLevel)}`}
+          className={`p-4 rounded-xl border-2 transition-all hover:shadow-md text-left ${getRiskColor(
+            capitalRiskLevel
+          )}`}
         >
           <div className="flex items-center justify-between mb-2">
             <span className="material-symbols-outlined text-2xl">
@@ -165,7 +169,9 @@ export default function LPRiskSummaryPanel({ invoices, onFilterByRisk }: LPRiskS
           <div className="text-sm font-medium mb-1">Capital at Risk</div>
           <div className="text-xs opacity-80">
             {riskMetrics.totalCapital > 0n
-              ? `${Number((riskMetrics.capitalAtRisk * 100n) / riskMetrics.totalCapital)}% of portfolio`
+              ? `${Number(
+                  (riskMetrics.capitalAtRisk * 100n) / riskMetrics.totalCapital
+                )}% of portfolio`
               : '0% of portfolio'}
           </div>
           {riskMetrics.capitalAtRisk > 0n && (
@@ -176,7 +182,9 @@ export default function LPRiskSummaryPanel({ invoices, onFilterByRisk }: LPRiskS
         {/* Disputed Positions */}
         <button
           onClick={() => onFilterByRisk('disputed')}
-          className={`p-4 rounded-xl border-2 transition-all hover:shadow-md text-left ${getRiskColor(disputeRiskLevel)}`}
+          className={`p-4 rounded-xl border-2 transition-all hover:shadow-md text-left ${getRiskColor(
+            disputeRiskLevel
+          )}`}
         >
           <div className="flex items-center justify-between mb-2">
             <span className="material-symbols-outlined text-2xl">
