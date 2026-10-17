@@ -1,5 +1,11 @@
 /**
- * Authoritative client boundary for indexer REST interactions (#1106, #1107, #1108, #1109).
+ * Browser transport for indexer REST data (#1106, #1107, #1108, #1109).
+ *
+ * Every request goes to the same-origin proxy at `/api/indexer/*`
+ * (`app/api/indexer/[...path]/route.ts`), which holds the upstream URL and
+ * credentials server-side, negotiates the API version, validates payloads and
+ * attaches freshness metadata (#1110–#1112). This module never sees the
+ * upstream URL or API key; server code uses `src/lib/indexer/server.ts`.
  *
  * Provides:
  * 1. Runtime schema validation rejecting malformed records (#1106).
@@ -9,15 +15,15 @@
  */
 
 import {
-  INDEXER_API_URL,
-  INDEXER_SERVER_URL,
-  INDEXER_API_KEY,
   INDEXER_DEFAULT_TIMEOUT_MS,
   INDEXER_DEFAULT_RETRIES,
   INDEXER_DEFAULT_BACKOFF_MS,
   INDEXER_MAX_BACKOFF_MS,
 } from '@/constants';
 import type { IndexerBoundaryStatus } from '@/lib/indexer-boundary';
+import { isIndexerErrorCode, type IndexerErrorCode } from '@/lib/indexer/errors';
+import { isIndexerFreshness } from '@/lib/indexer/freshness';
+import type { IndexerResourceName, IndexerResponseMeta } from '@/lib/indexer/types';
 import type { MonthlyDefaultBucket, MonthlyDefaultWithMA } from '@/utils/defaultRate';
 import { calculateMovingAverage } from '@/utils/defaultRate';
 import type { DailyFundingBucket } from '@/components/charts/FundingChart';
@@ -42,6 +48,8 @@ export interface IndexerClientErrorOptions {
   retryAfterSeconds?: number;
   isRetryable?: boolean;
   cause?: unknown;
+  /** Typed code from the `/api/indexer` proxy error envelope, when available. */
+  code?: IndexerErrorCode;
 }
 
 export class IndexerClientError extends Error {
@@ -50,6 +58,7 @@ export class IndexerClientError extends Error {
   readonly boundaryStatus: IndexerBoundaryStatus;
   readonly retryAfterSeconds?: number;
   readonly isRetryable: boolean;
+  readonly code?: IndexerErrorCode;
 
   constructor(options: IndexerClientErrorOptions) {
     super(options.message);
@@ -59,16 +68,28 @@ export class IndexerClientError extends Error {
     this.boundaryStatus = options.boundaryStatus;
     this.retryAfterSeconds = options.retryAfterSeconds;
     this.isRetryable = options.isRetryable ?? false;
+    this.code = options.code;
     if (options.cause) {
       this.cause = options.cause;
     }
   }
 }
 
+/**
+ * User-safe detail for an indexer failure. Proxy messages never contain upstream
+ * URLs, headers or credentials, so they can be shown (e.g. a version mismatch).
+ */
+export function indexerErrorDetail(err: unknown): string | undefined {
+  return err instanceof IndexerClientError && err.code ? err.message : undefined;
+}
+
 export function isAbortError(err: unknown): boolean {
   if (!err) return false;
   if (err instanceof IndexerClientError && err.type === 'aborted') return true;
-  if (err instanceof Error && (err.name === 'AbortError' || err.message.toLowerCase().includes('aborted'))) {
+  if (
+    err instanceof Error &&
+    (err.name === 'AbortError' || err.message.toLowerCase().includes('aborted'))
+  ) {
     return true;
   }
   return false;
@@ -79,7 +100,10 @@ export function classifyIndexerClientError(err: unknown): IndexerBoundaryStatus 
     return err.boundaryStatus;
   }
   if (err && typeof err === 'object') {
-    if ('boundaryStatus' in err && typeof (err as { boundaryStatus: unknown }).boundaryStatus === 'string') {
+    if (
+      'boundaryStatus' in err &&
+      typeof (err as { boundaryStatus: unknown }).boundaryStatus === 'string'
+    ) {
       return (err as { boundaryStatus: IndexerBoundaryStatus }).boundaryStatus;
     }
     if ('status' in err && typeof (err as { status: unknown }).status === 'number') {
@@ -108,25 +132,103 @@ export interface IndexerFetchOptions<T = unknown> {
   retries?: number;
   baseBackoffMs?: number;
   maxBackoffMs?: number;
-  apiKey?: string;
   validate?: (data: unknown) => T;
+  /** Receives the proxy envelope's metadata (API version, dropped records, freshness). */
+  onMeta?: (meta: IndexerResponseMeta) => void;
+  /** Rejects envelopes for any other resource (e.g. a mis-cached response). */
+  expectedResource?: IndexerResourceName;
 }
 
 export interface IndexerRequestOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
   retries?: number;
+  onMeta?: (meta: IndexerResponseMeta) => void;
+}
+
+// ─── Proxy envelope handling (#1110–#1112) ──────────────────────────────────
+
+/** Same-origin proxy that holds the indexer URL and credentials server-side. */
+export const INDEXER_PROXY_BASE = '/api/indexer';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** How each proxy error code maps onto this client's normalized error states. */
+const PROXY_CODE_STATES: Record<
+  IndexerErrorCode,
+  { type: IndexerErrorType; boundaryStatus: IndexerBoundaryStatus; transient: boolean }
+> = {
+  unauthorized: { type: 'unauthorized', boundaryStatus: 'unauthorized', transient: false },
+  forbidden: { type: 'unauthorized', boundaryStatus: 'unauthorized', transient: false },
+  rate_limited: { type: 'rate-limited', boundaryStatus: 'rate-limited', transient: false },
+  timeout: { type: 'timeout', boundaryStatus: 'unavailable', transient: true },
+  network: { type: 'unavailable', boundaryStatus: 'unavailable', transient: true },
+  upstream: { type: 'unavailable', boundaryStatus: 'unavailable', transient: true },
+  not_configured: { type: 'unavailable', boundaryStatus: 'unavailable', transient: false },
+  not_found: { type: 'unavailable', boundaryStatus: 'unavailable', transient: false },
+  schema: { type: 'malformed', boundaryStatus: 'malformed', transient: false },
+  version_mismatch: { type: 'malformed', boundaryStatus: 'malformed', transient: false },
+  bad_request: { type: 'malformed', boundaryStatus: 'malformed', transient: false },
+  unknown_resource: { type: 'malformed', boundaryStatus: 'malformed', transient: false },
+};
+
+async function readProxyErrorCode(
+  response: Response
+): Promise<{ code: IndexerErrorCode; message: string } | null> {
+  if (typeof response.json !== 'function') return null;
+  try {
+    const body: unknown = await response.json();
+    if (isRecord(body) && body.ok === false && isRecord(body.error)) {
+      const { code, message } = body.error;
+      if (isIndexerErrorCode(code)) {
+        return { code, message: typeof message === 'string' ? message : code };
+      }
+    }
+  } catch {
+    // Not a proxy envelope; fall back to status-based classification.
+  }
+  return null;
+}
+
+function unwrapProxyEnvelope(
+  json: unknown,
+  expectedResource?: IndexerResourceName
+): { data: unknown; meta: IndexerResponseMeta } {
+  if (
+    !isRecord(json) ||
+    json.ok !== true ||
+    (expectedResource !== undefined && json.resource !== expectedResource) ||
+    !Array.isArray(json.data) ||
+    !isRecord(json.meta) ||
+    typeof json.meta.apiVersion !== 'string' ||
+    typeof json.meta.droppedRecords !== 'number' ||
+    !isIndexerFreshness(json.meta.freshness)
+  ) {
+    throw new IndexerClientError({
+      type: 'malformed',
+      message: 'Indexer proxy response did not match the expected envelope',
+      status: 502,
+      boundaryStatus: 'malformed',
+      code: 'schema',
+      isRetryable: false,
+    });
+  }
+  return { data: json.data, meta: json.meta as unknown as IndexerResponseMeta };
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
-      reject(new IndexerClientError({
-        type: 'aborted',
-        message: 'Request was cancelled by user',
-        boundaryStatus: 'unavailable',
-        isRetryable: false,
-      }));
+      reject(
+        new IndexerClientError({
+          type: 'aborted',
+          message: 'Request was cancelled by user',
+          boundaryStatus: 'unavailable',
+          isRetryable: false,
+        })
+      );
       return;
     }
 
@@ -138,12 +240,14 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     const onAbort = () => {
       clearTimeout(timer);
       signal?.removeEventListener('abort', onAbort);
-      reject(new IndexerClientError({
-        type: 'aborted',
-        message: 'Request was cancelled during backoff',
-        boundaryStatus: 'unavailable',
-        isRetryable: false,
-      }));
+      reject(
+        new IndexerClientError({
+          type: 'aborted',
+          message: 'Request was cancelled during backoff',
+          boundaryStatus: 'unavailable',
+          isRetryable: false,
+        })
+      );
     };
 
     signal?.addEventListener('abort', onAbort, { once: true });
@@ -351,7 +455,7 @@ export async function fetchIndexer<T = unknown>(
   options: IndexerFetchOptions<T> = {}
 ): Promise<T> {
   const {
-    baseUrl = INDEXER_API_URL,
+    baseUrl = INDEXER_PROXY_BASE,
     method = 'GET',
     headers: customHeaders = {},
     cache = 'no-store',
@@ -360,13 +464,15 @@ export async function fetchIndexer<T = unknown>(
     retries = INDEXER_DEFAULT_RETRIES,
     baseBackoffMs = process.env.NODE_ENV === 'test' ? 0 : INDEXER_DEFAULT_BACKOFF_MS,
     maxBackoffMs = process.env.NODE_ENV === 'test' ? 0 : INDEXER_MAX_BACKOFF_MS,
-    apiKey = INDEXER_API_KEY,
     validate,
+    onMeta,
+    expectedResource,
   } = options;
 
-  const url = path.startsWith('http://') || path.startsWith('https://')
-    ? path
-    : `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+  const url =
+    path.startsWith('http://') || path.startsWith('https://')
+      ? path
+      : `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
 
   const isIdempotent = method === 'GET' || method === 'HEAD';
   const effectiveMaxRetries = isIdempotent ? Math.max(0, retries) : 0;
@@ -400,9 +506,6 @@ export async function fetchIndexer<T = unknown>(
     }
 
     const requestHeaders: Record<string, string> = { ...customHeaders };
-    if (apiKey) {
-      requestHeaders['X-API-Key'] = apiKey;
-    }
 
     try {
       const response = await fetch(url, {
@@ -432,15 +535,42 @@ export async function fetchIndexer<T = unknown>(
           });
         }
 
+        const { data, meta } = unwrapProxyEnvelope(json, expectedResource);
+        onMeta?.(meta);
+
         if (validate) {
-          return validate(json);
+          return validate(data);
         }
 
-        return json as T;
+        return data as T;
       }
 
-      // Non-2xx responses
+      // Non-2xx responses: prefer the proxy's typed error code over the HTTP status,
+      // so e.g. a credential failure (502 unauthorized) is never retried as an outage.
       const status = response.status ?? 500;
+      const proxyError = await readProxyErrorCode(response);
+      if (proxyError && proxyError.code !== 'rate_limited') {
+        const state = PROXY_CODE_STATES[proxyError.code];
+        const typedError = new IndexerClientError({
+          type: state.type,
+          message: proxyError.message,
+          status,
+          boundaryStatus: state.boundaryStatus,
+          code: proxyError.code,
+          isRetryable: state.transient && attempt < effectiveMaxRetries,
+        });
+        if (typedError.isRetryable) {
+          attempt++;
+          const backoff = Math.min(
+            maxBackoffMs,
+            baseBackoffMs * 2 ** (attempt - 1) + Math.random() * 50
+          );
+          await sleep(backoff, userSignal);
+          continue;
+        }
+        throw typedError;
+      }
+
       const retryAfterSeconds = response.headers?.get
         ? parseRetryAfter(response.headers.get('Retry-After'))
         : undefined;
@@ -577,9 +707,10 @@ export async function fetchInvoiceEvents(
   invoiceId: bigint | string,
   options: IndexerRequestOptions = {}
 ): Promise<RawInvoiceEvent[]> {
-  return fetchIndexer<RawInvoiceEvent[]>(`/invoice/${invoiceId}/events`, {
+  return fetchIndexer<RawInvoiceEvent[]>(`/invoices/${invoiceId}/events`, {
     ...options,
     validate: validateInvoiceEvents,
+    expectedResource: 'invoice.events',
   });
 }
 
@@ -592,6 +723,7 @@ export async function fetchDefaultAnalytics(
     {
       ...options,
       validate: validateDefaultAnalytics,
+      expectedResource: 'analytics.defaults',
     }
   );
   return calculateMovingAverage(buckets, 1);
@@ -602,59 +734,27 @@ export async function fetchFundingAnalytics(
   options: IndexerRequestOptions = {}
 ): Promise<DailyFundingBucket[]> {
   return fetchIndexer<DailyFundingBucket[]>(
-    `/v1/analytics/funding?period=${encodeURIComponent(period)}`,
+    `/analytics/funding?period=${encodeURIComponent(period)}`,
     {
       ...options,
       validate: validateFundingAnalytics,
+      expectedResource: 'analytics.funding',
     }
   );
 }
 
-export interface LeaderboardResult<T = unknown[]> {
-  data: T;
-  unavailable: boolean;
-  status?: IndexerBoundaryStatus;
-  error?: string;
-}
-
-export async function fetchLeaderboard<T = unknown[]>(
+/** Browser read of the leaderboard through the proxy (server code uses `src/lib/leaderboard.ts`). */
+export async function fetchLeaderboardEntries<T = unknown[]>(
   type: string,
   period: string,
+  limit?: number,
   options: IndexerRequestOptions = {}
-): Promise<LeaderboardResult<T>> {
-  const indexerUrl = process.env.INDEXER_URL || INDEXER_SERVER_URL;
-  if (!process.env.INDEXER_URL && !process.env.NEXT_PUBLIC_INDEXER_API_URL) {
-    return { data: [] as unknown as T, unavailable: false, status: 'empty' };
-  }
-
-  try {
-    const data = await fetchIndexer<T>(
-      `/leaderboard?type=${encodeURIComponent(type)}&period=${encodeURIComponent(period)}`,
-      {
-        ...options,
-        baseUrl: indexerUrl,
-        apiKey: process.env.INDEXER_API_KEY || INDEXER_API_KEY,
-        validate: validateLeaderboardData,
-      }
-    );
-
-    const isArr = Array.isArray(data);
-    const boundaryStatus: IndexerBoundaryStatus =
-      isArr && data.length === 0 ? 'empty' : 'loading';
-
-    return {
-      data,
-      unavailable: false,
-      status: boundaryStatus === 'empty' ? 'empty' : undefined,
-    };
-  } catch (error) {
-    const boundaryStatus = classifyIndexerClientError(error);
-    const isUnavailable = boundaryStatus === 'unavailable' || boundaryStatus === 'malformed';
-    return {
-      data: [] as unknown as T,
-      unavailable: isUnavailable,
-      status: boundaryStatus,
-      error: error instanceof Error ? error.message : 'Failed to fetch leaderboard',
-    };
-  }
+): Promise<T> {
+  const query = new URLSearchParams({ type, period });
+  if (limit !== undefined) query.set('limit', String(limit));
+  return fetchIndexer<T>(`/leaderboard?${query.toString()}`, {
+    ...options,
+    validate: validateLeaderboardData,
+    expectedResource: 'leaderboard',
+  });
 }

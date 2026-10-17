@@ -19,7 +19,15 @@ import {
   IndexerClientError,
   classifyIndexerClientError,
   isAbortError,
+  fetchLeaderboardEntries,
+  indexerErrorDetail,
 } from '../indexer-client';
+import {
+  freshnessFixtures,
+  malformedProxyEnvelopes,
+  proxyErrorEnvelope,
+  proxySuccessEnvelope,
+} from '@/mocks/fixtures/indexer';
 
 describe('Indexer Schema Validation (#1106)', () => {
   describe('validateInvoiceEvents', () => {
@@ -46,9 +54,7 @@ describe('Indexer Schema Validation (#1106)', () => {
   describe('validateDefaultAnalytics', () => {
     it('accepts valid monthly default bucket records', () => {
       const valid = {
-        monthly: [
-          { date: '2026-01', label: 'Jan 2026', defaulted: 0, funded: 10, defaultRate: 0 },
-        ],
+        monthly: [{ date: '2026-01', label: 'Jan 2026', defaulted: 0, funded: 10, defaultRate: 0 }],
       };
       expect(validateDefaultAnalytics(valid)).toEqual(valid.monthly);
     });
@@ -122,9 +128,9 @@ describe('Indexer Timeout & Cancellation Policy (#1107)', () => {
       });
     });
 
-    await expect(
-      fetchIndexer('/test-timeout', { timeoutMs: 15, retries: 0 })
-    ).rejects.toThrow(/timed out/i);
+    await expect(fetchIndexer('/test-timeout', { timeoutMs: 15, retries: 0 })).rejects.toThrow(
+      /timed out/i
+    );
   });
 
   it('aborts immediately when caller signal is triggered', async () => {
@@ -141,7 +147,15 @@ describe('Indexer Timeout & Cancellation Policy (#1107)', () => {
     controller.abort();
 
     await expect(promise).rejects.toThrow(/aborted/i);
-    expect(isAbortError(new IndexerClientError({ type: 'aborted', message: 'aborted', boundaryStatus: 'unavailable' }))).toBe(true);
+    expect(
+      isAbortError(
+        new IndexerClientError({
+          type: 'aborted',
+          message: 'aborted',
+          boundaryStatus: 'unavailable',
+        })
+      )
+    ).toBe(true);
   });
 });
 
@@ -167,11 +181,11 @@ describe('Indexer Retry and Backoff Policy (#1108)', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ status: 'ok' }),
+        json: async () => proxySuccessEnvelope('leaderboard', [{ status: 'ok' }]),
       });
 
-    const result = await fetchIndexer<{ status: string }>('/test-retry', { retries: 1 });
-    expect(result).toEqual({ status: 'ok' });
+    const result = await fetchIndexer<Array<{ status: string }>>('/test-retry', { retries: 1 });
+    expect(result).toEqual([{ status: 'ok' }]);
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
@@ -262,4 +276,105 @@ describe('Indexer Normalized Error States (#1109)', () => {
       expect(classifyIndexerClientError(err)).toBe('malformed');
     }
   });
+});
+
+describe('Proxy transport (#1110–#1112)', () => {
+  const globalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = globalFetch;
+    vi.clearAllMocks();
+  });
+
+  function respond(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), { status });
+  }
+
+  it('calls only the same-origin proxy, with no credential headers', async () => {
+    (global.fetch as any).mockResolvedValue(respond(proxySuccessEnvelope('invoice.events', [])));
+    await fetchInvoiceEvents(7n);
+    const [url, init] = (global.fetch as any).mock.calls[0];
+    expect(url).toBe('/api/indexer/invoices/7/events');
+    expect(Object.keys(init.headers ?? {})).not.toContain('X-API-Key');
+    expect(Object.keys(init.headers ?? {})).not.toContain('Authorization');
+  });
+
+  it.each([
+    [
+      'analytics.funding',
+      () => fetchFundingAnalytics('7d'),
+      '/api/indexer/analytics/funding?period=7d',
+    ],
+    [
+      'analytics.defaults',
+      () => fetchDefaultAnalytics('12m'),
+      '/api/indexer/analytics/defaults?period=12m',
+    ],
+    [
+      'leaderboard',
+      () => fetchLeaderboardEntries('lp', '30d', 10),
+      '/api/indexer/leaderboard?type=lp&period=30d&limit=10',
+    ],
+  ] as const)('routes %s through the proxy', async (resource, call, url) => {
+    (global.fetch as any).mockResolvedValue(respond(proxySuccessEnvelope(resource, [])));
+    await call();
+    expect((global.fetch as any).mock.calls[0][0]).toBe(url);
+  });
+
+  it('rejects an envelope for a different resource', async () => {
+    (global.fetch as any).mockResolvedValue(respond(proxySuccessEnvelope('leaderboard', [])));
+    const err = await fetchFundingAnalytics('7d').catch((e) => e);
+    expect(classifyIndexerClientError(err)).toBe('malformed');
+  });
+
+  it('passes envelope metadata to onMeta', async () => {
+    const envelope = proxySuccessEnvelope('invoice.events', [], {
+      freshness: freshnessFixtures.stale,
+      droppedRecords: 2,
+    });
+    (global.fetch as any).mockResolvedValue(respond(envelope));
+    const onMeta = vi.fn();
+    await fetchInvoiceEvents(1n, { onMeta });
+    expect(onMeta).toHaveBeenCalledWith(envelope.meta);
+  });
+
+  it.each([
+    ['unauthorized', 'unauthorized'],
+    ['forbidden', 'unauthorized'],
+    ['schema', 'malformed'],
+    ['version_mismatch', 'malformed'],
+    ['not_configured', 'unavailable'],
+  ] as const)('does not retry the non-transient proxy code %s', async (code, boundary) => {
+    (global.fetch as any).mockResolvedValue(respond(proxyErrorEnvelope(code), 502));
+    const err = await fetchIndexer('/leaderboard', { retries: 2 }).catch((e) => e);
+    expect(err).toBeInstanceOf(IndexerClientError);
+    expect(err.code).toBe(code);
+    expect(classifyIndexerClientError(err)).toBe(boundary);
+    expect(indexerErrorDetail(err)).toBe(`fixture ${code}`);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['timeout', 'network', 'upstream'] as const)(
+    'retries the transient proxy code %s',
+    async (code) => {
+      (global.fetch as any)
+        .mockResolvedValueOnce(respond(proxyErrorEnvelope(code), 502))
+        .mockResolvedValueOnce(respond(proxySuccessEnvelope('leaderboard', [])));
+      await expect(fetchIndexer('/leaderboard', { retries: 1 })).resolves.toEqual([]);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+    }
+  );
+
+  it.each(malformedProxyEnvelopes.map((f) => [f.name, f.body] as const))(
+    'rejects the malformed envelope (%s)',
+    async (_name, body) => {
+      (global.fetch as any).mockResolvedValue(respond(body));
+      const err = await fetchIndexer('/leaderboard', { retries: 0 }).catch((e) => e);
+      expect(classifyIndexerClientError(err)).toBe('malformed');
+    }
+  );
 });

@@ -11,26 +11,38 @@ import {
   ResponsiveContainer,
   type TooltipProps,
 } from 'recharts';
-import {
-  fetchFundingData,
-  type DailyFundingBucket,
-  type TokenFunding,
-} from '@/lib/indexerClient';
 import { transformFundingData } from '@/utils/funding';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
   type IndexerNoticeStatus,
 } from '@/components/IndexerUnavailableNotice';
 import DataSourceCaption from '@/components/DataSourceCaption';
+import { IndexerFreshnessBadge, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
+import type { IndexerResponseMeta } from '@/lib/indexer/types';
 import {
   fetchFundingAnalytics,
   classifyIndexerClientError,
+  indexerErrorDetail,
   isAbortError,
 } from '@/lib/indexer-client';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type TimeRange = '7D' | '30D' | '90D' | 'All';
+
+export interface TokenFunding {
+  symbol: string;
+  amount: number; // Whole unit amount
+  color: string;
+}
+
+export interface DailyFundingBucket {
+  date: string;
+  label: string;
+  total_usdc_equiv: number;
+  invoices_funded: number;
+  tokens: TokenFunding[];
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -132,20 +144,19 @@ export default function FundingChart() {
   const [unavailable, setUnavailable] = useState(false);
   const [errorStatus, setErrorStatus] = useState<IndexerNoticeStatus>('unavailable');
   const [requestId, setRequestId] = useState(0);
+  const [meta, setMeta] = useState<IndexerResponseMeta | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | undefined>();
 
   const fetchData = useCallback(async (selectedRange: TimeRange, signal?: AbortSignal) => {
     setLoading(true);
     setUnavailable(false);
+    setMeta(null);
+    setErrorDetail(undefined);
     try {
-      // Use centralized indexer client - single authoritative boundary
-      // with explicit schema validation and typed response
-      const dailyData = await fetchFundingData({ 
-        period: selectedRange.toLowerCase() 
+      const dailyData = await fetchFundingAnalytics(selectedRange.toLowerCase(), {
+        signal,
+        onMeta: setMeta,
       });
-      setData(dailyData);
-    } catch (error) {
-      console.error('[FundingChart] Failed to fetch data:', error);
-      const dailyData = await fetchFundingAnalytics(selectedRange.toLowerCase(), { signal });
       setData(dailyData);
     } catch (err) {
       if (isAbortError(err)) {
@@ -156,6 +167,7 @@ export default function FundingChart() {
       if (shouldUseDevMockFallback()) {
         setData(generateMockFunding(selectedRange));
       } else {
+        setErrorDetail(indexerErrorDetail(err));
         const boundary = classifyIndexerClientError(err);
         setErrorStatus(
           boundary === 'rate-limited' || boundary === 'unauthorized' || boundary === 'malformed'
@@ -189,6 +201,12 @@ export default function FundingChart() {
           <h3 className="font-headline text-xl font-bold text-on-surface">LP Funding History</h3>
           <p className="text-sm text-on-surface-variant">Daily volume across supported tokens</p>
           <DataSourceCaption metric="funding-history" />
+          {meta && !unavailable ? (
+            <div className="mt-2 flex flex-col gap-1">
+              <IndexerFreshnessBadge freshness={meta.freshness} />
+              <IndexerPartialNotice dropped={meta.droppedRecords} />
+            </div>
+          ) : null}
         </div>
 
         {/* Time Range Selector */}
@@ -221,6 +239,7 @@ export default function FundingChart() {
             <IndexerUnavailableNotice
               dataSource="Funding history"
               status={errorStatus}
+              detail={errorDetail}
               onRetry={() => setRequestId((id) => id + 1)}
             />
           </div>

@@ -46,22 +46,9 @@ export const INDEXER_WS_URL = process.env.NEXT_PUBLIC_INDEXER_WS_URL || 'ws://lo
 
 // ─── Indexer API Configuration ──────────────────────────────────────────────
 
-/**
- * Public indexer API URL (exposed to browser, no auth required)
- */
-export const INDEXER_API_URL = process.env.NEXT_PUBLIC_INDEXER_API_URL || 'https://api.iln.example.com';
-
-/**
- * Server-side indexer URL with optional authentication.
- * Used for leaderboard, analytics, and higher-volume server calls.
- */
-export const INDEXER_SERVER_URL = process.env.INDEXER_URL || process.env.NEXT_PUBLIC_INDEXER_API_URL || 'https://api.iln.example.com';
-
-/**
- * Server-side API key for authenticated indexer calls (never expose to client).
- * When set, enables higher rate limits vs. anonymous requests.
- */
-export const INDEXER_API_KEY = process.env.INDEXER_API_KEY || '';
+// The indexer REST URL and credential are server-only (read by
+// src/lib/indexer/server.ts). Browser code reaches the indexer through the
+// /api/indexer proxy, so they are deliberately not exported from this module.
 
 /**
  * Default timeout for indexer requests in milliseconds (#1107).
@@ -82,4 +69,3 @@ export const INDEXER_DEFAULT_BACKOFF_MS = 300;
  * Maximum backoff cap in milliseconds for exponential retry (#1108).
  */
 export const INDEXER_MAX_BACKOFF_MS = 2_000;
-

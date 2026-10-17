@@ -13,11 +13,8 @@ import {
   type TooltipProps,
 } from 'recharts';
 import {
-  fetchDefaultRateData,
-  type MonthlyDefaultBucket,
-} from '@/lib/indexerClient';
-import {
   calculateMovingAverage,
+  MonthlyDefaultBucket,
   MonthlyDefaultWithMA,
 } from '@/utils/defaultRate';
 import IndexerUnavailableNotice, {
@@ -25,9 +22,12 @@ import IndexerUnavailableNotice, {
   type IndexerNoticeStatus,
 } from '@/components/IndexerUnavailableNotice';
 import DataSourceCaption from '@/components/DataSourceCaption';
+import { IndexerFreshnessBadge, IndexerPartialNotice } from '@/components/indexer/IndexerStatus';
+import type { IndexerResponseMeta } from '@/lib/indexer/types';
 import {
   fetchDefaultAnalytics,
   classifyIndexerClientError,
+  indexerErrorDetail,
   isAbortError,
 } from '@/lib/indexer-client';
 
@@ -110,19 +110,16 @@ export default function DefaultRateChart() {
   const [unavailable, setUnavailable] = useState(false);
   const [errorStatus, setErrorStatus] = useState<IndexerNoticeStatus>('unavailable');
   const [requestId, setRequestId] = useState(0);
+  const [meta, setMeta] = useState<IndexerResponseMeta | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | undefined>();
 
   const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setUnavailable(false);
+    setMeta(null);
+    setErrorDetail(undefined);
     try {
-      // Use centralized indexer client - single authoritative boundary
-      // with explicit schema validation and typed response
-      const monthlyData = await fetchDefaultRateData();
-      const withMA = calculateMovingAverage(monthlyData, 1);
-      setChartData(withMA);
-    } catch (error) {
-      console.error('[DefaultRateChart] Failed to fetch data:', error);
-      const withMA = await fetchDefaultAnalytics('12m', { signal });
+      const withMA = await fetchDefaultAnalytics('12m', { signal, onMeta: setMeta });
       setChartData(withMA);
     } catch (err) {
       if (isAbortError(err)) {
@@ -135,6 +132,7 @@ export default function DefaultRateChart() {
         const withMA = calculateMovingAverage(mockData, 1);
         setChartData(withMA);
       } else {
+        setErrorDetail(indexerErrorDetail(err));
         const boundary = classifyIndexerClientError(err);
         setErrorStatus(
           boundary === 'rate-limited' || boundary === 'unauthorized' || boundary === 'malformed'
@@ -157,6 +155,9 @@ export default function DefaultRateChart() {
       controller.abort();
     };
   }, [requestId, fetchData]);
+
+  // No data must render as a placeholder, never as a 0.00% default rate.
+  const hasData = chartData.length > 0;
 
   const currentRate = useMemo(() => {
     if (chartData.length === 0) return 0;
@@ -191,6 +192,12 @@ export default function DefaultRateChart() {
           <h3 className="font-headline text-xl font-bold text-on-surface">Default Rate Trend</h3>
           <p className="text-sm text-on-surface-variant">Protocol health indicator</p>
           <DataSourceCaption metric="default-rate" />
+          {meta && !unavailable ? (
+            <div className="mt-2 flex flex-col gap-1">
+              <IndexerFreshnessBadge freshness={meta.freshness} />
+              <IndexerPartialNotice dropped={meta.droppedRecords} />
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -200,7 +207,7 @@ export default function DefaultRateChart() {
             Current
           </span>
           <span className="font-headline text-2xl font-bold text-on-surface">
-            {currentRate.toFixed(2)}%
+            {hasData ? `${currentRate.toFixed(2)}%` : '—'}
           </span>
         </div>
         <div className="flex flex-col gap-1 rounded-xl bg-surface-container p-4">
@@ -208,14 +215,16 @@ export default function DefaultRateChart() {
             All-time
           </span>
           <span className="font-headline text-2xl font-bold text-on-surface">
-            {allTimeRate.toFixed(2)}%
+            {hasData ? `${allTimeRate.toFixed(2)}%` : '—'}
           </span>
         </div>
         <div className="flex flex-col gap-1 rounded-xl bg-surface-container p-4">
           <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
             Trend
           </span>
-          <span className={`font-headline text-2xl font-bold ${trendClass}`}>{trendArrow}</span>
+          <span className={`font-headline text-2xl font-bold ${trendClass}`}>
+            {trend ? trendArrow : '—'}
+          </span>
         </div>
       </div>
 
@@ -231,6 +240,7 @@ export default function DefaultRateChart() {
             <IndexerUnavailableNotice
               dataSource="Default-rate history"
               status={errorStatus}
+              detail={errorDetail}
               onRetry={() => setRequestId((id) => id + 1)}
             />
           </div>

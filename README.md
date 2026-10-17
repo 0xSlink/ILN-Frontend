@@ -173,18 +173,22 @@ See [docs/feature-flags.md](docs/feature-flags.md) for the full reference, inclu
 <details>
 <summary><b>Indexer, notifications & email (server / cron)</b></summary>
 
-| Variable                               | Description                                                                                |
-| -------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `NEXT_PUBLIC_INDEXER_API_URL`          | Indexer REST API base URL (activity feed, analytics charts).                               |
-| `NEXT_PUBLIC_INDEXER_WS_URL`           | Indexer WebSocket URL for real-time updates.                                               |
-| `INDEXER_URL`                          | Server-side indexer URL (leaderboard, server functions).                                   |
-| `NOTIFICATION_API`                     | External backend base URL for notifications.                                               |
-| `NEXT_PUBLIC_SUPABASE_URL`             | Supabase project URL.                                                                      |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`        | Supabase anonymous (browser-safe) key.                                                     |
-| `SUPABASE_SERVICE_ROLE_KEY`            | Server-only key used by the reminder cron to bypass RLS.                                   |
-| `RESEND_API_KEY`                       | Resend API key used to send payer reminder emails.                                         |
-| `CRON_SECRET`                          | Secret used to authorize `GET /api/reminders` (the cron trigger).                          |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | WalletConnect project ID, from [cloud.walletconnect.com](https://cloud.walletconnect.com). |
+| Variable                               | Description                                                                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_INDEXER_API_URL`          | Deprecated: read server-side only as a fallback for `INDEXER_URL`.                                |
+| `NEXT_PUBLIC_INDEXER_WS_URL`           | Indexer WebSocket URL for real-time updates.                                                      |
+| `INDEXER_URL`                          | Server-only indexer base URL. The browser reaches it only via `/api/indexer/*`.                   |
+| `INDEXER_API_KEY`                      | Server-only bearer credential for the indexer. Never use a `NEXT_PUBLIC_` name (the build fails). |
+| `INDEXER_TIMEOUT_MS`                   | Upstream indexer timeout in ms (default `8000`, clamped 1000–30000).                              |
+| `INDEXER_API_VERSION_POLICY`           | `strict` (default) requires `X-Indexer-Api-Version: 1.x`; `allow-missing` only for rollout.       |
+| `INDEXER_STALE_AFTER_SECONDS`          | Age after which indexer data is shown as stale (default `300`).                                   |
+| `NOTIFICATION_API`                     | External backend base URL for notifications.                                                      |
+| `NEXT_PUBLIC_SUPABASE_URL`             | Supabase project URL.                                                                             |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`        | Supabase anonymous (browser-safe) key.                                                            |
+| `SUPABASE_SERVICE_ROLE_KEY`            | Server-only key used by the reminder cron to bypass RLS.                                          |
+| `RESEND_API_KEY`                       | Resend API key used to send payer reminder emails.                                                |
+| `CRON_SECRET`                          | Secret used to authorize `GET /api/reminders` (the cron trigger).                                 |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | WalletConnect project ID, from [cloud.walletconnect.com](https://cloud.walletconnect.com).        |
 
 Local UI development works fine without these — they only matter when exercising Supabase-backed reminders, email delivery, or WalletConnect. See [docs/supabase-setup.md](docs/supabase-setup.md) for the reminder schema.
 

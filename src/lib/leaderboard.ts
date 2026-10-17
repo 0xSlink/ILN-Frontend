@@ -1,40 +1,60 @@
-import { fetchLeaderboard as fetchLeaderboardData, type LeaderboardEntry, type LeaderboardResult,
-  type IndexerRequestOptions, } from '@/lib/indexerClient';
+import { IndexerError, type IndexerErrorCode } from '@/lib/indexer/errors';
+import { loadIndexerResource } from '@/lib/indexer/server';
+import type { IndexerResponseMeta } from '@/lib/indexer/types';
+import type { IndexerBoundaryStatus } from '@/lib/indexer-boundary';
 
 export interface LeaderboardResult<T = unknown[]> {
   data: T;
-  /** True when the indexer was unreachable (distinct from "no rows"). */
+  /** True whenever the indexer could not provide trustworthy rows. */
   unavailable: boolean;
+  status?: IndexerBoundaryStatus;
+  /** Typed indexer error code when `unavailable` is true. */
+  code?: IndexerErrorCode;
+  error?: string;
+  meta?: IndexerResponseMeta;
 }
 
-export type { LeaderboardResult };
+function boundaryStatusFor(code: IndexerErrorCode): IndexerBoundaryStatus {
+  if (code === 'unauthorized' || code === 'forbidden') return 'unauthorized';
+  if (code === 'rate_limited') return 'rate-limited';
+  if (code === 'schema' || code === 'version_mismatch' || code === 'bad_request') {
+    return 'malformed';
+  }
+  return 'unavailable';
+}
 
 /**
- * Fetch the leaderboard from the indexer service via the centralized client.
- * Returns a discriminated result so callers can distinguish "indexer temporarily
- * unavailable" from "no rows" — the former should surface an honest unavailable
- * state rather than empty data.
+ * Server-side leaderboard read for `/api/leaderboard`.
  *
- * Server-side only (uses authenticated indexer access when INDEXER_API_KEY is set).
+ * Goes through the same server-only indexer client as `/api/indexer/*`
+ * (credentials, timeout, version check, payload validation). Every failure —
+ * including a missing INDEXER_URL — is reported as `unavailable` with a typed
+ * code, never as an empty leaderboard. Server-side only.
  */
-export async function getLeaderboard<T = LeaderboardEntry[]>(
+export async function getLeaderboard<T = unknown[]>(
   type: string,
   period: string,
-  options?: IndexerRequestOptions
+  limit?: number
 ): Promise<LeaderboardResult<T>> {
-  try {
-    // Use centralized indexer client - single authoritative boundary
-    // with explicit schema validation, auth, timeout, and error contracts
-    const data = await fetchLeaderboardData(100, type);
-    return { data: data as unknown as T, unavailable: false };
-  } catch (error) {
-    console.error('[LeaderboardAPI] Error fetching leaderboard:', error);
-    return { data: [] as unknown as T, unavailable: true };
-  }
-  const indexerUrl = process.env.INDEXER_URL;
-  if (!indexerUrl) {
-    return { data: [] as unknown as T, unavailable: false, status: 'empty' };
-  }
+  const params = new URLSearchParams({ type, period });
+  if (limit !== undefined) params.set('limit', String(limit));
 
-  return fetchLeaderboard<T>(type, period, options);
+  try {
+    const envelope = await loadIndexerResource(['leaderboard'], params);
+    return {
+      data: envelope.data as unknown as T,
+      unavailable: false,
+      ...(envelope.data.length === 0 ? { status: 'empty' as const } : {}),
+      meta: envelope.meta,
+    };
+  } catch (err) {
+    const error = err instanceof IndexerError ? err : new IndexerError('upstream');
+    return {
+      data: [] as unknown as T,
+      unavailable: true,
+      status: boundaryStatusFor(error.code),
+      code: error.code,
+      error: error.message,
+    };
+  }
 }
