@@ -10,6 +10,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import useAddressBook from '../useAddressBook';
+import { currentWalletRecordScope, walletRecordKey } from '@/utils/walletRecordStore';
 
 // vi.mock is hoisted above module-level consts, so the address is hoisted too.
 const { TEST_WALLET } = vi.hoisted(() => ({
@@ -41,6 +42,14 @@ function makeAddr(i: number): string {
   const c3 = String.fromCharCode(65 + (i % 26));
   // G + 52 'A's + c1 + c2 + c3 = 56 chars total
   return 'G' + 'A'.repeat(52) + c1 + c2 + c3;
+}
+
+/** Entries persisted in the scoped, integrity-checked record (#1087/#1089). */
+function storedEntries(): { nickname: string }[] | null {
+  const raw = localStorage.getItem(
+    walletRecordKey('address-book', currentWalletRecordScope(TEST_WALLET))
+  );
+  return raw ? JSON.parse(raw).data : null;
 }
 
 describe('useAddressBook', () => {
@@ -82,9 +91,7 @@ describe('useAddressBook', () => {
     });
 
     // Verify persisted to localStorage
-    const stored = localStorage.getItem(`iln-address-book-${TEST_WALLET}`);
-    expect(stored).not.toBeNull();
-    expect(JSON.parse(stored!)).toHaveLength(1);
+    expect(storedEntries()).toHaveLength(1);
   });
 
   // ── addAddress — validation (#863) ───────────────────────────────────────
@@ -241,8 +248,7 @@ describe('useAddressBook', () => {
     expect(result.current.addressBook[0].nickname).toBe('Updated');
 
     // Verify localStorage reflects the new value
-    const stored = JSON.parse(localStorage.getItem(`iln-address-book-${TEST_WALLET}`)!);
-    expect(stored[0].nickname).toBe('Updated');
+    expect(storedEntries()![0].nickname).toBe('Updated');
   });
 
   // ── updateAddress — validation (#863) ────────────────────────────────────
