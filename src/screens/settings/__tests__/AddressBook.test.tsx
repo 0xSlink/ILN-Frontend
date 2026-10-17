@@ -16,32 +16,58 @@ vi.mock('@/context/ToastContext', () => ({
   useToast: () => ({ addToast: addToastMock, updateToast: updateToastMock }),
 }));
 
-const addAddressMock = vi.fn();
+const addAddressMock = vi.fn(() => true);
 const deleteAddressMock = vi.fn();
 const searchAddressesMock = vi.fn();
+const retryHydrationMock = vi.fn();
+const clearCorruptedStateMock = vi.fn();
 
 const addressBook = [
   { id: '1', address: 'GADDRESSONELONGENOUGH1234567890', nickname: 'Alice' },
   { id: '2', address: 'GADDRESSTWOLONGENOUGH1234567890', nickname: 'Bob' },
 ];
 
+let mockHookState: Record<string, unknown> = {
+  addressBook,
+  addAddress: addAddressMock,
+  deleteAddress: deleteAddressMock,
+  searchAddresses: searchAddressesMock,
+  isLoading: false,
+  isDegraded: false,
+  error: null,
+  validationIssues: null,
+  retryHydration: retryHydrationMock,
+  clearCorruptedState: clearCorruptedStateMock,
+};
+
 vi.mock('@/hooks/useAddressBook', () => ({
-  default: () => ({
-    addressBook,
-    addAddress: addAddressMock,
-    deleteAddress: deleteAddressMock,
-    searchAddresses: searchAddressesMock,
-  }),
+  default: () => mockHookState,
 }));
 
 describe('AddressBookPage', () => {
   beforeEach(() => {
     addToastMock.mockClear();
     updateToastMock.mockClear();
-    addAddressMock.mockClear();
+    addAddressMock.mockReset();
+    addAddressMock.mockReturnValue(true);
     deleteAddressMock.mockClear();
+    retryHydrationMock.mockClear();
+    clearCorruptedStateMock.mockClear();
     searchAddressesMock.mockReset();
     searchAddressesMock.mockReturnValue(addressBook);
+
+    mockHookState = {
+      addressBook,
+      addAddress: addAddressMock,
+      deleteAddress: deleteAddressMock,
+      searchAddresses: searchAddressesMock,
+      isLoading: false,
+      isDegraded: false,
+      error: null,
+      validationIssues: null,
+      retryHydration: retryHydrationMock,
+      clearCorruptedState: clearCorruptedStateMock,
+    };
   });
 
   it('renders each address book entry with its truncated address', () => {
@@ -81,6 +107,24 @@ describe('AddressBookPage', () => {
       expect.objectContaining({ type: 'success', title: 'addressBook.success.added' })
     );
     expect(screen.getByPlaceholderText('addressBook.stellarAddressPlaceholder')).toHaveValue('');
+  });
+
+  it('shows error toast when adding invalid address format fails validation', () => {
+    addAddressMock.mockReturnValue(false);
+    render(<AddressBookPage />);
+
+    fireEvent.change(screen.getByPlaceholderText('addressBook.stellarAddressPlaceholder'), {
+      target: { value: 'invalid address with spaces' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('addressBook.nicknamePlaceholder'), {
+      target: { value: 'Bad Format' },
+    });
+    fireEvent.click(screen.getByText('addressBook.addAddress'));
+
+    expect(addAddressMock).toHaveBeenCalled();
+    expect(addToastMock).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', title: 'Invalid address or format rejected' })
+    );
   });
 
   it('deletes an address', () => {
@@ -124,5 +168,37 @@ describe('AddressBookPage', () => {
     });
     expect(searchAddressesMock).toHaveBeenCalledWith('Alice');
     expect(screen.getByText(/1/)).toBeInTheDocument();
+  });
+
+  it('displays a warning banner when storage is in degraded mode', () => {
+    mockHookState.isDegraded = true;
+    render(<AddressBookPage />);
+    expect(screen.getByRole('status')).toHaveTextContent(/safe degraded mode/i);
+  });
+
+  it('displays an error alert with retry and reset recovery actions on hydration error', () => {
+    mockHookState.error =
+      'Wallet ownership mismatch: stored address book does not belong to active wallet.';
+    render(<AddressBookPage />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/Wallet ownership mismatch/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+    expect(retryHydrationMock).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /reset/i }));
+    expect(clearCorruptedStateMock).toHaveBeenCalled();
+  });
+
+  it('displays validation issues banner when records are excluded during hydration', () => {
+    mockHookState.validationIssues = {
+      rejectedCount: 2,
+      reasons: ['Unknown fields', 'Malformed address'],
+    };
+    render(<AddressBookPage />);
+
+    expect(
+      screen.getByText(/2 malformed record\(s\) excluded during validation/i)
+    ).toBeInTheDocument();
   });
 });

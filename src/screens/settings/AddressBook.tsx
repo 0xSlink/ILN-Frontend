@@ -8,7 +8,18 @@ import useAddressBook from '@/hooks/useAddressBook';
 export default function AddressBookPage() {
   const { t } = useTranslation();
   const { addToast, updateToast } = useToast();
-  const { addressBook, addAddress, deleteAddress, searchAddresses } = useAddressBook();
+  const {
+    addressBook,
+    addAddress,
+    deleteAddress,
+    searchAddresses,
+    isLoading: _isLoading = false,
+    isDegraded = false,
+    error = null,
+    validationIssues = null,
+    retryHydration,
+    clearCorruptedState,
+  } = useAddressBook();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -22,7 +33,11 @@ export default function AddressBookPage() {
       addToast({ type: 'error', title: t('addressBook.errors.missingFields') });
       return;
     }
-    addAddress(newAddress, newNickname);
+    const added = addAddress(newAddress, newNickname);
+    if (!added) {
+      addToast({ type: 'error', title: 'Invalid address or format rejected' });
+      return;
+    }
     setNewAddress('');
     setNewNickname('');
     addToast({ type: 'success', title: t('addressBook.success.added') });
@@ -53,6 +68,57 @@ export default function AddressBookPage() {
 
   return (
     <div className="space-y-6">
+      {isDegraded && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-xs text-warning flex items-center justify-between"
+        >
+          <span>
+            Storage is operating in safe degraded mode (private browsing or quota limit reached).
+            Changes persist for this session only.
+          </span>
+        </div>
+      )}
+
+      {error && (
+        <div
+          role="alert"
+          className="rounded-xl border border-error/40 bg-error/10 p-4 text-xs text-error flex items-center justify-between gap-4"
+        >
+          <span>{error}</span>
+          <div className="flex gap-2 shrink-0">
+            {retryHydration && (
+              <button
+                onClick={retryHydration}
+                className="rounded-lg bg-surface-container-high px-3 py-1 font-medium hover:bg-surface-variant transition-colors"
+              >
+                Retry
+              </button>
+            )}
+            {clearCorruptedState && (
+              <button
+                onClick={clearCorruptedState}
+                className="rounded-lg bg-error/20 px-3 py-1 font-medium text-error hover:bg-error/30 transition-colors"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {validationIssues && validationIssues.rejectedCount > 0 && (
+        <div
+          role="status"
+          className="rounded-xl border border-warning/30 bg-warning/10 p-3 text-xs text-warning flex items-center justify-between"
+        >
+          <span>
+            {validationIssues.rejectedCount} malformed record(s) excluded during validation.
+          </span>
+        </div>
+      )}
+
       <div className="border border-surface-dim rounded-xl overflow-hidden">
         <div className="flex items-center justify-between p-4 bg-surface-container-low">
           <h3 className="text-lg font-medium">{t('addressBook.title')}</h3>
