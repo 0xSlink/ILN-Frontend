@@ -45,6 +45,7 @@ The app is a single Next.js project (App Router) that talks directly to Soroban 
 - **Payer workflows** — pay invoices, mark invoices as paid, open disputes, opt into email reminders, and view payer-specific dashboard state.
 - **Analytics & stats** — protocol-wide metrics, volume charts, token breakdowns, dispute rates, yield analytics, freelancer cash-flow analytics, and a leaderboard.
 - **Governance & admin** — create/list/vote on proposals, delegate voting power, manage the token allowlist, and view protocol health and contract version info.
+- **Wallet authentication** — authenticate Freighter wallets through the configured SEP-10 service domain, with replay protection, in-memory bearer sessions, and non-sensitive readiness diagnostics.
 - **Growth & engagement** — referrals, product roadmap, reputation profiles with a score simulator, an in-app notification center, a command palette, onboarding tours, and a PWA offline fallback page.
 - **Internationalization & theming** — multi-locale support via `next-intl`/`i18next`, with light/dark theme support.
 
@@ -139,17 +140,18 @@ The checked-in example ships with safe Stellar Testnet defaults, so local UI dev
 <details>
 <summary><b>Stellar & smart contract configuration</b></summary>
 
-| Variable                               | Default                                                    | Description                                                   |
-| -------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------- |
-| `NEXT_PUBLIC_CONTRACT_ID`              | `CD3TE3IAHM737P236XZL2OYU275ZKD6MN7YH7PYYAXYIGEH55OPEWYJC` | Invoice Factoring smart contract ID on Soroban Testnet.       |
-| `NEXT_PUBLIC_NETWORK_PASSPHRASE`       | `Test SDF Network ; September 2015`                        | Stellar network passphrase.                                   |
-| `NEXT_PUBLIC_RPC_URL`                  | `https://soroban-testnet.stellar.org`                      | Soroban RPC endpoint.                                         |
-| `NEXT_PUBLIC_NETWORK_NAME`             | `TESTNET`                                                  | Human-readable network label (`TESTNET`, `MAINNET`, `LOCAL`). |
-| `NEXT_PUBLIC_STELLAR_NETWORK`          | `testnet`                                                  | Network type identifier (`testnet`, `public`).                |
-| `NEXT_PUBLIC_TESTNET_USDC_TOKEN_ID`    | `CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75` | USDC asset contract ID on testnet.                            |
-| `NEXT_PUBLIC_TESTNET_EURC_TOKEN_ID`    | `GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP`  | EURC asset contract ID on testnet.                            |
-| `NEXT_PUBLIC_TESTNET_XLM_TOKEN_ID`     | `native-xlm`                                               | Native XLM token identifier.                                  |
-| `NEXT_PUBLIC_GOVERNANCE_ADMIN_ADDRESS` | `GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF` | Fallback admin address for governance parameters.             |
+| Variable                               | Default                                                    | Description                                                    |
+| -------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
+| `NEXT_PUBLIC_CONTRACT_ID`              | `CD3TE3IAHM737P236XZL2OYU275ZKD6MN7YH7PYYAXYIGEH55OPEWYJC` | Invoice Factoring smart contract ID on Soroban Testnet.        |
+| `NEXT_PUBLIC_NETWORK_PASSPHRASE`       | `Test SDF Network ; September 2015`                        | Stellar network passphrase.                                    |
+| `NEXT_PUBLIC_RPC_URL`                  | `https://soroban-testnet.stellar.org`                      | Soroban RPC endpoint.                                          |
+| `NEXT_PUBLIC_NETWORK_NAME`             | `TESTNET`                                                  | Human-readable network label (`TESTNET`, `MAINNET`, `LOCAL`).  |
+| `NEXT_PUBLIC_STELLAR_NETWORK`          | `testnet`                                                  | Network type identifier (`testnet`, `public`).                 |
+| `NEXT_PUBLIC_SEP10_HOME_DOMAIN`        | _(unset)_                                                  | Optional SEP-10 home domain; defaults to the browser hostname. |
+| `NEXT_PUBLIC_TESTNET_USDC_TOKEN_ID`    | `CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75` | USDC asset contract ID on testnet.                             |
+| `NEXT_PUBLIC_TESTNET_EURC_TOKEN_ID`    | `GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP`  | EURC asset contract ID on testnet.                             |
+| `NEXT_PUBLIC_TESTNET_XLM_TOKEN_ID`     | `native-xlm`                                               | Native XLM token identifier.                                   |
+| `NEXT_PUBLIC_GOVERNANCE_ADMIN_ADDRESS` | `GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF` | Fallback admin address for governance parameters.              |
 
 </details>
 
@@ -189,6 +191,12 @@ See [docs/feature-flags.md](docs/feature-flags.md) for the full reference, inclu
 Local UI development works fine without these — they only matter when exercising Supabase-backed reminders, email delivery, or WalletConnect. See [docs/supabase-setup.md](docs/supabase-setup.md) for the reminder schema.
 
 </details>
+
+### SEP-10 wallet authentication
+
+Wallet authentication uses `NEXT_PUBLIC_SEP10_HOME_DOMAIN` when configured, otherwise the actual browser hostname, and reads that service domain's `/.well-known/stellar.toml` `SIGNING_KEY` and `WEB_AUTH_ENDPOINT`. The browser validates the signed challenge against the active wallet, service domain, web-auth domain, and configured Stellar network before signing and exchanging it. A missing or invalid domain configuration is an explicit error; the client does not fall back to a fabricated endpoint.
+
+Authentication is currently available with Freighter. The returned bearer token remains in memory, is not written to browser storage, and is discarded when the wallet disconnects or changes. Authenticated API calls should use `authenticatedRequest` from `useWallet()` so expiry, 401, and 403 responses remain distinguishable. Requests are restricted to the exact HTTPS origin advertised by the SEP-10 endpoint, and redirects are rejected. The wallet menu displays the configured domain, network, token expiry, and latest auth-server health result.
 
 <details>
 <summary><b>App metadata & GitHub feedback integration</b></summary>

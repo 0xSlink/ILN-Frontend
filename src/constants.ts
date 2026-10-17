@@ -10,6 +10,7 @@ export const NETWORK_PASSPHRASE =
 export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://soroban-testnet.stellar.org';
 export const NETWORK_NAME = process.env.NEXT_PUBLIC_NETWORK_NAME || 'TESTNET';
 export const STELLAR_NETWORK = process.env.NEXT_PUBLIC_STELLAR_NETWORK || 'testnet';
+export const SEP10_HOME_DOMAIN = process.env.NEXT_PUBLIC_SEP10_HOME_DOMAIN || '';
 export const TESTNET_USDC_TOKEN_ID =
   process.env.NEXT_PUBLIC_TESTNET_USDC_TOKEN_ID ||
   'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75';
