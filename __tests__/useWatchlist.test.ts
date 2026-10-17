@@ -1,6 +1,11 @@
 import { renderHook, act } from '@testing-library/react';
-import { useWatchlist } from '../hooks/useWatchlist';
+import { useWatchlist } from '@/hooks/useWatchlist';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+// The hook surfaces limit warnings through the toast context.
+vi.mock('@/context/ToastContext', () => ({
+  useToast: () => ({ addToast: vi.fn(() => 'toast-id'), updateToast: vi.fn() }),
+}));
 
 describe('useWatchlist', () => {
   const walletAddress = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890';

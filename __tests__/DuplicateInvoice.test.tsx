@@ -1,12 +1,11 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import SubmitInvoiceForm from '../components/SubmitInvoiceForm';
-import { ToastProvider } from '../context/ToastContext';
-import { WalletProvider } from '../context/WalletContext';
+import SubmitInvoiceForm from '@/components/SubmitInvoiceForm';
+import { ToastProvider } from '@/context/ToastContext';
 
 // Mock the hooks used in SubmitInvoiceForm
-vi.mock('../hooks/useApprovedTokens', () => ({
+vi.mock('@/hooks/useApprovedTokens', () => ({
   useApprovedTokens: () => ({
     tokens: [],
     tokenMap: new Map(),
@@ -16,7 +15,7 @@ vi.mock('../hooks/useApprovedTokens', () => ({
   }),
 }));
 
-vi.mock('../context/WalletContext', () => ({
+vi.mock('@/context/WalletContext', () => ({
   useWallet: () => ({
     address: 'GABC...',
     isConnected: true,
@@ -66,9 +65,11 @@ describe('Submit similar invoice feature', () => {
     };
     renderForm(initialValues, '123');
 
-    expect(screen.getByLabelText(/Payer Stellar address/i)).toHaveValue('GPAYER...');
-    expect(screen.getByLabelText(/Invoice amount/i)).toHaveValue('1000');
-    expect(screen.getByLabelText(/Discount rate \(%\)/i)).toHaveValue('5');
+    // The field labels also wrap a FieldTooltip button, so query by placeholder.
+    expect(screen.getByPlaceholderText('G...')).toHaveValue('GPAYER...');
+    expect(screen.getByPlaceholderText('5000.00')).toHaveValue('1000');
+    // Discount rate lives on step 2; the live preview reflects the pre-filled value.
+    expect(screen.getByText('5.00%')).toBeInTheDocument();
   });
 
   it('ensures due date is always blank on initialization even with pre-fill', () => {
@@ -95,7 +96,7 @@ describe('Submit similar invoice feature', () => {
     fireEvent.click(dismissBtn);
 
     expect(screen.queryByText(/Pre-filled from invoice #123/i)).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/Payer Stellar address/i)).toHaveValue('GPAYER...');
+    expect(screen.getByPlaceholderText('G...')).toHaveValue('GPAYER...');
   });
 
   it('keeps fields editable after pre-fill', () => {

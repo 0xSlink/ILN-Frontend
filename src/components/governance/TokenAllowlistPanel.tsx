@@ -6,6 +6,9 @@ import { useToast } from '@/context/ToastContext';
 import { useWallet } from '@/context/WalletContext';
 import { AcceptedToken, createProposal, fetchProtocolParameters } from '@/utils/governance';
 import { formatAddress } from '@/utils/format';
+import { CONTRACT_ERROR_MAP, parseContractError } from '@/lib/contract/errors';
+import FieldTooltip from '@/components/FieldTooltip';
+import GovernanceMockStatusBanner from '@/components/governance/GovernanceMockStatusBanner';
 
 interface TokenRow extends AcceptedToken {
   decimals: number;
@@ -88,10 +91,15 @@ export default function TokenAllowlistPanel() {
       setTokenAddress('');
       setDecimals('6');
     } catch (error) {
+      const code = parseContractError(error);
       updateToast(toastId, {
         type: 'error',
         title: 'Proposal failed',
-        message: error instanceof Error ? error.message : 'Transaction rejected',
+        message: code
+          ? CONTRACT_ERROR_MAP[code].message
+          : error instanceof Error
+            ? error.message
+            : 'Transaction rejected',
       });
     } finally {
       setSubmitting(false);
@@ -137,6 +145,8 @@ export default function TokenAllowlistPanel() {
 
   return (
     <section className="mt-10 rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-6">
+      <GovernanceMockStatusBanner action="createProposal" />
+
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-start">
         <div>
           <p className="text-xs font-bold uppercase tracking-widest text-primary">
@@ -235,13 +245,19 @@ export default function TokenAllowlistPanel() {
       </div>
 
       <div className="mt-6 grid gap-4 rounded-xl bg-surface-container p-4 md:grid-cols-[1fr_160px_auto]">
-        <input
-          value={tokenAddress}
-          onChange={(event) => setTokenAddress(event.target.value)}
-          disabled={!isAdmin}
-          className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-50"
-          placeholder="Token contract address"
-        />
+        <div>
+          <span className="mb-1 inline-flex items-center text-xs font-semibold text-on-surface-variant">
+            Token contract address
+            <FieldTooltip content="ILN does not support fee-on-transfer tokens. The token must transfer the exact amount specified, with no fee deducted." />
+          </span>
+          <input
+            value={tokenAddress}
+            onChange={(event) => setTokenAddress(event.target.value)}
+            disabled={!isAdmin}
+            className="w-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest px-4 py-3 text-sm outline-none focus:border-primary disabled:opacity-50"
+            placeholder="Token contract address"
+          />
+        </div>
         <input
           type="number"
           min={0}

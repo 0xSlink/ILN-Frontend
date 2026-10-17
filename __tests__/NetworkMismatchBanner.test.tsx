@@ -75,8 +75,9 @@ describe('NetworkMismatchBanner', () => {
     render(<NetworkMismatchBanner />);
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(screen.getByText(/Network mismatch/i)).toBeInTheDocument();
-    expect(screen.getByText(/wallet is on Mainnet/i)).toBeInTheDocument();
-    expect(screen.getByText(/configured for Testnet/i)).toBeInTheDocument();
+    // The label is split across a <strong>, so assert on the alert's text.
+    expect(screen.getByRole('alert')).toHaveTextContent(/wallet is on Mainnet/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/configured for Testnet/i);
   });
 
   it("shows RPC mismatch details when RPC URL doesn't match wallet", () => {

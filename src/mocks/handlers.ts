@@ -112,4 +112,13 @@ export const handlers = [
       result: stellarRpcResponse(method),
     });
   }),
+
+  // ActivityFeed fetches this on mount (defaults to https://api.iln.example.com
+  // when NEXT_PUBLIC_INDEXER_API_URL is unset). Without a handler the request
+  // escapes to a real network call that resolves after the test's jsdom
+  // environment has already been torn down, crashing with "window is not
+  // defined" from the resulting setState call.
+  http.get('https://api.iln.example.com/invoice/:invoiceId/events', () => {
+    return HttpResponse.json([]);
+  }),
 ];

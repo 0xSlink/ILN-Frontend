@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import VoteSection from './VoteSection';
 import type { Proposal, VoteChoice } from '@/utils/governance';
 
@@ -9,7 +9,6 @@ const mockProposal: Proposal = {
   status: 'Active',
   votesFor: 1500000,
   votesAgainst: 500000,
-  votesAbstain: 100000,
   quorumRequired: 3000000,
   endTime: BigInt(Math.floor(Date.now() / 1000) + 86400 * 7),
   proposer: 'GABCDEF123...',

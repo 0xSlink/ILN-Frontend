@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { formatDate } from '@/utils/format';
 
 interface DueDateCountdownProps {
   dueDate: bigint;
@@ -115,7 +114,9 @@ export default function DueDateCountdown({
     <div className="flex items-center gap-3">
       <div className="relative">
         <span
-          className={`cursor-help ${display.className} ${display.shouldPulse ? 'animate-pulse-fast' : ''}`}
+          className={`cursor-help ${display.className} ${
+            display.shouldPulse ? 'animate-pulse-fast' : ''
+          }`}
           onMouseEnter={() => setIsTooltipVisible(true)}
           onMouseLeave={() => setIsTooltipVisible(false)}
           onFocus={() => setIsTooltipVisible(true)}

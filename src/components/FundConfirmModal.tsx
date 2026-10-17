@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useWallet } from '@/context/WalletContext';
-import { useToast } from '@/context/ToastContext';
 import { useTransaction } from '@/hooks/useTransaction';
 import TokenSelector, { TokenAmount } from './TokenSelector';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
@@ -12,11 +11,11 @@ import {
   Invoice,
   submitSignedTransaction,
 } from '@/utils/soroban';
-import { formatTokenAmount, formatDate, calculateYield } from '@/utils/format';
-import { useFundInvoice } from '@/hooks/useInvoices';
-import { getPayerScore, PayerScoreResult } from '@/utils/soroban';
+import { formatTokenAmount, calculateYield } from '@/utils/format';
+import { PayerScoreResult } from '@/utils/soroban';
 import { fetchProtocolParameters } from '@/utils/governance';
 import FieldTooltip from './FieldTooltip';
+import { trackFunnelStep } from '@/lib/funnel-tracking';
 
 type FundingStep = 'approve' | 'fund';
 
@@ -33,8 +32,7 @@ export default function FundConfirmModal({
   onSuccess,
   payerScore,
 }: FundConfirmModalProps) {
-  const { address, signTx } = useWallet();
-  const { addToast, updateToast } = useToast();
+  const { address } = useWallet();
   const { execute, loading: txLoading, error: txError, signingModal } = useTransaction();
   const isApproving = txLoading; // or more specific state if needed
   const isFunding = txLoading;
@@ -43,25 +41,22 @@ export default function FundConfirmModal({
   const [allowance, setAllowance] = useState<bigint | null>(null);
   const [fundingError, setFundingError] = useState<string | null>(null);
   const [faqExpanded, setFaqExpanded] = useState(false);
-  const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
+  const defaultSelectedTokenId = invoice?.token ?? defaultToken?.contractId ?? null;
+  const [selectedTokenId, setSelectedTokenId] = useState<string | null>(defaultSelectedTokenId);
+  const selectedTokenIdToUse = selectedTokenId ?? defaultSelectedTokenId;
+  const [renderedAtSeconds] = useState(() => Date.now() / 1000);
   const [protocolFeeBps, setProtocolFeeBps] = useState<number | null>(null);
   const modalRef = useFocusTrap<HTMLDivElement>(true, onClose);
 
-  useEffect(() => {
-    if (invoice && !selectedTokenId) {
-      setSelectedTokenId(invoice.token || defaultToken?.contractId || null);
-    }
-  }, [invoice, selectedTokenId, defaultToken]);
-
   const selectedToken = useMemo(() => {
-    return selectedTokenId ? tokenMap.get(selectedTokenId) || null : null;
-  }, [selectedTokenId, tokenMap]);
+    return selectedTokenIdToUse ? tokenMap.get(selectedTokenIdToUse) || null : null;
+  }, [selectedTokenIdToUse, tokenMap]);
 
   const isTokenMismatch = !!(
     invoice &&
-    selectedTokenId &&
+    selectedTokenIdToUse &&
     invoice.token &&
-    selectedTokenId !== invoice.token
+    selectedTokenIdToUse !== invoice.token
   );
 
   const selectedInvoiceToken = invoice
@@ -105,8 +100,19 @@ export default function FundConfirmModal({
 
   useEffect(() => {
     if (!invoice || !address) return;
-    void refreshAllowance(invoice, address);
-  }, [address, refreshAllowance, invoice]);
+    trackFunnelStep('lp_funding', 'started', {
+      token: selectedToken?.symbol ?? 'USDC',
+      invoiceId: invoice.id.toString(),
+    });
+    const inv = invoice;
+    const walletAddress = address;
+
+    async function fetchAllowance() {
+      await refreshAllowance(inv, walletAddress);
+    }
+
+    void fetchAllowance();
+  }, [address, refreshAllowance, invoice, selectedToken?.symbol]);
 
   if (!invoice) return null;
 
@@ -118,6 +124,9 @@ export default function FundConfirmModal({
   const approveToken = async () => {
     if (!address || !selectedInvoiceToken) return;
     setFundingError(null);
+    trackFunnelStep('lp_funding', 'allowance_requested', {
+      token: selectedToken?.symbol || 'token',
+    });
 
     const result = await execute(
       async (signTx) => {
@@ -129,24 +138,39 @@ export default function FundConfirmModal({
         return submitSignedTransaction({ tx, signTx });
       },
       {
+        expectedAction: 'approve',
         title: `Approving ${selectedToken?.symbol || 'token'}...`,
         pendingMessage: 'Waiting for wallet signature...',
         successTitle: `${selectedToken?.symbol || 'Token'} approved`,
-        successMessage: `Allowance updated for ${formatTokenAmount(invoice.amount, selectedToken || selectedInvoiceToken!)}.`,
+        successMessage: `Allowance updated for ${formatTokenAmount(
+          invoice.amount,
+          selectedToken || selectedInvoiceToken!
+        )}.`,
       }
     );
 
     if (!result) {
+      trackFunnelStep('lp_funding', 'failed', {
+        step: 'approve',
+        reason: txError ?? 'Approval failed.',
+      });
       setFundingError(txError ?? 'Approval failed.');
       return;
     }
 
+    trackFunnelStep('lp_funding', 'allowance_approved', {
+      token: selectedToken?.symbol || 'token',
+    });
     setAllowance(invoice.amount);
   };
 
   const confirmFunding = async () => {
     if (!address) return;
     setFundingError(null);
+    trackFunnelStep('lp_funding', 'deposit_sign_requested', {
+      token: selectedToken?.symbol || 'token',
+      invoiceId: invoice.id.toString(),
+    });
 
     const result = await execute(
       async (signTx) => {
@@ -154,6 +178,7 @@ export default function FundConfirmModal({
         return submitSignedTransaction({ tx, signTx });
       },
       {
+        expectedAction: 'fund_invoice',
         title: 'Funding invoice...',
         pendingMessage: 'Waiting for wallet signature...',
         successTitle: 'Invoice funded successfully!',
@@ -162,8 +187,16 @@ export default function FundConfirmModal({
     );
 
     if (result) {
+      trackFunnelStep('lp_funding', 'completed', {
+        token: selectedToken?.symbol || 'token',
+        invoiceId: invoice.id.toString(),
+      });
       onSuccess();
     } else {
+      trackFunnelStep('lp_funding', 'failed', {
+        step: 'fund',
+        reason: txError ?? 'Funding failed.',
+      });
       setFundingError(txError ?? 'An unknown error occurred');
     }
   };
@@ -188,10 +221,16 @@ export default function FundConfirmModal({
         {needsApproval && (
           <div className="flex items-center gap-4">
             <div
-              className={`flex items-center gap-2 ${currentStep === 'approve' ? 'text-primary' : 'text-on-surface-variant line-through'}`}
+              className={`flex items-center gap-2 ${
+                currentStep === 'approve' ? 'text-primary' : 'text-on-surface-variant line-through'
+              }`}
             >
               <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${currentStep === 'approve' ? 'bg-primary text-surface-container-lowest' : 'bg-surface-variant text-on-surface-variant'}`}
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                  currentStep === 'approve'
+                    ? 'bg-primary text-surface-container-lowest'
+                    : 'bg-surface-variant text-on-surface-variant'
+                }`}
               >
                 1
               </div>
@@ -199,10 +238,16 @@ export default function FundConfirmModal({
             </div>
             <div className="w-12 h-px bg-surface-variant"></div>
             <div
-              className={`flex items-center gap-2 ${currentStep === 'fund' ? 'text-primary' : 'text-on-surface-variant opacity-50'}`}
+              className={`flex items-center gap-2 ${
+                currentStep === 'fund' ? 'text-primary' : 'text-on-surface-variant opacity-50'
+              }`}
             >
               <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${currentStep === 'fund' ? 'bg-primary text-surface-container-lowest' : 'bg-surface-variant text-on-surface-variant'}`}
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                  currentStep === 'fund'
+                    ? 'bg-primary text-surface-container-lowest'
+                    : 'bg-surface-variant text-on-surface-variant'
+                }`}
               >
                 2
               </div>
@@ -275,7 +320,11 @@ export default function FundConfirmModal({
                 <p className="text-lg text-on-surface-variant">
                   {isCheckingAllowance
                     ? 'Checking current allowance...'
-                    : `You're authorising ILN to spend ${selectedToken ? formatTokenAmount(invoice.amount, selectedToken) : invoice.amount.toString()} ${selectedToken?.symbol || tokenSymbol} from your wallet. This is a one-time approval.`}
+                    : `You're authorising ILN to spend ${
+                        selectedToken
+                          ? formatTokenAmount(invoice.amount, selectedToken)
+                          : `${invoice.amount.toString()} ${tokenSymbol}`
+                      } from your wallet. This is a one-time approval.`}
                 </p>
               </div>
 
@@ -440,7 +489,7 @@ export default function FundConfirmModal({
                 <div className="flex justify-between text-sm border-t border-surface-dim pt-4">
                   <span className="text-on-surface-variant">Days until due:</span>
                   <span className="font-bold text-on-surface">
-                    {Math.max(0, Math.ceil((Number(invoice.due_date) - Date.now() / 1000) / 86400))}{' '}
+                    {Math.max(0, Math.ceil((Number(invoice.due_date) - renderedAtSeconds) / 86400))}{' '}
                     days
                   </span>
                 </div>

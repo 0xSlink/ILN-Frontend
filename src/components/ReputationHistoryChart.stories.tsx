@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import ReputationHistoryChart from './ReputationHistoryChart';
 
 const meta: Meta<typeof ReputationHistoryChart> = {

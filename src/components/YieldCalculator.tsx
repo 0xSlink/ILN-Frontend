@@ -108,7 +108,7 @@ export default function YieldCalculator({ onFindMatching }: YieldCalculatorProps
 
   const apy = useMemo(() => {
     if (normalizedAmount <= 0 || normalizedSettlementDays <= 0) return 0;
-    return (normalizedDiscountRate / 100) * (365 / normalizedSettlementDays) * 100;
+    return (normalizedDiscountRate / 100) * (365 / normalizedSettlementDays);
   }, [normalizedAmount, normalizedDiscountRate, normalizedSettlementDays]);
 
   const riskAdjustedApy = useMemo(

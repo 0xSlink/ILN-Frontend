@@ -11,14 +11,14 @@ describe('YieldCalculator', () => {
   });
 
   test('renders initial values', () => {
-    expect(screen.getByText('You send:')).toBeInTheDocument();
+    expect(screen.getByText('You send')).toBeInTheDocument();
     expect(screen.getByText('1,000 USDC')).toBeInTheDocument();
-    expect(screen.getByText('Freelancer receives:')).toBeInTheDocument();
-    expect(screen.getByText('900 USDC')).toBeInTheDocument(); // 1000 - (1000 * 100 / 10000) = 900
-    expect(screen.getByText('Your yield:')).toBeInTheDocument();
+    expect(screen.getByText('Freelancer receives')).toBeInTheDocument();
+    expect(screen.getByText('990 USDC')).toBeInTheDocument(); // 1000 - (1000 * 100 / 10000) = 990
+    expect(screen.getByText('Your yield')).toBeInTheDocument();
     expect(screen.getByText('10 USDC')).toBeInTheDocument(); // 1000 * 100 / 10000 = 10
-    expect(screen.getByText('Annualised yield (APY):')).toBeInTheDocument();
-    expect(screen.getByText('121.67%')).toBeInTheDocument(); // (100/100) * (365/30) * 100 = 121.67
+    expect(screen.getByText('Annualised yield (APY)')).toBeInTheDocument();
+    expect(screen.getByText('12.17%')).toBeInTheDocument(); // (100/100) * (365/30)
   });
 
   test('updates values when amount changes', () => {
@@ -29,14 +29,14 @@ describe('YieldCalculator', () => {
 
     fireEvent.change(amountInput, { target: { value: '2000' } });
 
-    expect(screen.getByText('You send:')).toBeInTheDocument();
+    expect(screen.getByText('You send')).toBeInTheDocument();
     expect(screen.getByText('2,000 USDC')).toBeInTheDocument();
-    expect(screen.getByText('Freelancer receives:')).toBeInTheDocument();
-    expect(screen.getByText('1,800 USDC')).toBeInTheDocument(); // 2000 - (2000 * 100 / 10000) = 1800
-    expect(screen.getByText('Your yield:')).toBeInTheDocument();
-    expect(screen.getByText('200 USDC')).toBeInTheDocument(); // 2000 * 100 / 10000 = 200
-    expect(screen.getByText('Annualised yield (APY):')).toBeInTheDocument();
-    expect(screen.getByText('121.67%')).toBeInTheDocument(); // APY unchanged because discount rate and settlement days same
+    expect(screen.getByText('Freelancer receives')).toBeInTheDocument();
+    expect(screen.getByText('1,980 USDC')).toBeInTheDocument(); // 2000 - (2000 * 100 / 10000) = 1980
+    expect(screen.getByText('Your yield')).toBeInTheDocument();
+    expect(screen.getByText('20 USDC')).toBeInTheDocument(); // 2000 * 100 / 10000 = 20
+    expect(screen.getByText('Annualised yield (APY)')).toBeInTheDocument();
+    expect(screen.getByText('12.17%')).toBeInTheDocument(); // APY unchanged because discount rate and settlement days same
   });
 
   test('updates values when discount rate changes', () => {
@@ -47,14 +47,14 @@ describe('YieldCalculator', () => {
 
     fireEvent.change(discountInput, { target: { value: '200' } });
 
-    expect(screen.getByText('You send:')).toBeInTheDocument();
+    expect(screen.getByText('You send')).toBeInTheDocument();
     expect(screen.getByText('1,000 USDC')).toBeInTheDocument();
-    expect(screen.getByText('Freelancer receives:')).toBeInTheDocument();
-    expect(screen.getByText('800 USDC')).toBeInTheDocument(); // 1000 - (1000 * 200 / 10000) = 800
-    expect(screen.getByText('Your yield:')).toBeInTheDocument();
-    expect(screen.getByText('200 USDC')).toBeInTheDocument(); // 1000 * 200 / 10000 = 200
-    expect(screen.getByText('Annualised yield (APY):')).toBeInTheDocument();
-    expect(screen.getByText('243.33%')).toBeInTheDocument(); // (200/100) * (365/30) * 100 = 243.33
+    expect(screen.getByText('Freelancer receives')).toBeInTheDocument();
+    expect(screen.getByText('980 USDC')).toBeInTheDocument(); // 1000 - (1000 * 200 / 10000) = 980
+    expect(screen.getByText('Your yield')).toBeInTheDocument();
+    expect(screen.getByText('20 USDC')).toBeInTheDocument(); // 1000 * 200 / 10000 = 20
+    expect(screen.getByText('Annualised yield (APY)')).toBeInTheDocument();
+    expect(screen.getByText('24.33%')).toBeInTheDocument(); // (200/100) * (365/30)
   });
 
   test('updates values when settlement days changes', () => {
@@ -65,8 +65,8 @@ describe('YieldCalculator', () => {
 
     fireEvent.change(daysInput, { target: { value: '60' } });
 
-    expect(screen.getByText('Annualised yield (APY):')).toBeInTheDocument();
-    expect(screen.getByText('60.84%')).toBeInTheDocument(); // (100/100) * (365/60) * 100 = 60.833... ~ 60.84
+    expect(screen.getByText('Annualised yield (APY)')).toBeInTheDocument();
+    expect(screen.getByText('6.08%')).toBeInTheDocument(); // (100/100) * (365/60)
   });
 
   test('calls onFindMatching when button clicked', () => {
@@ -113,7 +113,7 @@ describe('YieldCalculator', () => {
     fireEvent.change(amountInput, { target: { value: '0' } });
 
     expect(screen.getAllByText('0 USDC').length).toBeGreaterThan(0);
-    expect(screen.getByText('Freelancer receives:')).toBeInTheDocument();
+    expect(screen.getByText('Freelancer receives')).toBeInTheDocument();
     expect(screen.getAllByText('0 USDC').length).toBeGreaterThan(1);
   });
 
@@ -125,8 +125,9 @@ describe('YieldCalculator', () => {
 
     fireEvent.change(discountInput, { target: { value: '10000' } });
 
-    expect(screen.getByText('Freelancer receives:')).toBeInTheDocument();
+    expect(screen.getByText('Freelancer receives')).toBeInTheDocument();
     expect(screen.getAllByText('0 USDC').length).toBeGreaterThan(0);
-    expect(screen.getByText('1,000 USDC')).toBeInTheDocument();
+    // "You send" and "Your yield" both show the full invoice value at 100%.
+    expect(screen.getAllByText('1,000 USDC').length).toBeGreaterThan(1);
   });
 });

@@ -3,22 +3,19 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 import InvoiceFilterBar from '@/components/InvoiceFilterBar';
 import { useWallet } from '@/context/WalletContext';
 import { useToast } from '@/context/ToastContext';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
+import { useTransactionPreview } from '@/hooks/useTransactionPreview';
 import { applyInvoiceFilters, useInvoiceFilters } from '@/hooks/useInvoiceFilters';
 import { getAllInvoices, submitInvoice, Invoice } from '@/utils/soroban';
 import { formatUSDC, formatAddress, formatDate } from '@/utils/format';
 import { rpc, TransactionBuilder } from '@stellar/stellar-sdk';
 import { RPC_URL, NETWORK_PASSPHRASE } from '@/constants';
 import { paginate, pageCountFor } from '@/utils/pagination';
-import SkeletonRow, { FREELANCER_COLUMNS } from '@/components/SkeletonRow';
 import { ExportButton } from '@/components/ExportButton';
-import { EmptyState } from '@/components/EmptyState';
-import { FreelancerEmptyIllustration } from '@/components/illustrations/EmptyIllustrations';
 
 const server = new rpc.Server(RPC_URL);
 
@@ -81,6 +78,7 @@ function FreelancerPageContent() {
   const { addToast, updateToast } = useToast();
   const { signTx } = useWallet();
   const { tokenMap, defaultToken } = useApprovedTokens();
+  const { previewModal, requestPreview } = useTransactionPreview();
 
   const [screen, setScreen] = useState<Screen>('submit');
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -198,17 +196,19 @@ function FreelancerPageContent() {
         discountRate: discountBps,
       });
 
-      const signedXdr = await signTx(tx.toXDR());
+      const txXdr = tx.toXDR();
+      await requestPreview(txXdr, 'submit_invoice');
+      const signedXdr = await signTx(txXdr);
       const sendResult = await server.sendTransaction(
         TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE)
       );
 
-      if ((sendResult as any).status === 'PENDING') {
-        let txStatus = await server.getTransaction((sendResult as any).hash);
+      if (sendResult.status === 'PENDING') {
+        let txStatus = await server.getTransaction(sendResult.hash);
         let tries = 0;
-        while ((txStatus as any).status === 'NOT_FOUND' && tries < 20) {
+        while (txStatus.status === 'NOT_FOUND' && tries < 20) {
           await new Promise((r) => setTimeout(r, 1500));
-          txStatus = await server.getTransaction((sendResult as any).hash);
+          txStatus = await server.getTransaction(sendResult.hash);
           tries++;
         }
 
@@ -218,10 +218,10 @@ function FreelancerPageContent() {
         updateToast(toastId, {
           type: 'success',
           title: t('freelancer.toast.submitted'),
-          txHash: (sendResult as any).hash,
+          txHash: sendResult.hash,
         });
       } else {
-        throw new Error(`Transaction rejected: ${(sendResult as any).status}`);
+        throw new Error(`Transaction rejected: ${sendResult.status}`);
       }
     } catch (err: any) {
       updateToast(toastId, {
@@ -246,6 +246,7 @@ function FreelancerPageContent() {
 
   return (
     <>
+      {previewModal}
       <Navbar />
       <main className="min-h-screen pt-28 pb-20 px-4">
         <div className="max-w-4xl mx-auto">
@@ -723,7 +724,6 @@ function FreelancerPageContent() {
           )}
         </div>
       </main>
-      <Footer />
     </>
   );
 }

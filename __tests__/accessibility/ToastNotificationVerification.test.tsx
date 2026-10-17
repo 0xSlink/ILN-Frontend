@@ -4,7 +4,6 @@ import { axe } from 'jest-axe';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ToastProvider, useToast } from '@/context/ToastContext';
 import { NotificationProvider } from '@/context/NotificationContext';
-import AppToaster from '@/components/AppToaster';
 
 // Mock wallet context for notification testing
 vi.mock('@/context/WalletContext', () => ({
@@ -42,10 +41,12 @@ describe('Toast Accessibility Verification', () => {
   });
 
   it('should have proper ARIA live region with announcements', async () => {
+    // ToastProvider already renders its own <AppToaster /> internally -
+    // rendering a second one here duplicated the toast container landmark
+    // and tripped axe's landmark-unique rule.
     const { container } = render(
       <ToastProvider>
         <TestToastComponent />
-        <AppToaster />
       </ToastProvider>
     );
 
@@ -72,24 +73,27 @@ describe('Toast Accessibility Verification', () => {
   });
 
   it('should verify AppToaster has accessibility attributes', () => {
+    // ToastProvider already renders AppToaster; don't render a second one.
     render(
       <ToastProvider>
-        <AppToaster />
+        <div />
       </ToastProvider>
     );
 
-    // The Toaster component should have accessibility attributes
-    // Sonner's Toaster should render with proper ARIA
+    // The Toaster component should have accessibility attributes.
+    // AppToaster sets a custom containerAriaLabel ("Toast notifications");
+    // Sonner appends its hotkey hint to that, so match by prefix rather
+    // than pinning the exact hotkey string.
     const toastRegion = screen.getByRole('region', { hidden: true });
     expect(toastRegion).toBeInTheDocument();
-    expect(toastRegion).toHaveAttribute('aria-label', 'Toast notifications');
+    expect(toastRegion.getAttribute('aria-label')).toMatch(/^Toast notifications/);
   });
 
   it('should handle different toast types appropriately', async () => {
+    // Same duplicate-AppToaster issue as above.
     const { container } = render(
       <ToastProvider>
         <TestToastComponent />
-        <AppToaster />
       </ToastProvider>
     );
 

@@ -1,7 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { useRouter } from 'next/navigation';
-import CommandPalette from '../components/CommandPalette';
+import CommandPalette from '@/components/CommandPalette';
+import { KeyboardShortcutsProvider } from '@/context/KeyboardShortcutsContext';
+
+// The palette reads the keyboard-shortcuts context (Cmd+K registration).
+function renderPalette() {
+  return render(
+    <KeyboardShortcutsProvider>
+      <CommandPalette />
+    </KeyboardShortcutsProvider>
+  );
+}
 
 vi.mock('next/navigation', () => ({
   useRouter: vi.fn(),
@@ -17,7 +27,7 @@ describe('CommandPalette', () => {
   });
 
   it('opens with Cmd+K on Mac', () => {
-    render(<CommandPalette />);
+    renderPalette();
     expect(screen.queryByPlaceholderText(/type a command/i)).not.toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
@@ -25,7 +35,7 @@ describe('CommandPalette', () => {
   });
 
   it('opens with Ctrl+K on Windows', () => {
-    render(<CommandPalette />);
+    renderPalette();
     expect(screen.queryByPlaceholderText(/type a command/i)).not.toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
@@ -33,7 +43,7 @@ describe('CommandPalette', () => {
   });
 
   it('closes with Escape', () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
     expect(screen.getByPlaceholderText(/type a command/i)).toBeInTheDocument();
 
@@ -42,7 +52,7 @@ describe('CommandPalette', () => {
   });
 
   it('closes when clicking backdrop', () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     const backdrop = screen.getByPlaceholderText(/type a command/i).closest('.fixed');
@@ -52,7 +62,7 @@ describe('CommandPalette', () => {
   });
 
   it('fuzzy search filters commands correctly', () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     const input = screen.getByPlaceholderText(/type a command/i);
@@ -64,7 +74,7 @@ describe('CommandPalette', () => {
   });
 
   it('fuzzy search works with non-contiguous characters', () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     const input = screen.getByPlaceholderText(/type a command/i);
@@ -74,7 +84,7 @@ describe('CommandPalette', () => {
   });
 
   it('invoice lookup by number navigates correctly', async () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     const input = screen.getByPlaceholderText(/type a command/i);
@@ -89,7 +99,7 @@ describe('CommandPalette', () => {
   });
 
   it('invoice lookup works with # prefix', async () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     const input = screen.getByPlaceholderText(/type a command/i);
@@ -104,7 +114,7 @@ describe('CommandPalette', () => {
   });
 
   it('arrow keys navigate results', () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     const input = screen.getByPlaceholderText(/type a command/i);
@@ -126,7 +136,7 @@ describe('CommandPalette', () => {
   });
 
   it('Enter executes selected command', async () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     const input = screen.getByPlaceholderText(/type a command/i);
@@ -140,7 +150,7 @@ describe('CommandPalette', () => {
   });
 
   it('clicking a command executes it', async () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     const input = screen.getByPlaceholderText(/type a command/i);
@@ -155,7 +165,7 @@ describe('CommandPalette', () => {
   });
 
   it('tracks recent commands in localStorage', async () => {
-    render(<CommandPalette />);
+    renderPalette();
 
     // Execute a command
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
@@ -175,15 +185,15 @@ describe('CommandPalette', () => {
     // Pre-populate recent commands
     localStorage.setItem('iln_recent_commands', JSON.stringify(['analytics', 'dashboard']));
 
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     expect(screen.getByText('Go to Analytics')).toBeInTheDocument();
     expect(screen.getByText('Go to Dashboard')).toBeInTheDocument();
   });
 
-  it('limits recent commands to 5', async () => {
-    render(<CommandPalette />);
+  it('keeps recent commands most-recent-first, capped at MAX_RECENT (10)', async () => {
+    renderPalette();
 
     const commands = ['analytics', 'dashboard', 'governance', 'freelancer', 'lp', 'payer'];
 
@@ -198,12 +208,13 @@ describe('CommandPalette', () => {
 
     const stored = localStorage.getItem('iln_recent_commands');
     const recent = JSON.parse(stored!);
-    expect(recent.length).toBe(5);
-    expect(recent).not.toContain('analytics'); // First one should be dropped
+    expect(recent.length).toBe(commands.length);
+    expect(recent.length).toBeLessThanOrEqual(10);
+    expect(recent[0]).toBe('payer'); // most recently executed first
   });
 
   it('shows empty state when no commands match', () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     const input = screen.getByPlaceholderText(/type a command/i);
@@ -213,24 +224,24 @@ describe('CommandPalette', () => {
   });
 
   it('shows empty state when no recent commands', () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     expect(screen.getByText('No recent commands')).toBeInTheDocument();
   });
 
   it('opens shortcuts modal with ? outside input', () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: '?' });
     expect(screen.getByText('Keyboard shortcuts')).toBeInTheDocument();
   });
 
   it('does not open shortcuts modal from input fields', () => {
     render(
-      <div>
+      <KeyboardShortcutsProvider>
         <input aria-label="test-input" />
         <CommandPalette />
-      </div>
+      </KeyboardShortcutsProvider>
     );
 
     const input = screen.getByLabelText('test-input');
@@ -241,7 +252,7 @@ describe('CommandPalette', () => {
   });
 
   it('resets selection when query changes', () => {
-    render(<CommandPalette />);
+    renderPalette();
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
 
     const input = screen.getByPlaceholderText(/type a command/i);

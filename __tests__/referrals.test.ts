@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { generateReferralCode } from '../src/utils/referrals';
 
 // Mock SubtleCrypto if needed, but it's available in Node 19+ and vitest handles it usually

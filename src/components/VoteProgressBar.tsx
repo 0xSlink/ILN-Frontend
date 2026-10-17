@@ -6,7 +6,6 @@ import { votePercent } from '@/utils/governance';
 interface VoteProgressBarProps {
   votesFor: number;
   votesAgainst: number;
-  votesAbstain: number;
   quorumRequired: number;
   compact?: boolean;
 }
@@ -14,14 +13,12 @@ interface VoteProgressBarProps {
 export default function VoteProgressBar({
   votesFor,
   votesAgainst,
-  votesAbstain,
   quorumRequired,
   compact = false,
 }: VoteProgressBarProps) {
-  const total = votesFor + votesAgainst + votesAbstain;
+  const total = votesFor + votesAgainst;
   const forPct = votePercent(votesFor, total);
   const againstPct = votePercent(votesAgainst, total);
-  const abstainPct = votePercent(votesAbstain, total);
   const quorumPct = Math.min((total / quorumRequired) * 100, 100);
   const quorumReached = total >= quorumRequired;
   const forIsWinning = forPct > 50;
@@ -36,7 +33,7 @@ export default function VoteProgressBar({
       return;
     }
     setTransitionEnabled(true);
-  }, [votesFor, votesAgainst, votesAbstain]);
+  }, [votesFor, votesAgainst]);
 
   const t500 = transitionEnabled ? 'transition-all duration-500 ease-in-out' : '';
   const t700 = transitionEnabled ? 'transition-all duration-700 ease-in-out' : '';
@@ -59,7 +56,6 @@ export default function VoteProgressBar({
         <div className="flex h-2 w-full overflow-hidden rounded-full bg-surface-container-high">
           <div className={`${forBarColor} ${t500}`} style={{ width: `${forPct}%` }} />
           <div className={`bg-red-500 ${t500}`} style={{ width: `${againstPct}%` }} />
-          <div className={`bg-surface-dim ${t500}`} style={{ width: `${abstainPct}%` }} />
         </div>
         <div className="flex items-center justify-between text-[11px] text-on-surface-variant">
           <span className="flex items-center gap-1">
@@ -69,10 +65,6 @@ export default function VoteProgressBar({
           <span className="flex items-center gap-1">
             <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
             {againstPct}% Against
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-2 h-2 rounded-full bg-outline" />
-            {abstainPct}% Abstain
           </span>
         </div>
       </div>
@@ -109,22 +101,6 @@ export default function VoteProgressBar({
           <div
             className={`h-full rounded-full bg-red-500 ${t700}`}
             style={{ width: `${againstPct}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Abstain */}
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-sm font-semibold text-on-surface-variant">Abstain</span>
-          <span className="text-sm text-on-surface-variant">
-            {fmt(votesAbstain)} ILN &middot; {abstainPct}%
-          </span>
-        </div>
-        <div className="h-3 w-full rounded-full bg-surface-container-high overflow-hidden">
-          <div
-            className={`h-full rounded-full bg-outline ${t700}`}
-            style={{ width: `${abstainPct}%` }}
           />
         </div>
       </div>

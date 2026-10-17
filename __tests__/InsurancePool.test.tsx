@@ -1,15 +1,15 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import InsurancePoolPanel from '../components/InsurancePoolPanel';
-import { useInsurance } from '../hooks/useInsurance';
-import { useTransaction } from '../hooks/useTransaction';
-import { useApprovedTokens } from '../hooks/useApprovedTokens';
+import InsurancePoolPanel from '@/components/InsurancePoolPanel';
+import { useInsurance } from '@/hooks/useInsurance';
+import { useTransaction } from '@/hooks/useTransaction';
+import { useApprovedTokens } from '@/hooks/useApprovedTokens';
 
-vi.mock('../hooks/useInsurance');
-vi.mock('../hooks/useTransaction');
-vi.mock('../hooks/useApprovedTokens');
-vi.mock('../context/WalletContext', () => ({
+vi.mock('@/hooks/useInsurance');
+vi.mock('@/hooks/useTransaction');
+vi.mock('@/hooks/useApprovedTokens');
+vi.mock('@/context/WalletContext', () => ({
   useWallet: () => ({
     address: 'GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC6',
   }),
@@ -21,6 +21,8 @@ describe('InsurancePoolPanel', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // The panel renders null unless the insurance pool feature flag is on.
+    vi.stubEnv('NEXT_PUBLIC_INSURANCE_POOL_ENABLED', 'true');
 
     (useInsurance as any).mockReturnValue({
       poolInfo: {
@@ -46,7 +48,7 @@ describe('InsurancePoolPanel', () => {
     render(<InsurancePoolPanel />);
 
     expect(screen.getByText('Default Protection')).toBeInTheDocument();
-    expect(screen.getByText('50,000')).toBeInTheDocument();
+    expect(screen.getByText(/50,000 USDC/)).toBeInTheDocument();
     expect(screen.getByText('12')).toBeInTheDocument();
     expect(screen.getByText('0.5%')).toBeInTheDocument();
     expect(screen.getByText('Not Enrolled')).toBeInTheDocument();

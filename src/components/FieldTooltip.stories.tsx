@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import FieldTooltip from './FieldTooltip';
 
 const meta: Meta<typeof FieldTooltip> = {

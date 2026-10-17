@@ -6,7 +6,7 @@
  * - PartiallyFunded status counting
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildHistoricalVolume, get_contract_stats, TOKEN_COLORS } from '@/utils/contract-stats';
+import { buildHistoricalVolume, get_contract_stats } from '@/utils/contract-stats';
 import type { Invoice } from '@/utils/soroban';
 
 vi.mock('@/constants', () => ({
@@ -27,7 +27,17 @@ vi.mock('@/lib/fetch-protocol-contract-events', () => ({
   fetchProtocolContractEvents: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock('@/utils/governance', () => ({
+  fetchProtocolParameters: vi.fn().mockResolvedValue({
+    feeRateBps: 50,
+    maxDiscountRateBps: 500,
+    acceptedTokens: [],
+    minProposalILN: 500,
+  }),
+}));
+
 import { getAllInvoices } from '@/utils/soroban';
+import { fetchProtocolParameters } from '@/utils/governance';
 
 const XLM = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
 const USDC = 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75';
@@ -145,5 +155,84 @@ describe('buildHistoricalVolume – XLM and unknown token paths', () => {
     const buckets = buildHistoricalVolume(invoices, 7);
     const total = buckets.reduce((acc, b) => acc + b.volume_usd, 0);
     expect(total).toBe(0);
+  });
+
+  it('drops an invoice whose funded_at lands exactly on the cutoff boundary (no matching pre-seeded bucket)', () => {
+    // The bucket map is pre-seeded for `days` calendar days counting back from
+    // "now" (inclusive), i.e. the earliest bucket is `now - (days-1)` days.
+    // `cutoff` itself is `now - days` days, one day earlier than that earliest
+    // bucket. An invoice funded exactly at `cutoff` passes the `ts < cutoff`
+    // filter (it's not less than cutoff) but its date has no pre-seeded
+    // bucket, exercising the `if (!bucket) continue;` branch.
+    const fixedNow = new Date('2026-01-08T00:00:00.000Z').getTime();
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+    try {
+      const days = 7;
+      const cutoffSeconds = Math.floor((fixedNow - days * 24 * 60 * 60 * 1000) / 1000);
+      const invoices: Invoice[] = [
+        makeInvoice({
+          status: 'Funded',
+          amount: 1_000_000n,
+          token: USDC,
+          funded_at: BigInt(cutoffSeconds),
+        }),
+      ];
+      const buckets = buildHistoricalVolume(invoices, days);
+      const totalVolume = buckets.reduce((acc, b) => acc + b.volume_usd, 0);
+      expect(totalVolume).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('get_contract_stats – fetchProtocolParameters failure fallback', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('falls back to feeRateBps 0 when fetchProtocolParameters rejects', async () => {
+    vi.mocked(getAllInvoices).mockResolvedValue([
+      makeInvoice({
+        id: 1n,
+        status: 'Funded',
+        amount: 100_000_000n,
+        discount_rate: 250,
+        funded_at: recentTs,
+      }),
+    ]);
+    vi.mocked(fetchProtocolParameters).mockRejectedValueOnce(new Error('governance RPC down'));
+
+    const stats = await get_contract_stats();
+
+    // The .catch(() => ({ feeRateBps: 0 })) fallback kicks in, so feeBps is 0
+    // and no protocol fees should be accrued for this invoice.
+    expect(stats.feeRateBps).toBe(0);
+    expect(stats.total_protocol_fees_usd).toBe(0);
+    expect(stats.total_funded).toBe(1);
+  });
+
+  it('falls back to feeBps 0 when fetchProtocolParameters resolves without a feeRateBps field', async () => {
+    vi.mocked(getAllInvoices).mockResolvedValue([
+      makeInvoice({
+        id: 1n,
+        status: 'Funded',
+        amount: 100_000_000n,
+        discount_rate: 250,
+        funded_at: recentTs,
+      }),
+    ]);
+    // Resolves successfully (so .catch is not triggered) but with a shape
+    // missing feeRateBps, exercising the `protocolParams.feeRateBps ?? 0`
+    // nullish-coalescing fallback rather than the promise-rejection path.
+    vi.mocked(fetchProtocolParameters).mockResolvedValueOnce({
+      maxDiscountRateBps: 500,
+      acceptedTokens: [],
+      minProposalILN: 500,
+    } as any);
+
+    const stats = await get_contract_stats();
+
+    expect(stats.feeRateBps).toBe(0);
+    expect(stats.total_protocol_fees_usd).toBe(0);
   });
 });

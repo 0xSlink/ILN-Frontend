@@ -13,7 +13,7 @@ concurrency:
 jobs:
   accessibility:
     name: accessibility
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 

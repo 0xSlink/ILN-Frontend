@@ -113,10 +113,10 @@ describe('${componentName}', () => {
   fs.writeFileSync(storyFilePath, storyTemplate, 'utf8');
   fs.writeFileSync(testFilePath, testTemplate, 'utf8');
 
-  console.log(`Successfully scaffolded ${componentName}:`);
-  console.log(`  - Component: ${path.relative(process.cwd(), componentFilePath)}`);
-  console.log(`  - Story:     ${path.relative(process.cwd(), storyFilePath)}`);
-  console.log(`  - Test:      ${path.relative(process.cwd(), testFilePath)}`);
+  console.error(`Successfully scaffolded ${componentName}:`);
+  console.error(`  - Component: ${path.relative(process.cwd(), componentFilePath)}`);
+  console.error(`  - Story:     ${path.relative(process.cwd(), storyFilePath)}`);
+  console.error(`  - Test:      ${path.relative(process.cwd(), testFilePath)}`);
 }
 
 scaffold();

@@ -11,10 +11,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  check-secret:
+    name: Check Chromatic Token
+    runs-on: ubuntu-latest
+    outputs:
+      has_token: ${{ steps.check.outputs.has_token }}
+    steps:
+      - name: Check for CHROMATIC_PROJECT_TOKEN
+        id: check
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+        run: |
+          if [ -n "$CHROMATIC_PROJECT_TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
   chromatic:
-    if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+    needs: check-secret
+    if: needs.check-secret.outputs.has_token == 'true'
     name: Chromatic Visual Regression
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,24 +76,27 @@ jobs:
           retention-days: 7
 
   chromatic-skip-notice:
-    if: ${{ secrets.CHROMATIC_PROJECT_TOKEN == '' }}
+    needs: check-secret
+    if: needs.check-secret.outputs.has_token == 'false'
     name: Chromatic Skip Notice
     runs-on: ubuntu-latest
     steps:
       - name: Generate skip notice
         run: |
-          echo "## Visual Regression Testing Skipped" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Visual regression testing with Chromatic is not available for this run because the required credentials are not configured." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Why is this skipped?" >> $GITHUB_STEP_SUMMARY
-          echo "- Fork PRs do not have access to repository secrets" >> $GITHUB_STEP_SUMMARY
-          echo "- The \`CHROMATIC_PROJECT_TOKEN\` secret is not set in this environment" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### What this means" >> $GITHUB_STEP_SUMMARY
-          echo "- Visual regression tests will run on the main branch and direct PRs from maintainers" >> $GITHUB_STEP_SUMMARY
-          echo "- Your code changes will still be tested by other CI checks (linting, unit tests, E2E tests)" >> $GITHUB_STEP_SUMMARY
-          echo "- A maintainer will review visual changes when merging your PR" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### For maintainers" >> $GITHUB_STEP_SUMMARY
-          echo "To enable Chromatic for this environment, set the \`CHROMATIC_PROJECT_TOKEN\` secret in the repository settings." >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Visual Regression Testing Skipped"
+            echo ""
+            echo "Visual regression testing with Chromatic is not available for this run because the required credentials are not configured."
+            echo ""
+            echo "### Why is this skipped?"
+            echo "- Fork PRs do not have access to repository secrets"
+            echo "- The \`CHROMATIC_PROJECT_TOKEN\` secret is not set in this environment"
+            echo ""
+            echo "### What this means"
+            echo "- Visual regression tests will run on the main branch and direct PRs from maintainers"
+            echo "- Your code changes will still be tested by other CI checks (linting, unit tests, E2E tests)"
+            echo "- A maintainer will review visual changes when merging your PR"
+            echo ""
+            echo "### For maintainers"
+            echo "To enable Chromatic for this environment, set the \`CHROMATIC_PROJECT_TOKEN\` secret in the repository settings."
+          } >> "$GITHUB_STEP_SUMMARY"

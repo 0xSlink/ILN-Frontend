@@ -66,6 +66,13 @@ const VALID_STELLAR_PAYER = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
 const push = vi.fn();
 
+/** Due dates must be in the future and no more than 365 days out. */
+function futureDueDate(daysAhead = 30) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAhead);
+  return date.toISOString().slice(0, 10);
+}
+
 function advanceToReviewAndSubmit() {
   // Step 1 — invoice details
   fireEvent.change(screen.getByPlaceholderText('G...'), {
@@ -75,7 +82,7 @@ function advanceToReviewAndSubmit() {
     target: { value: '5000' },
   });
   fireEvent.change(screen.getByLabelText(/due date/i), {
-    target: { value: '2030-01-01' },
+    target: { value: futureDueDate() },
   });
   fireEvent.click(screen.getByRole('button', { name: /continue/i }));
   // Step 2 — token & rate (defaults are valid)

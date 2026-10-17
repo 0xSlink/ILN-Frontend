@@ -4,6 +4,40 @@ Welcome! This guide takes a new contributor from a fresh clone to a running loca
 
 **Verified against the current repository setup:** Next.js 16.2.4, React 19.2.4, Node 20.9.0, pnpm 9, Husky 9, Supabase-gated reminders, Resend-gated email delivery, and Freighter on Stellar Testnet.
 
+## ⚡ Fastest Option: GitHub Codespaces / Dev Container
+
+The repo ships a fully pre-configured **dev container** (`.devcontainer/devcontainer.json`) that gives you the exact same environment used in CI — Node 20.9.0, pnpm 9.0.0, and all recommended VS Code extensions — with zero local setup.
+
+### Option A — GitHub Codespaces (cloud, browser or VS Code)
+
+1. Click **Code → Codespaces → Create codespace on this branch** on the GitHub repo page.
+2. Wait ~2 minutes for the container to build and `pnpm install` to run automatically.
+3. Run the dev server:
+   ```bash
+   pnpm dev
+   ```
+4. Codespaces will forward port **3000** and prompt you to open it in your browser.
+
+### Option B — VS Code Dev Container (local Docker)
+
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers).
+2. Open the cloned repository in VS Code.
+3. When prompted, click **Reopen in Container** (or run `Dev Containers: Reopen in Container` from the Command Palette).
+4. VS Code will build the image, run `pnpm install`, and forward ports automatically.
+
+### Verify the devcontainer works
+
+Once inside the container, run:
+
+```bash
+pnpm install   # should be instant — already run by postCreateCommand
+pnpm dev       # should start Next.js on http://localhost:3000
+```
+
+Both commands must succeed without errors for the environment to be considered healthy.
+
+---
+
 ## Prerequisites
 
 ### 1. Node.js 20.9.0
@@ -11,7 +45,7 @@ Welcome! This guide takes a new contributor from a fresh clone to a running loca
 The repo pins Node in `.nvmrc` and `package.json` requires Node `>=20.9.0 <21`.
 
 ```bash
-node --version
+node --version   # should print v20.9.0
 ```
 
 Recommended install with `nvm`:
@@ -72,15 +106,15 @@ cp .env.local.example .env.local
 
 The checked-in example contains safe defaults for Stellar Testnet and placeholders for env-gated integrations. Local UI development works with the testnet defaults, but these integrations require real credentials:
 
-| Integration                   | Variables                                                                                                                                                                          | Required when                                                                                                                                |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Supabase browser/client reads | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`                                                                                                                        | Testing notification/reminder persistence against Supabase                                                                                   |
-| Supabase server writes        | `SUPABASE_SERVICE_ROLE_KEY`                                                                                                                                                        | Running reminder cron behavior that bypasses RLS                                                                                             |
-| Resend email delivery         | `RESEND_API_KEY`                                                                                                                                                                   | Sending payer reminder emails                                                                                                                |
-| Protected reminder cron       | `CRON_SECRET`                                                                                                                                                                      | Calling `GET /api/reminders` outside local experiments                                                                                       |
-| GitHub feedback API           | `GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO`                                                                                                                                      | Creating GitHub issues from feedback submissions                                                                                             |
-| WalletConnect                 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`                                                                                                                                             | Testing WalletConnect flows                                                                                                                  |
-| SEP-10 auth                   | `SEP10_SERVER_SECRET_KEY`, `SEP10_HOME_DOMAIN`, `JWT_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_NETWORK_PASSPHRASE`, `NEXT_PUBLIC_SUPABASE_URL` | Running the SEP-10 challenge/verify flow; apply the [SEP-10 challenge migration](../supabase/migrations/002_sep10_auth_challenges.sql) first |
+| Integration                   | Variables                                                                                                                                                                          | Required when                                                                                                                       |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Supabase browser/client reads | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`                                                                                                                        | Testing notification/reminder persistence against Supabase                                                                          |
+| Supabase server writes        | `SUPABASE_SERVICE_ROLE_KEY`                                                                                                                                                        | Running reminder cron behavior that bypasses RLS                                                                                    |
+| Resend email delivery         | `RESEND_API_KEY`                                                                                                                                                                   | Sending payer reminder emails                                                                                                       |
+| Protected reminder cron       | `CRON_SECRET`                                                                                                                                                                      | Calling `GET /api/reminders` outside local experiments                                                                              |
+| GitHub feedback API           | `GITHUB_TOKEN`, `GITHUB_OWNER`, `GITHUB_REPO`                                                                                                                                      | Creating GitHub issues from feedback submissions                                                                                    |
+| WalletConnect                 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`                                                                                                                                             | Testing WalletConnect flows                                                                                                         |
+| SEP-10 auth                   | `SEP10_SERVER_SECRET_KEY`, `SEP10_HOME_DOMAIN`, `JWT_SECRET_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_NETWORK_PASSPHRASE`, `NEXT_PUBLIC_SUPABASE_URL` | Running SEP-10 challenge/verify; apply the [SEP-10 challenge migration](../supabase/migrations/002_sep10_auth_challenges.sql) first |
 
 Use placeholder values only for routes you are not exercising. Never commit `.env.local`.
 

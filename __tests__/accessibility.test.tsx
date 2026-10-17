@@ -57,8 +57,14 @@ vi.mock('@/context/ToastContext', () => ({
 
 vi.mock('@/hooks/useApprovedTokens', () => ({
   useApprovedTokens: vi.fn(() => ({
+    tokens: [],
     tokenMap: new Map([['USDC', { contractId: 'USDC', symbol: 'USDC' }]]),
     defaultToken: { contractId: 'USDC', symbol: 'USDC' },
+    isLoading: false,
+    error: null,
+    validateTokenAddress: vi.fn(() => true),
+    approveToken: vi.fn(),
+    removeToken: vi.fn(),
   })),
 }));
 
@@ -97,6 +103,28 @@ vi.mock('@/hooks/usePayerScores', () => ({
   usePayerScores: vi.fn(() => ({
     scores: new Map(),
     risks: new Map(),
+  })),
+}));
+
+// The global `useQuery` mock (vitest.setup.ts) returns `data: []` for every
+// consumer, which fits list-shaped hooks (useInvoices, etc.) but breaks
+// useContractStats — Stats.tsx expects a single ContractStats object and
+// crashes on `[].total_invoices.toLocaleString()`. Override with an
+// object-shaped mock, matching the real hook's return type.
+vi.mock('@/hooks/useContractStats', () => ({
+  useContractStats: vi.fn(() => ({
+    data: {
+      total_invoices: 0,
+      total_funded: 0,
+      total_paid: 0,
+      total_volume_usd: 0,
+      total_protocol_fees_usd: 0,
+      feeRateBps: 0,
+      volume_by_token: [],
+      daily_volume: [],
+      dispute_rate: { rate30dPercent: 0, funded30d: 0, disputed30d: 0, dailyTrend90d: [] },
+    },
+    isLoading: false,
   })),
 }));
 
@@ -149,10 +177,16 @@ describe('Accessibility checks', () => {
   });
 
   it('Home page should have no accessibility violations', async () => {
+    // Home renders the full page (Navbar, Hero, Stats, PersonalizedDashboard,
+    // Footer, etc.) under the real Providers tree, then axe-scans the whole
+    // thing - the heaviest single case in this suite. The 15s timeout below
+    // matched the older global default but still flaked under the CI/coverage
+    // job's broad `--coverage.include=src/**` instrumentation on
+    // ubuntu-latest. Match the current 30s global testTimeout headroom.
     const { container } = render(<HomePage />, { wrapper: TestWrapper });
     const results = await axe(container, axeConfig);
     expect(results).toHaveNoViolations();
-  });
+  }, 30000);
 
   it('Invoice detail page should have no accessibility violations', async () => {
     const params = Promise.resolve({ id: '1' }) as any;

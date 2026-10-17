@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import InvoicePdfButton from './InvoicePdfButton';
 
 const meta: Meta<typeof InvoicePdfButton> = {

@@ -3,7 +3,6 @@ import React, { useEffect, useState } from 'react';
 interface VotingProgressBarProps {
   for: number;
   against: number;
-  abstain: number;
   quorum: number;
   totalEligible: number;
 }
@@ -11,7 +10,6 @@ interface VotingProgressBarProps {
 export default function VotingProgressBar({
   for: forVotes,
   against,
-  abstain,
   quorum,
   totalEligible,
 }: VotingProgressBarProps) {
@@ -22,7 +20,7 @@ export default function VotingProgressBar({
     setMounted(true);
   }, []);
 
-  const totalVotesCast = forVotes + against + abstain;
+  const totalVotesCast = forVotes + against;
 
   // Percentages relative to total votes cast for the bar segments
   const getPercentage = (count: number) => {
@@ -32,7 +30,6 @@ export default function VotingProgressBar({
 
   const forPct = getPercentage(forVotes);
   const againstPct = getPercentage(against);
-  const abstainPct = getPercentage(abstain);
 
   // Quorum position relative to total eligible
   const quorumThresholdPct = (quorum / totalEligible) * 100;
@@ -49,15 +46,6 @@ export default function VotingProgressBar({
           <span className="text-sm font-bold text-on-surface">
             {forVotes.toLocaleString()}{' '}
             <span className="text-on-surface-variant font-medium">({forPct.toFixed(1)}%)</span>
-          </span>
-        </div>
-        <div className="flex flex-col items-center">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
-            Abstain
-          </span>
-          <span className="text-sm font-bold text-on-surface">
-            {abstain.toLocaleString()}{' '}
-            <span className="text-on-surface-variant font-medium">({abstainPct.toFixed(1)}%)</span>
           </span>
         </div>
         <div className="flex flex-col items-end">
@@ -77,11 +65,6 @@ export default function VotingProgressBar({
         <div
           className="h-full bg-primary transition-[width] duration-500 ease-out first:rounded-l-full last:rounded-r-full"
           style={{ width: mounted ? `${forPct}%` : '0%' }}
-        />
-        {/* Abstain Segment */}
-        <div
-          className="h-full bg-outline-variant/50 transition-[width] duration-500 ease-out first:rounded-l-full last:rounded-r-full"
-          style={{ width: mounted ? `${abstainPct}%` : '0%' }}
         />
         {/* Against Segment */}
         <div

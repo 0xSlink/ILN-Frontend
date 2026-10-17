@@ -13,7 +13,11 @@ export default function AppToaster() {
       richColors
       expand={false}
       gap={8}
-      // Accessibility - Sonner handles ARIA attributes internally
+      // Sonner handles ARIA attributes on individual toasts internally, but
+      // its default container label ("Notifications") is generic enough to
+      // be ambiguous next to the app's own Notification Bell panel - give
+      // the toast queue landmark its own distinct, meaningful name.
+      containerAriaLabel="Toast notifications"
       toastOptions={{
         classNames: {
           toast: 'font-sans',

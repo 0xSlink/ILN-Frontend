@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import TokenAllowlistPanel from './TokenAllowlistPanel';
 
 const meta: Meta<typeof TokenAllowlistPanel> = {

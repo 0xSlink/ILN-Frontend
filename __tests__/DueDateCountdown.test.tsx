@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import DueDateCountdown from '../components/DueDateCountdown';
+import DueDateCountdown from '@/components/DueDateCountdown';
 
 describe('DueDateCountdown', () => {
   beforeEach(() => {
@@ -22,13 +22,13 @@ describe('DueDateCountdown', () => {
   };
 
   describe('Time formatting and threshold logic', () => {
-    it("displays '> 7 days' format with default color for dates more than 7 days away", () => {
+    it("displays '> 7 days' format in green for dates more than 7 days away", () => {
       // 10 days in the future = 10 * 24 * 60 * 60 = 864000 seconds
       renderComponent(864000);
 
       const countdown = screen.getByRole('button', { name: /Due date:/i });
       expect(countdown).toHaveTextContent('10d 0h');
-      expect(countdown).toHaveClass('text-on-surface');
+      expect(countdown).toHaveClass('text-green-500');
       expect(countdown).not.toHaveClass('animate-pulse-fast');
     });
 
@@ -92,23 +92,23 @@ describe('DueDateCountdown', () => {
       expect(countdown).toHaveClass('animate-pulse-fast');
     });
 
-    it('displays overdue format with red text and no pulse', () => {
+    it('displays an "Expired" pill when overdue, with no pulse', () => {
       // 2 days overdue = -2 * 24 * 60 * 60 = -172800 seconds
       renderComponent(-172800);
 
       const countdown = screen.getByRole('button', { name: /Due date:/i });
-      expect(countdown).toHaveTextContent('Overdue by 2d 0h');
-      expect(countdown).toHaveClass('text-red-500');
+      expect(countdown).toHaveTextContent('Expired');
+      expect(countdown).toHaveClass('text-gray-600');
       expect(countdown).not.toHaveClass('animate-pulse-fast');
     });
 
-    it('displays overdue with hours component', () => {
+    it('displays "Expired" regardless of how long ago the due date passed', () => {
       // 1 day 5 hours overdue = -(24 + 5) * 60 * 60 = -104400 seconds
       renderComponent(-104400);
 
       const countdown = screen.getByRole('button', { name: /Due date:/i });
-      expect(countdown).toHaveTextContent('Overdue by 1d 5h');
-      expect(countdown).toHaveClass('text-red-500');
+      expect(countdown).toHaveTextContent('Expired');
+      expect(countdown).toHaveClass('text-gray-600');
       expect(countdown).not.toHaveClass('animate-pulse-fast');
     });
   });
@@ -264,8 +264,8 @@ describe('DueDateCountdown', () => {
         vi.advanceTimersByTime(31 * 60 * 1000);
       });
 
-      expect(countdown).toHaveTextContent('Overdue by 0d 0h');
-      expect(countdown).toHaveClass('text-red-500');
+      expect(countdown).toHaveTextContent('Expired');
+      expect(countdown).toHaveClass('text-gray-600');
       expect(countdown).not.toHaveClass('animate-pulse-fast');
     });
 
@@ -301,7 +301,7 @@ describe('DueDateCountdown', () => {
 
       const countdown = screen.getByRole('button', { name: /Due date:/i });
       expect(countdown).toHaveTextContent('365d 0h');
-      expect(countdown).toHaveClass('text-on-surface');
+      expect(countdown).toHaveClass('text-green-500');
     });
 
     it('handles minutes display correctly for < 1 hour', () => {

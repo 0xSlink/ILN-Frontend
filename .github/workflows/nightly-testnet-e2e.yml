@@ -41,6 +41,12 @@ jobs:
           NEXT_PUBLIC_API_MOCKING: disabled
         run: pnpm exec playwright test e2e/testnet-smoke.spec.ts --project=mobile-375
 
+      - name: Run live testnet governance vote journey
+        env:
+          PLAYWRIGHT_BASE_URL: https://invoice-liquidity-network.vercel.app
+          NEXT_PUBLIC_API_MOCKING: disabled
+        run: pnpm exec playwright test e2e/governance-live.spec.ts --project=mobile-375
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4

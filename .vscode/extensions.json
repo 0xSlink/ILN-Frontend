@@ -1,3 +1,13 @@
 {
-  "recommendations": ["openai.chatgpt"]
+  "recommendations": [
+    "openai.chatgpt",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "bradlc.vscode-tailwindcss",
+    "ms-vscode.vscode-typescript-next",
+    "mikestead.dotenv",
+    "streetsidesoftware.code-spell-checker",
+    "github.vscode-pull-request-github",
+    "EditorConfig.EditorConfig"
+  ]
 }

@@ -59,7 +59,7 @@ export default function BulkActionBar({
         message: `Exported ${selectedInvoices.length} invoices to CSV.`,
       });
       onClearSelection();
-    } catch (err) {
+    } catch {
       addToast({
         type: 'error',
         title: 'Export failed',

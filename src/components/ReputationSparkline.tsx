@@ -83,7 +83,7 @@ export default function ReputationSparkline({
             <XAxis dataKey="label" hide />
             <Tooltip
               formatter={(value: any) => [`${value}/100`, 'Score']}
-              labelFormatter={(label: string, items: any) => {
+              labelFormatter={(label: string, _items: any) => {
                 return label;
               }}
             />

@@ -39,15 +39,19 @@ export default function Navbar() {
     { href: '/dashboard', label: t('nav.dashboard') },
     { href: '/analytics', label: t('nav.analytics') },
     { href: '/stats', label: t('nav.stats') },
+    { href: '/leaderboard', label: t('nav.leaderboard') },
     { href: '/referrals', label: 'Referrals' },
   ];
 
   return (
-    <nav className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-outline-variant/15 shadow-sm h-20 transition-colors duration-300">
+    <nav
+      aria-label={t('nav.mainNavigation')}
+      className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-md border-b border-outline-variant/15 shadow-sm h-20 transition-colors duration-300"
+    >
       <div className="flex justify-between items-center px-8 h-full max-w-7xl mx-auto">
         <Link
           href="/"
-          className="flex min-h-[44px] min-w-[44px] items-center justify-center text-2xl font-bold text-primary tracking-tight hover:opacity-80 transition-opacity"
+          className="flex min-h-[44px] min-w-[44px] items-center justify-center text-2xl font-bold text-primary tracking-tight transition-opacity hover:opacity-80"
         >
           ILN
         </Link>
@@ -96,6 +100,12 @@ export default function Navbar() {
             href="/stats"
           >
             {t('nav.stats')}
+          </Link>
+          <Link
+            className="text-on-surface-variant hover:text-primary transition-colors duration-200 text-sm font-medium"
+            href="/leaderboard"
+          >
+            {t('nav.leaderboard')}
           </Link>
           {/* <a
             className="text-on-surface-variant hover:text-primary transition-colors duration-200 text-sm font-medium"
@@ -165,7 +175,8 @@ export default function Navbar() {
             </span>
           </button>
 
-          <div className="hidden sm:block">
+          <div className="hidden sm:flex sm:items-center sm:gap-4">
+            <span className="h-6 w-px bg-outline-variant/20" aria-hidden="true" />
             <WalletButton />
           </div>
         </div>

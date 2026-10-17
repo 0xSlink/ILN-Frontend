@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import InvoiceFilterBar from './InvoiceFilterBar';
 
 const meta: Meta<typeof InvoiceFilterBar> = {

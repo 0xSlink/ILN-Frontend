@@ -22,7 +22,7 @@ vi.mock('@/utils/federation', () => ({
 import WalletAddress from '../WalletAddress';
 
 const FULL_ADDRESS = 'GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC6';
-const SHORT_ADDRESS = 'GCCCCC...CCC6';
+const SHORT_ADDRESS = 'GCCC...CCC6';
 
 describe('WalletAddress', () => {
   beforeEach(() => {

@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 
@@ -92,7 +91,7 @@ export default function GovernanceHowItWorksPage() {
       title: 'Voting & Participation',
       icon: 'ballot',
       description:
-        "One ILN equals one vote. You can vote 'For', 'Against', or 'Abstain'. Your tokens are not locked during voting; your voting power is calculated based on your balance at the time the proposal was created.",
+        "One ILN equals one vote. You can vote 'For' or 'Against'. Your tokens are not locked during voting; your voting power is calculated based on your balance at the time the proposal was created.",
     },
     {
       title: 'Quorum & Thresholds',
@@ -211,8 +210,6 @@ export default function GovernanceHowItWorksPage() {
           </div>
         </div>
       </section>
-
-      <Footer />
     </main>
   );
 }

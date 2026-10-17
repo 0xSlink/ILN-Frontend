@@ -13,7 +13,8 @@
  */
 import { render } from '@testing-library/react';
 import { axe } from 'jest-axe';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
+import Link from 'next/link';
 
 // Mock the profile page component
 const MockProfilePage = () => {
@@ -96,9 +97,9 @@ const MockProfilePage = () => {
                   <time dateTime="2026-05-28">May 28, 2026</time>
                 </td>
                 <td>
-                  <a href="/i/123" aria-describedby="invoice-123-desc">
+                  <Link href="/i/123" aria-describedby="invoice-123-desc">
                     #123
-                  </a>
+                  </Link>
                   <span id="invoice-123-desc" className="sr-only">
                     Invoice for web development services
                   </span>

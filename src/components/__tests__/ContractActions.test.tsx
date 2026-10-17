@@ -21,7 +21,7 @@ describe('ContractActions', () => {
       </ToastProvider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Simulate Transaction' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Simulate Transaction' })[0]);
 
     expect(screen.getByRole('status', { name: 'Transaction status' })).toHaveTextContent(
       'Preparing transaction'
@@ -29,7 +29,7 @@ describe('ContractActions', () => {
     expect(screen.getByRole('button', { name: 'Preparing transaction' })).toBeDisabled();
 
     await act(async () => {
-      vi.advanceTimersByTime(650);
+      await vi.advanceTimersByTimeAsync(650);
     });
 
     expect(screen.getByRole('status', { name: 'Transaction status' })).toHaveTextContent(
@@ -37,7 +37,7 @@ describe('ContractActions', () => {
     );
 
     await act(async () => {
-      vi.advanceTimersByTime(650 * 3);
+      await vi.advanceTimersByTimeAsync(650 * 3);
     });
 
     expect(screen.getByRole('status', { name: 'Transaction status' })).toHaveTextContent(
@@ -57,10 +57,10 @@ describe('ContractActions', () => {
       </ToastProvider>
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Simulate Transaction' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Simulate Transaction' })[0]);
 
     await act(async () => {
-      vi.advanceTimersByTime(650 * 4);
+      await vi.advanceTimersByTimeAsync(650 * 4);
     });
 
     expect(screen.getByRole('status', { name: 'Transaction status' })).toHaveTextContent(

@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { fetchProtocolParameters } from '@/utils/governance';
-import { Invoice, TokenMetadata, getTokenAllowance, getUsdcAllowance } from '@/utils/soroban';
-import { CONTRACT_ID } from '@/constants';
+import { Invoice, TokenMetadata, getTokenAllowance } from '@/utils/soroban';
 import { formatTokenAmount, formatAddress } from '@/utils/format';
 import { TokenIcon } from './TokenSelector';
 
@@ -115,13 +114,21 @@ export default function PayerSettlementModal({
               <div className="flex bg-surface-container-high p-1 rounded-lg">
                 <button
                   onClick={() => setPayFull(true)}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${payFull ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                    payFull
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
                 >
                   Full Amount
                 </button>
                 <button
                   onClick={() => setPayFull(false)}
-                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${!payFull ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}`}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${
+                    !payFull
+                      ? 'bg-primary text-white shadow-sm'
+                      : 'text-on-surface-variant hover:text-on-surface'
+                  }`}
                 >
                   Partial
                 </button>

@@ -3,7 +3,6 @@
 import { use, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 import ActivityFeed from '@/components/ActivityFeed';
 import CancelInvoiceButton from '@/components/CancelInvoiceButton';
 import DynamicInvoicePdfButton from '@/components/DynamicInvoicePdfButton';
@@ -220,7 +219,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             submitterAddress={invoice.freelancer}
             currentWallet={address ?? undefined}
             status={invoice.status}
-            whitelist={(invoice as any).whitelist || []}
+            whitelist={invoice.whitelist || []}
           />
 
           <ActivityFeed invoiceId={invoiceId} />
@@ -256,7 +255,6 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           }}
         />
       ) : null}
-      <Footer />
     </main>
   );
 }

@@ -14,7 +14,7 @@ describe('OfflinePage', () => {
       value: false,
     });
     render(<OfflinePage />);
-    expect(screen.getByText(/offline|connection/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /you're offline/i })).toBeInTheDocument();
   });
 
   it('displays offline icon when offline', async () => {
@@ -24,7 +24,7 @@ describe('OfflinePage', () => {
     });
     render(<OfflinePage />);
     await waitFor(() => {
-      const heading = screen.getByText(/you're offline|offline/i);
+      const heading = screen.getByRole('heading', { name: /you're offline/i });
       expect(heading).toBeInTheDocument();
     });
   });
@@ -36,10 +36,8 @@ describe('OfflinePage', () => {
     });
     render(<OfflinePage />);
     await waitFor(() => {
-      const heading = screen.getByText(/connection restored|online/i);
-      if (heading) {
-        expect(heading).toBeInTheDocument();
-      }
+      const heading = screen.getByRole('heading', { name: /connection restored/i });
+      expect(heading).toBeInTheDocument();
     });
   });
 
@@ -51,7 +49,8 @@ describe('OfflinePage', () => {
     render(<OfflinePage />);
     await waitFor(() => {
       expect(screen.getByText(/available offline/i)).toBeInTheDocument();
-      expect(screen.getByText(/cached invoices/i)).toBeInTheDocument();
+      // "cached invoices" appears both in the intro copy and in the list.
+      expect(screen.getAllByText(/cached invoices/i).length).toBeGreaterThan(0);
     });
   });
 
@@ -97,7 +96,7 @@ describe('OfflinePage', () => {
     });
     render(<OfflinePage />);
     await waitFor(() => {
-      expect(screen.getByText(/offline/i)).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /you're offline/i })).toBeInTheDocument();
     });
 
     Object.defineProperty(navigator, 'onLine', {
@@ -107,10 +106,7 @@ describe('OfflinePage', () => {
     fireEvent(window, new Event('online'));
 
     await waitFor(() => {
-      const heading = screen.queryByText(/connection restored|online/i);
-      if (heading) {
-        expect(heading).toBeInTheDocument();
-      }
+      expect(screen.getByRole('heading', { name: /connection restored/i })).toBeInTheDocument();
     });
   });
 
@@ -121,10 +117,7 @@ describe('OfflinePage', () => {
     });
     render(<OfflinePage />);
     await waitFor(() => {
-      const heading = screen.queryByText(/connection restored/i);
-      if (heading) {
-        expect(heading).toBeInTheDocument();
-      }
+      expect(screen.getByRole('heading', { name: /connection restored/i })).toBeInTheDocument();
     });
 
     Object.defineProperty(navigator, 'onLine', {
@@ -134,10 +127,7 @@ describe('OfflinePage', () => {
     fireEvent(window, new Event('offline'));
 
     await waitFor(() => {
-      const offlineHeading = screen.queryByText(/you're offline/i);
-      if (offlineHeading) {
-        expect(offlineHeading).toBeInTheDocument();
-      }
+      expect(screen.getByRole('heading', { name: /you're offline/i })).toBeInTheDocument();
     });
   });
 

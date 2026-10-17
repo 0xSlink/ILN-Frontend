@@ -8,19 +8,34 @@ import { useInvoices } from '@/hooks/useInvoices';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
-vi.mock('../../../context/WalletContext', () => ({
+vi.mock('@/context/WalletContext', () => ({
   useWallet: vi.fn(),
 }));
 
-vi.mock('../../../context/ToastContext', () => ({
+// Rendered subtrees pull in the notification bell/drawer, which require the
+// NotificationProvider.
+vi.mock('@/context/NotificationContext', () => ({
+  useNotification: () => ({
+    notifications: [],
+    unreadCount: 0,
+    setNotifications: vi.fn(),
+    addNotification: vi.fn(),
+    markAsRead: vi.fn(),
+    markAllAsRead: vi.fn(),
+    clearUnread: vi.fn(),
+    isRead: vi.fn(() => true),
+  }),
+}));
+
+vi.mock('@/context/ToastContext', () => ({
   useToast: vi.fn(),
 }));
 
-vi.mock('../../../hooks/useInvoices', () => ({
+vi.mock('@/hooks/useInvoices', () => ({
   useInvoices: vi.fn(),
 }));
 
-vi.mock('../../../utils/soroban', () => ({
+vi.mock('@/utils/soroban', () => ({
   cancelInvoice: vi.fn(),
   submitSignedTransaction: vi.fn(),
 }));
@@ -46,7 +61,7 @@ describe('Freelancer Dashboard Bulk Actions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    (useToast as any).mockReturnValue({ addToast: mockAddToast });
+    (useToast as any).mockReturnValue({ addToast: mockAddToast, updateToast: vi.fn() });
     (useWallet as any).mockReturnValue({
       address: FREELANCER_ADDR,
       isConnected: true,

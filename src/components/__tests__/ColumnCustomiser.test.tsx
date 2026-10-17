@@ -1,62 +1,102 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import ColumnCustomiser, { ColumnConfig } from '../ColumnCustomiser';
 import React from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import ColumnCustomiser, { type ColumnConfig } from '../ColumnCustomiser';
 
-const mockColumns: ColumnConfig[] = [
+const allColumns: ColumnConfig[] = [
   { id: 'id', label: 'ID', isMandatory: true },
   { id: 'amount', label: 'Amount' },
-  { id: 'date', label: 'Date' },
+  { id: 'status', label: 'Status' },
 ];
 
+const baseProps = {
+  allColumns,
+  visibleColumns: ['id', 'amount'],
+  columnOrder: ['id', 'amount', 'status'],
+  onVisibilityChange: vi.fn(),
+  onOrderChange: vi.fn(),
+  onReset: vi.fn(),
+};
+
 describe('ColumnCustomiser', () => {
-  const defaultProps = {
-    allColumns: mockColumns,
-    visibleColumns: ['id', 'amount'],
-    columnOrder: ['id', 'amount', 'date'],
-    onVisibilityChange: vi.fn(),
-    onOrderChange: vi.fn(),
-    onReset: vi.fn(),
-  };
-
-  it('renders the columns button', () => {
-    render(<ColumnCustomiser {...defaultProps} />);
-    expect(screen.getByText(/Columns/i)).toBeInTheDocument();
+  it('is closed by default', () => {
+    render(<ColumnCustomiser {...baseProps} />);
+    expect(screen.queryByText('Table Columns')).not.toBeInTheDocument();
   });
 
-  it('opens the dropdown on click', () => {
-    render(<ColumnCustomiser {...defaultProps} />);
-    fireEvent.click(screen.getByText(/Columns/i));
-    expect(screen.getByText(/Table Columns/i)).toBeInTheDocument();
-    expect(screen.getByText(/Amount/i)).toBeInTheDocument();
+  it('opens the dropdown and lists columns in order', () => {
+    render(<ColumnCustomiser {...baseProps} />);
+    fireEvent.click(screen.getByText('Columns'));
+    const labels = screen.getAllByText(/^(ID|Amount|Status)$/).map((el) => el.textContent);
+    expect(labels).toEqual(['ID', 'Amount', 'Status']);
   });
 
-  it('cannot toggle mandatory columns', () => {
-    render(<ColumnCustomiser {...defaultProps} />);
-    fireEvent.click(screen.getByText(/Columns/i));
-
-    // Find the ID checkbox
-    const idRow = screen.getByText('ID').closest('div');
-    const checkbox = idRow?.querySelector('input[type="checkbox"]');
-    expect(checkbox).toBeDisabled();
+  it('reflects visibility state via checkboxes and disables mandatory columns', () => {
+    render(<ColumnCustomiser {...baseProps} />);
+    fireEvent.click(screen.getByText('Columns'));
+    const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[];
+    expect(checkboxes[0].checked).toBe(true);
+    expect(checkboxes[0].disabled).toBe(true);
+    expect(checkboxes[2].checked).toBe(false);
   });
 
-  it('calls onVisibilityChange when a non-mandatory column is toggled', () => {
-    render(<ColumnCustomiser {...defaultProps} />);
-    fireEvent.click(screen.getByText(/Columns/i));
-
-    const amountRow = screen.getByText('Amount').closest('label');
-    const checkbox = amountRow?.querySelector('input[type="checkbox"]');
-    if (checkbox) fireEvent.click(checkbox);
-
-    expect(defaultProps.onVisibilityChange).toHaveBeenCalledWith('amount', false);
+  it('toggles a non-mandatory column visibility', () => {
+    const onVisibilityChange = vi.fn();
+    render(<ColumnCustomiser {...baseProps} onVisibilityChange={onVisibilityChange} />);
+    fireEvent.click(screen.getByText('Columns'));
+    fireEvent.click(screen.getAllByRole('checkbox')[1]);
+    expect(onVisibilityChange).toHaveBeenCalledWith('amount', false);
   });
 
-  it('calls onReset when reset button is clicked', () => {
-    render(<ColumnCustomiser {...defaultProps} />);
-    fireEvent.click(screen.getByText(/Columns/i));
+  it('calls onReset', () => {
+    const onReset = vi.fn();
+    render(<ColumnCustomiser {...baseProps} onReset={onReset} />);
+    fireEvent.click(screen.getByText('Columns'));
+    fireEvent.click(screen.getByText('Reset to Default'));
+    expect(onReset).toHaveBeenCalled();
+  });
 
-    fireEvent.click(screen.getByText(/Reset to Default/i));
-    expect(defaultProps.onReset).toHaveBeenCalled();
+  it('reorders columns via drag-and-drop', () => {
+    const onOrderChange = vi.fn();
+    render(<ColumnCustomiser {...baseProps} onOrderChange={onOrderChange} />);
+    fireEvent.click(screen.getByText('Columns'));
+    const items = document.querySelectorAll('[draggable="true"]');
+    const dataTransfer = { effectAllowed: '' };
+
+    fireEvent.dragStart(items[0], { dataTransfer });
+    fireEvent.dragOver(items[2], { dataTransfer });
+    expect(onOrderChange).toHaveBeenCalledWith(['amount', 'status', 'id']);
+
+    fireEvent.dragEnd(items[2], { dataTransfer });
+  });
+
+  it('does not reorder when dragging over the same item', () => {
+    const onOrderChange = vi.fn();
+    render(<ColumnCustomiser {...baseProps} onOrderChange={onOrderChange} />);
+    fireEvent.click(screen.getByText('Columns'));
+    const items = document.querySelectorAll('[draggable="true"]');
+    const dataTransfer = { effectAllowed: '' };
+    fireEvent.dragStart(items[0], { dataTransfer });
+    fireEvent.dragOver(items[0], { dataTransfer });
+    expect(onOrderChange).not.toHaveBeenCalled();
+  });
+
+  it('closes when clicking outside', () => {
+    render(
+      <div>
+        <ColumnCustomiser {...baseProps} />
+        <button>outside</button>
+      </div>
+    );
+    fireEvent.click(screen.getByText('Columns'));
+    expect(screen.getByText('Table Columns')).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByText('outside'));
+    expect(screen.queryByText('Table Columns')).not.toBeInTheDocument();
+  });
+
+  it('skips rendering a column id that is not found in allColumns', () => {
+    render(<ColumnCustomiser {...baseProps} columnOrder={['id', 'amount', 'status', 'ghost']} />);
+    fireEvent.click(screen.getByText('Columns'));
+    expect(screen.queryByText('ghost')).not.toBeInTheDocument();
   });
 });

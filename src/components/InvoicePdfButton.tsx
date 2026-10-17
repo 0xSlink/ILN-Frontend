@@ -139,7 +139,9 @@ export default function InvoicePdfButton({ invoice, data, baseUrl }: InvoicePdfB
                 <span className="flex items-center justify-between font-bold text-on-surface-variant">
                   <span>Notes</span>
                   <span
-                    className={`text-xs font-normal ${notesLen > 1000 ? 'text-error' : 'text-on-surface-variant'}`}
+                    className={`text-xs font-normal ${
+                      notesLen > 1000 ? 'text-error' : 'text-on-surface-variant'
+                    }`}
                   >
                     {notesLen}/1000
                   </span>

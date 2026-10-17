@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { connectHorizonTransactionStream } from '@/lib/horizon-stream';
 import { connectIndexerWebSocket } from '@/lib/indexer-websocket';
+import { journeyRecovery } from '@/lib/journey-recovery-slos';
 import { applyContractEventToInvoices, type ParsedContractEvent } from '@/lib/contract-events';
 import {
   isContractEventStreamingActive,
@@ -42,52 +43,12 @@ export function useContractEvents(enabled = true) {
   const wsHandleRef = useRef<ReturnType<typeof connectIndexerWebSocket> | null>(null);
   const horizonHandleRef = useRef<ReturnType<typeof connectHorizonTransactionStream> | null>(null);
 
-  const connectWebSocket = useCallback(() => {
-    setConnectionType('websocket');
-
-    const handle = connectIndexerWebSocket({
-      onEvent: (event) => {
-        patchInvoiceQueries(queryClient, event);
-        setError(null);
-        setRetryCount(0);
-      },
-      onStatusChange: (status) => {
-        setContractEventStreamingActive(status === 'connected');
-        if (status === 'error' || status === 'disconnected') {
-          if (process.env.NODE_ENV === 'development') {
-            console.error(`[ContractEventSync] WebSocket failed, falling back to polling`);
-          }
-          setError('WebSocket connection failed. Falling back to polling.');
-          setConnectionType('polling');
-          wsHandleRef.current?.close();
-          wsHandleRef.current = null;
-          horizonHandleRef.current = connectHorizonTransactionStream({
-            onEvent: (event) => {
-              patchInvoiceQueries(queryClient, event);
-              setError(null);
-              setRetryCount(0);
-            },
-            onStatusChange: (status) => {
-              setContractEventStreamingActive(status === 'connected');
-              if (status === 'disconnected') {
-                if (process.env.NODE_ENV === 'development') {
-                  console.error('[ContractEventSync] Polling connection failed.');
-                }
-                setError('Connection failed. Please refresh manually.');
-              }
-            },
-          });
-        }
-      },
-      maxReconnectAttempts: 3,
-    });
-
-    return handle;
-  }, [queryClient]);
-
   const connectPolling = useCallback(
-    (attempt: number) => {
+    function connectPollingAttempt(attempt: number) {
       setConnectionType('polling');
+      // Set once this stream has failed and been handed to the retry below;
+      // anything it reports afterwards is stale.
+      let retired = false;
       const handle = connectHorizonTransactionStream({
         onEvent: (event) => {
           patchInvoiceQueries(queryClient, event);
@@ -95,18 +56,37 @@ export function useContractEvents(enabled = true) {
           setRetryCount(0);
         },
         onStatusChange: (status) => {
+          if (retired) return;
           setContractEventStreamingActive(status === 'connected');
-          if (status === 'error' || status === 'disconnected') {
+          if (status === 'connected') {
+            setError(null);
+            setRetryCount(0);
+            // The RPC data plane is serving again — close any outage window (#1160).
+            journeyRecovery.markRecovered('rpc');
+            journeyRecovery.markRecovered('indexer');
+          } else if (status === 'error' || status === 'disconnected') {
+            journeyRecovery.markInterruption('rpc', 'horizon_stream');
+            // Close the failed stream so its own reconnect loop cannot run
+            // alongside this retry. Left open, every disconnect it reports
+            // spawns another stream, and a multi-service outage fans out into
+            // a reconnect storm.
+            retired = true;
+            horizonHandleRef.current?.close();
+            horizonHandleRef.current = null;
             if (attempt < MAX_RETRIES) {
               const delay = BASE_DELAY_MS * Math.pow(2, attempt);
               if (process.env.NODE_ENV === 'development') {
                 console.error(
-                  `[ContractEventSync] Connection failed. Retry ${attempt + 1}/${MAX_RETRIES} in ${delay}ms`
+                  `[ContractEventSync] Connection failed. Retry ${
+                    attempt + 1
+                  }/${MAX_RETRIES} in ${delay}ms`
                 );
               }
               setError(`Connection lost. Retrying... (${attempt + 1}/${MAX_RETRIES})`);
               setRetryCount(attempt + 1);
-              retryTimeout.current = setTimeout(() => connectPolling(attempt + 1), delay);
+              retryTimeout.current = setTimeout(() => {
+                horizonHandleRef.current = connectPollingAttempt(attempt + 1);
+              }, delay);
             } else {
               setError('Failed to connect after 3 attempts. Please refresh manually.');
               if (process.env.NODE_ENV === 'development') {
@@ -120,6 +100,42 @@ export function useContractEvents(enabled = true) {
     },
     [queryClient]
   );
+
+  const connectWebSocket = useCallback(() => {
+    setConnectionType('websocket');
+    // A failing socket can report both `disconnected` and `error`; fall back to
+    // Horizon only once so a single outage never opens duplicate streams.
+    let fellBack = false;
+
+    const handle = connectIndexerWebSocket({
+      onEvent: (event) => {
+        patchInvoiceQueries(queryClient, event);
+        setError(null);
+        setRetryCount(0);
+      },
+      onStatusChange: (status) => {
+        if (fellBack) return;
+        setContractEventStreamingActive(status === 'connected');
+        if (status === 'connected') {
+          // The indexer stream is live again — close any outage window (#1160).
+          journeyRecovery.markRecovered('indexer');
+        } else if (status === 'error' || status === 'disconnected') {
+          fellBack = true;
+          journeyRecovery.markInterruption('indexer', 'websocket');
+          if (process.env.NODE_ENV === 'development') {
+            console.error(`[ContractEventSync] WebSocket failed, falling back to polling`);
+          }
+          setError('WebSocket connection failed. Falling back to polling.');
+          wsHandleRef.current?.close();
+          wsHandleRef.current = null;
+          horizonHandleRef.current = connectPolling(0);
+        }
+      },
+      maxReconnectAttempts: 3,
+    });
+
+    return handle;
+  }, [queryClient, connectPolling]);
 
   useEffect(() => {
     if (!enabled) {

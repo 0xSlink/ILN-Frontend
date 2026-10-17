@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scoreToRiskLevel, RISK_SORT_ORDER, RiskLevel } from '../utils/risk';
+import { scoreToRiskLevel, RISK_SORT_ORDER, RiskLevel } from '@/utils/risk';
 
 describe('scoreToRiskLevel', () => {
   it('returns Low for score 70–100', () => {

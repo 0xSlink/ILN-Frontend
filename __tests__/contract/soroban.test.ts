@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Contract integration tests for src/utils/soroban.ts
  * Mocks @stellar/stellar-sdk to avoid real blockchain dependency.

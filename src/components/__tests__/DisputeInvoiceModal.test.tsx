@@ -69,9 +69,7 @@ describe('DisputeInvoiceModal', () => {
 
   it('enables submit button when evidence is provided', async () => {
     render(<DisputeInvoiceModal invoice={mockInvoice} onClose={vi.fn()} onSuccess={vi.fn()} />);
-    const evidenceInput =
-      screen.getByPlaceholderText(/evidence|dispute|reason/i) ||
-      screen.getByLabelText(/evidence|reason/i);
+    const evidenceInput = screen.getByLabelText(/evidence description/i);
     if (evidenceInput) {
       fireEvent.change(evidenceInput, { target: { value: 'This invoice is incorrect' } });
       await waitFor(() => {
@@ -90,9 +88,7 @@ describe('DisputeInvoiceModal', () => {
 
     render(<DisputeInvoiceModal invoice={mockInvoice} onClose={vi.fn()} onSuccess={vi.fn()} />);
 
-    const evidenceInput =
-      screen.getByPlaceholderText(/evidence|dispute|reason/i) ||
-      screen.getByLabelText(/evidence|reason/i);
+    const evidenceInput = screen.getByLabelText(/evidence description/i);
     if (evidenceInput) {
       fireEvent.change(evidenceInput, { target: { value: 'Incorrect invoice' } });
       const submitButton = screen.queryByRole('button', { name: /submit|raise/i });
@@ -112,9 +108,7 @@ describe('DisputeInvoiceModal', () => {
 
     render(<DisputeInvoiceModal invoice={mockInvoice} onClose={vi.fn()} onSuccess={vi.fn()} />);
 
-    const evidenceInput =
-      screen.getByPlaceholderText(/evidence|dispute|reason/i) ||
-      screen.getByLabelText(/evidence|reason/i);
+    const evidenceInput = screen.getByLabelText(/evidence description/i);
     if (evidenceInput) {
       fireEvent.change(evidenceInput, { target: { value: 'Invoice issue' } });
       const submitButton = screen.queryByRole('button', { name: /submit|raise/i });
@@ -136,9 +130,7 @@ describe('DisputeInvoiceModal', () => {
 
     render(<DisputeInvoiceModal invoice={mockInvoice} onClose={onClose} onSuccess={onSuccess} />);
 
-    const evidenceInput =
-      screen.getByPlaceholderText(/evidence|dispute|reason/i) ||
-      screen.getByLabelText(/evidence|reason/i);
+    const evidenceInput = screen.getByLabelText(/evidence description/i);
     if (evidenceInput) {
       fireEvent.change(evidenceInput, { target: { value: 'Issue' } });
       const submitButton = screen.queryByRole('button', { name: /submit|raise/i });

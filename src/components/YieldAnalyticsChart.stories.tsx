@@ -1,6 +1,5 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import YieldAnalyticsChart from './YieldAnalyticsChart';
-import type { Invoice } from '@/utils/soroban';
 
 const meta: Meta<typeof YieldAnalyticsChart> = {
   title: 'Components/YieldAnalyticsChart',

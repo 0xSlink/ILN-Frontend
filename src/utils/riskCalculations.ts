@@ -1,6 +1,5 @@
 'use client';
 
-import { Invoice } from '@/utils/soroban';
 import { PayerScore } from '@/utils/risk';
 
 export interface InvoiceRiskDetail {

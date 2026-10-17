@@ -1,11 +1,10 @@
 import React from 'react';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { axe } from 'jest-axe';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ToastProvider, useToast } from '@/context/ToastContext';
 import NotificationBell from '@/components/NotificationBell';
 import { NotificationProvider } from '@/context/NotificationContext';
-import AppToaster from '@/components/AppToaster';
 
 // Mock dependencies
 vi.mock('@/context/WalletContext', () => ({
@@ -70,20 +69,13 @@ function NotificationTestComponent() {
 
 describe('Toast Accessibility Audit', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
     localStorage.clear();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.clearAllTimers();
   });
 
   it('should have ARIA live region for toasts', async () => {
     render(
       <ToastProvider>
         <ToastTestComponent />
-        <AppToaster />
       </ToastProvider>
     );
 
@@ -99,7 +91,6 @@ describe('Toast Accessibility Audit', () => {
     const { container } = render(
       <ToastProvider>
         <ToastTestComponent />
-        <AppToaster />
       </ToastProvider>
     );
 
@@ -125,7 +116,6 @@ describe('Toast Accessibility Audit', () => {
     const { container } = render(
       <ToastProvider>
         <ToastTestComponent />
-        <AppToaster />
       </ToastProvider>
     );
 
@@ -144,7 +134,6 @@ describe('Toast Accessibility Audit', () => {
     render(
       <ToastProvider>
         <ToastTestComponent />
-        <AppToaster />
       </ToastProvider>
     );
 
@@ -225,19 +214,23 @@ describe('Screen Reader Announcement Integration', () => {
     // Toast system handles immediate feedback
     // Notification system handles persistent notifications
 
-    render(
+    const { container } = render(
       <NotificationProvider>
         <ToastProvider>
           <ToastTestComponent />
           <NotificationTestComponent />
-          <AppToaster />
         </ToastProvider>
       </NotificationProvider>
     );
 
-    // Check that both systems have appropriate ARIA attributes
-    const toastLiveRegion = screen.getByRole('status', { hidden: true });
+    // Check that both systems have appropriate ARIA attributes. There are
+    // legitimately two role="status" live regions on screen at once here -
+    // ToastContext's own #toast-live-region and NotificationBell's unread
+    // announcer - so scope this query to the toast one specifically rather
+    // than asserting there's only one status region in the whole tree.
+    const toastLiveRegion = container.querySelector('#toast-live-region');
     expect(toastLiveRegion).toBeInTheDocument();
+    expect(toastLiveRegion).toHaveAttribute('role', 'status');
 
     const notificationButton = screen.getByRole('button', { name: /open notifications/i });
     expect(notificationButton).toBeInTheDocument();

@@ -13,16 +13,10 @@ export default function PayerReminderOptIn() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (isConnected && address) {
-      loadPreference();
-    }
-  }, [isConnected, address]);
-
   const loadPreference = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('reminder_preferences')
         .select('email, enabled')
         .eq('address', address)
@@ -39,19 +33,54 @@ export default function PayerReminderOptIn() {
     }
   };
 
+  useEffect(() => {
+    if (isConnected && address) {
+      loadPreference();
+    }
+  }, [isConnected, address]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!address) return;
 
     setSaving(true);
     try {
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
       const response = await fetch('/api/reminders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address, email, enabled }),
       });
 
+      if (response.status === 429) {
+        addToast({
+          type: 'warning',
+          title: 'Too many attempts',
+          message: 'Please wait a moment and try saving your preference again.',
+        });
+        return;
+      }
+
       if (!response.ok) throw new Error('Failed to save');
+
+      const body = (await response.json()) as {
+        success?: boolean;
+        saved?: boolean;
+        delivery?: 'ok' | 'degraded';
+      };
+
+      if (body.success && body.delivery === 'degraded') {
+        // Preference WAS saved, but the delivery channel is temporarily degraded.
+        // This is a different user action than a failed save: no re-entry needed.
+        addToast({
+          type: 'warning',
+          title: 'Preference saved, delivery temporarily degraded',
+          message: enabled
+            ? `Your preference is saved, but reminder delivery is temporarily degraded. We'll resume sending to ${email} shortly.`
+            : 'Your preference is saved, but reminder delivery is temporarily degraded.',
+        });
+        return;
+      }
 
       addToast({
         type: 'success',
@@ -64,7 +93,7 @@ export default function PayerReminderOptIn() {
       addToast({
         type: 'error',
         title: 'Save failed',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: error instanceof Error ? error.message : 'Your preference failed to save.',
       });
     } finally {
       setSaving(false);

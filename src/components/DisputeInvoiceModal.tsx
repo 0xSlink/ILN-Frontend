@@ -31,11 +31,14 @@ export default function DisputeInvoiceModal({
     if (!address || !canSubmit) return;
 
     const reasonHash = await hashEvidence(evidence);
-    const toastId = addToast({ type: 'pending', title: 'Submitting dispute...' });
+    addToast({ type: 'pending', title: 'Submitting dispute...' });
 
     try {
       const tx = await disputeInvoice(address, invoice.id, reasonHash);
-      const txHash = await execute(tx, 'Dispute invoice');
+      const txHash = await execute(tx, {
+        expectedAction: 'dispute_invoice',
+        title: 'Dispute invoice',
+      });
       if (txHash) {
         addToast({
           type: 'success',

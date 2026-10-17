@@ -3,11 +3,9 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import Footer from '@/components/Footer';
 import Navbar from '@/components/Navbar';
 import VoteSection from '@/components/VoteSection';
-import VoteProgressBar from '@/components/VoteProgressBar';
-import QuorumProgressBar from '@/components/QuorumProgressBar';
+import GovernanceMockStatusBanner from '@/components/governance/GovernanceMockStatusBanner';
 import { GOVERNANCE_ADMIN_ADDRESS } from '@/constants';
 import { useToast } from '@/context/ToastContext';
 import { useWallet } from '@/context/WalletContext';
@@ -23,9 +21,7 @@ import {
   fetchProposal,
   formatVotingPower,
   getVotingPower,
-  quorumReached,
   timeRemaining,
-  totalVotes,
   vetoProposal,
 } from '@/utils/governance';
 
@@ -57,12 +53,11 @@ function StatusBadge({ status }: { status: ProposalStatus }) {
       icon: 'fiber_manual_record',
     },
     Passed: { color: 'bg-primary/15 text-primary border-primary/30', icon: 'check_circle' },
-    Failed: { color: 'bg-red-500/15 text-red-500 border-red-500/30', icon: 'cancel' },
+    Rejected: { color: 'bg-red-500/15 text-red-500 border-red-500/30', icon: 'cancel' },
     Executed: {
       color: 'bg-purple-500/15 text-purple-500 border-purple-500/30',
       icon: 'rocket_launch',
     },
-    Pending: { color: 'bg-amber-500/15 text-amber-500 border-amber-500/30', icon: 'schedule' },
     Vetoed: { color: 'bg-red-500/15 text-red-500 border-red-500/30', icon: 'gavel' },
   };
   const { color, icon } = config[status];
@@ -193,7 +188,7 @@ export default function ProposalDetailPage() {
   const router = useRouter();
   const { address, isConnected, connect, signTx } = useWallet();
   const { addToast, updateToast } = useToast();
-  const { execute, loading: isVoting, signingModal } = useTransaction();
+  const { execute, loading: isVoting } = useTransaction();
 
   const proposalId = Number(params.id);
 
@@ -233,6 +228,7 @@ export default function ProposalDetailPage() {
     if (!proposal || !address) return;
 
     const result = await execute(async (signTx) => castVote(proposal.id, choice, address, signTx), {
+      expectedAction: 'cast_vote',
       title: `Casting vote: ${choice}…`,
       pendingMessage: 'Waiting for wallet signature...',
       successTitle: 'Vote submitted',
@@ -314,8 +310,6 @@ export default function ProposalDetailPage() {
   const canVote = isActive && !alreadyVoted && isConnected && votingPower > 0;
 
   const remaining = proposal ? timeRemaining(proposal) : '';
-  const total = proposal ? totalVotes(proposal) : 0;
-  const quorum = proposal ? quorumReached(proposal) : false;
   const now = Math.floor(Date.now() / 1000);
   const timelockRemaining =
     proposal?.status === 'Passed' && proposal.executableAfter && proposal.executableAfter > now
@@ -455,7 +449,9 @@ export default function ProposalDetailPage() {
                         </span>
                       </span>
                       <p
-                        className={`text-sm font-medium ${step.done ? 'text-on-surface' : 'text-on-surface-variant'}`}
+                        className={`text-sm font-medium ${
+                          step.done ? 'text-on-surface' : 'text-on-surface-variant'
+                        }`}
                       >
                         {step.label}
                       </p>
@@ -512,6 +508,7 @@ export default function ProposalDetailPage() {
                         The execution delay has passed. Anyone can now execute this proposal
                         on-chain.
                       </p>
+                      <GovernanceMockStatusBanner action="executeProposal" />
                       <button
                         onClick={handleExecute}
                         disabled={isExecuting}
@@ -525,6 +522,7 @@ export default function ProposalDetailPage() {
               )}
 
               {/* Voting power */}
+              {isConnected && <GovernanceMockStatusBanner action="getVotingPower" />}
               <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5">
                 <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-2">
                   Your Voting Power
@@ -548,8 +546,11 @@ export default function ProposalDetailPage() {
                 )}
               </div>
 
-              {/* Execute button (Passed proposals) */}
-              {isPassed && (
+              {/* Execute button (Passed proposals with no timelock information).
+                  When `executableAfter` is known, the timelock panel above owns
+                  the execute affordance so it stays gated on the delay and is
+                  not rendered twice. */}
+              {isPassed && !proposal?.executableAfter && (
                 <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5 space-y-3">
                   <div className="flex items-center gap-2 text-primary">
                     <span className="material-symbols-outlined text-[20px]">rocket_launch</span>
@@ -558,6 +559,7 @@ export default function ProposalDetailPage() {
                   <p className="text-xs text-on-surface-variant">
                     The timelock delay has elapsed. Anyone can now trigger on-chain execution.
                   </p>
+                  <GovernanceMockStatusBanner action="executeProposal" />
                   {isConnected ? (
                     <button
                       onClick={handleExecute}
@@ -609,24 +611,6 @@ export default function ProposalDetailPage() {
                 </div>
               )}
 
-              {/* Failed state */}
-              {proposal.status === 'Failed' && (
-                <div className="rounded-2xl border border-red-500/30 bg-red-500/5 px-5 py-4 flex items-center gap-3">
-                  <span
-                    className="material-symbols-outlined text-red-500"
-                    style={{ fontVariationSettings: "'FILL' 1" }}
-                  >
-                    cancel
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-red-500">Proposal failed</p>
-                    <p className="text-xs text-on-surface-variant">
-                      {quorum ? 'Did not achieve majority.' : 'Did not reach quorum.'}
-                    </p>
-                  </div>
-                </div>
-              )}
-
               {isAdmin && proposal.status !== 'Executed' && proposal.status !== 'Vetoed' && (
                 <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-5 space-y-3">
                   <div className="flex items-center gap-2 text-red-500">
@@ -636,6 +620,7 @@ export default function ProposalDetailPage() {
                   <p className="text-xs text-on-surface-variant">
                     Only the configured governance admin address can veto proposals.
                   </p>
+                  <GovernanceMockStatusBanner action="vetoProposal" />
                   <button
                     onClick={() => setVetoModalOpen(true)}
                     className="w-full rounded-xl bg-red-600 py-3 text-sm font-bold text-white transition-all hover:bg-red-700"
@@ -671,7 +656,6 @@ export default function ProposalDetailPage() {
         </div>
       </div>
 
-      <Footer />
       {vetoModalOpen && (
         <VetoProposalModal
           reason={vetoReason}

@@ -1,0 +1,145 @@
+name: Coverage Trend
+
+# #891 — per-directory coverage-delta reporting.
+#
+# `vitest.config.ts` enforces one global threshold over everything in the
+# coverage `include` list. That catches new untested code, but it cannot catch
+# one directory quietly losing coverage while another gains it — which is how
+# the original 6-file contract-layer scope drifted unnoticed. This workflow
+# runs the enforced scope twice (base ref, then PR head) and reports the
+# per-directory delta so a reviewer sees the one row that moved.
+
+on:
+  pull_request:
+    branches: [dev, main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  coverage-trend:
+    name: Per-directory coverage trend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests with coverage on the base ref
+        id: base
+        run: |
+          set -euo pipefail
+          git checkout -q "${{ github.event.pull_request.base.sha }}"
+          # Thresholds are zeroed: this run only produces a measurement to diff
+          # against. The authoritative gate is the `coverage` job in ci.yml.
+          pnpm exec vitest run \
+            --coverage \
+            --coverage.reporter=json-summary \
+            --coverage.reportsDirectory=./coverage-base \
+            --coverage.thresholds.lines=0 \
+            --coverage.thresholds.functions=0 \
+            --coverage.thresholds.branches=0 \
+            --coverage.thresholds.statements=0 \
+            || true
+          cp ./coverage-base/coverage-summary.json ./coverage-base.json
+
+      - name: Run tests with coverage on the PR head
+        run: |
+          set -euo pipefail
+          git checkout -q "${{ github.event.pull_request.head.sha }}"
+          pnpm exec vitest run \
+            --coverage \
+            --coverage.reporter=json-summary \
+            --coverage.reportsDirectory=./coverage-head \
+            --coverage.thresholds.lines=0 \
+            --coverage.thresholds.functions=0 \
+            --coverage.thresholds.branches=0 \
+            --coverage.thresholds.statements=0 \
+            || true
+          cp ./coverage-head/coverage-summary.json ./coverage-head.json
+
+      - name: Generate per-directory trend report
+        # Floor is the branches threshold enforced in vitest.config.ts — the
+        # lowest enforced metric, so it is the strictest value a per-directory
+        # row can be held to without contradicting the global gate.
+        run: |
+          node scripts/coverage-trend-report.mjs \
+            --summary ./coverage-head.json \
+            --baseline ./coverage-base.json \
+            --markdown-out ./coverage-trend.md \
+            --floor 80
+
+      - name: Publish report to the job summary
+        if: always()
+        run: |
+          if [ -f ./coverage-trend.md ]; then
+            cat ./coverage-trend.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Coverage trend report unavailable (a coverage run did not produce a summary)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload trend report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-trend-${{ github.event.pull_request.number || 'dispatch' }}
+          path: |
+            coverage-trend.md
+            coverage-head.json
+            coverage-base.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Post PR comment with the trend
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        with:
+          script: |
+            const fs = require('fs');
+            if (!fs.existsSync('coverage-trend.md')) {
+              core.warning('No coverage trend report was generated; skipping comment.');
+              return;
+            }
+            const report = fs.readFileSync('coverage-trend.md', 'utf8');
+            const marker = '## 📈 Per-directory coverage trend';
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(
+              c => c.user?.login === 'github-actions[bot]' && c.body?.includes(marker)
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body: report,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body: report,
+              });
+            }

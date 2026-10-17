@@ -18,12 +18,12 @@ vi.mock('@/constants', async (importActual) => {
 describe('FeedbackWidget', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // @ts-ignore - allow overwriting for test
+    // @ts-expect-error - allow overwriting for test
     constants.STELLAR_NETWORK = 'testnet';
   });
 
   it('should not render when network is not testnet', () => {
-    // @ts-ignore - allow overwriting for test
+    // @ts-expect-error - allow overwriting for test
     constants.STELLAR_NETWORK = 'mainnet';
     render(<FeedbackWidget />);
     expect(screen.queryByRole('button', { name: /feedback/i })).not.toBeInTheDocument();

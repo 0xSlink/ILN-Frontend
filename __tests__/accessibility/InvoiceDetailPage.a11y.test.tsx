@@ -13,7 +13,7 @@
  */
 import { render } from '@testing-library/react';
 import { axe } from 'jest-axe';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 // Mock the invoice detail page component
 const MockInvoiceDetailPage = () => {

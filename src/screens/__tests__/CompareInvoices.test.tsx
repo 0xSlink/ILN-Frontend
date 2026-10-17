@@ -1,19 +1,21 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import CompareInvoicesScreen from '../CompareInvoices';
 import React from 'react';
 
 // Mock hooks and utilities
-vi.mock('next/navigation', () => ({
-  useSearchParams: () => ({
-    get: vi.fn().mockReturnValue('1,2,3'),
-  }),
-  useRouter: () => ({
-    push: vi.fn(),
-  }),
-}));
+// These objects must keep a stable identity across renders: the screen's fetch
+// effect depends on them, so fresh objects would re-fetch on every render.
+vi.mock('next/navigation', () => {
+  const searchParams = { get: vi.fn().mockReturnValue('1,2,3') };
+  const router = { push: vi.fn() };
+  return {
+    useSearchParams: () => searchParams,
+    useRouter: () => router,
+  };
+});
 
-vi.mock('../../../context/WalletContext', () => ({
+vi.mock('@/context/WalletContext', () => ({
   useWallet: () => ({
     address: 'GD...',
     connect: vi.fn(),
@@ -21,14 +23,27 @@ vi.mock('../../../context/WalletContext', () => ({
   }),
 }));
 
-vi.mock('../../../context/ToastContext', () => ({
-  useToast: () => ({
-    addToast: vi.fn(),
-    updateToast: vi.fn(),
+// Rendered subtrees pull in the notification bell/drawer, which require the
+// NotificationProvider.
+vi.mock('@/context/NotificationContext', () => ({
+  useNotification: () => ({
+    notifications: [],
+    unreadCount: 0,
+    setNotifications: vi.fn(),
+    addNotification: vi.fn(),
+    markAsRead: vi.fn(),
+    markAllAsRead: vi.fn(),
+    clearUnread: vi.fn(),
+    isRead: vi.fn(() => true),
   }),
 }));
 
-vi.mock('../../../utils/soroban', () => ({
+vi.mock('@/context/ToastContext', () => {
+  const toast = { addToast: vi.fn(), updateToast: vi.fn() };
+  return { useToast: () => toast };
+});
+
+vi.mock('@/utils/soroban', () => ({
   getAllInvoices: vi.fn().mockResolvedValue([
     {
       id: BigInt(1),
@@ -60,15 +75,16 @@ vi.mock('../../../utils/soroban', () => ({
   submitSignedTransaction: vi.fn(),
 }));
 
-vi.mock('../../../hooks/useApprovedTokens', () => ({
-  useApprovedTokens: () => ({
+vi.mock('@/hooks/useApprovedTokens', () => {
+  const result = {
     tokens: [],
     tokenMap: new Map(),
     defaultToken: { symbol: 'USDC', decimals: 7, contractId: 'TOKEN_ID' },
-  }),
-}));
+  };
+  return { useApprovedTokens: () => result };
+});
 
-vi.mock('../../../hooks/usePayerScores', () => ({
+vi.mock('@/hooks/usePayerScores', () => ({
   usePayerScores: () => ({
     scores: new Map([
       ['P1', 80],
@@ -77,7 +93,7 @@ vi.mock('../../../hooks/usePayerScores', () => ({
     ]),
     risks: new Map([
       ['P1', 'Low'],
-      ['P2', 'Very Low'],
+      ['P2', 'Low'],
       ['P3', 'Medium'],
     ]),
   }),
@@ -89,7 +105,7 @@ describe('CompareInvoicesScreen', () => {
 
     // Wait for data to load
     const invoice1 = await screen.findByText(/Invoice #1/i);
-    const invoice2 = await screen.findByText(/Invoice #2/i);
+    const [invoice2] = await screen.findAllByText(/Invoice #2/i);
     const invoice3 = await screen.findByText(/Invoice #3/i);
 
     expect(invoice1).toBeInTheDocument();

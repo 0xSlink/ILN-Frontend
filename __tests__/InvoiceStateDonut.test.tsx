@@ -26,9 +26,8 @@ describe('InvoiceStateDonut', () => {
     expect(screen.getByText('PAID')).toBeInTheDocument();
     expect(screen.getByText('EXPIRED')).toBeInTheDocument();
 
-    // Counts and percentages should show up
-    expect(screen.getByText(/1 — 25.0%/)).toBeInTheDocument();
+    // Counts and percentages should show up (PENDING and EXPIRED share 25.0%)
+    expect(screen.getAllByText(/1 — 25.0%/)).toHaveLength(2);
     expect(screen.getByText(/2 — 50.0%/)).toBeInTheDocument();
-    expect(screen.getByText(/1 — 25.0%/)).toBeInTheDocument();
   });
 });

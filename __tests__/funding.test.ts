@@ -1,6 +1,6 @@
 import { expect, test, describe } from 'vitest';
-import { transformFundingData } from '../utils/funding';
-import { DailyFundingBucket } from '../components/charts/FundingChart';
+import { transformFundingData } from '@/utils/funding';
+import { DailyFundingBucket } from '@/components/charts/FundingChart';
 
 describe('Funding Utils', () => {
   test('transformFundingData correctly transforms token data into row properties', () => {

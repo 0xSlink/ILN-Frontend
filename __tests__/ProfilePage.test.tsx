@@ -94,12 +94,12 @@ describe('Profile page', () => {
   it('renders public reputation data and recent activity', async () => {
     render(<ProfilePage />);
 
-    expect(screen.getByText(/Loading profile data/i)).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: /Loading profile data/i })).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getByText('alice*stellar.org')).toBeInTheDocument());
 
     expect(mockedGetReputation).toHaveBeenCalledWith(profileAddress);
-    expect(screen.getByText(profileAddress)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(profileAddress))).toBeInTheDocument();
     expect(screen.getByText('82')).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByText('10')).toBeInTheDocument();

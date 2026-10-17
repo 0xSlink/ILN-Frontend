@@ -1,11 +1,6 @@
 import { expect, test, describe } from 'vitest';
-import {
-  calculateLPMetrics,
-  getMonthlyYieldData,
-  getOutcomeBreakdown,
-  getPayerPerformance,
-} from '../utils/lp-analytics';
-import { Invoice } from '../utils/soroban';
+import { calculateLPMetrics, getOutcomeBreakdown, getPayerPerformance } from '@/utils/lp-analytics';
+import { Invoice } from '@/utils/soroban';
 
 const mockAddress = 'GCLP123456789';
 const mockInvoices: Invoice[] = [

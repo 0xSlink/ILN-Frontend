@@ -123,14 +123,20 @@ export default function LPPortfolioSummary({
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       <MetricCard
         title="Total Invested"
-        value={formatTokenAmount(metrics.totalInvested, defaultToken?.decimals || 7)}
+        value={formatTokenAmount(metrics.totalInvested, {
+          symbol: defaultToken?.symbol ?? 'USDC',
+          decimals: defaultToken?.decimals ?? 7,
+        })}
         trend="+12%"
         trendDirection="up"
         sparklineData={investedSparkline}
       />
       <MetricCard
         title="Current Yield"
-        value={formatTokenAmount(metrics.currentYield, defaultToken?.decimals || 7)}
+        value={formatTokenAmount(metrics.currentYield, {
+          symbol: defaultToken?.symbol ?? 'USDC',
+          decimals: defaultToken?.decimals ?? 7,
+        })}
         trend="+8%"
         trendDirection="up"
         sparklineData={yieldSparkline}

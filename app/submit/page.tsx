@@ -3,7 +3,6 @@
 import { Suspense } from 'react';
 
 import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 import SubmitInvoiceForm from '@/components/SubmitInvoiceForm';
 
 export default function SubmitRoute() {
@@ -17,7 +16,6 @@ export default function SubmitRoute() {
           </Suspense>
         </div>
       </section>
-      <Footer />
     </main>
   );
 }

@@ -19,6 +19,7 @@ import {
 } from '@/utils/network';
 import { getWalletRoles, type WalletRole } from '@/utils/soroban';
 import { trackEvent } from '@/lib/analytics';
+import { journeyRecovery } from '@/lib/journey-recovery-slos';
 import {
   clearWalletStorage,
   getStoredWalletProvider,
@@ -26,11 +27,38 @@ import {
   WALLET_ADDRESS_STORAGE_KEY,
   type WalletProviderType,
 } from '@/utils/walletStorage';
+import {
+  connectWalletConnect,
+  disconnectWalletConnect,
+  getWalletConnectAddress,
+  signTransactionWithWalletConnect,
+} from '@/lib/walletConnect';
+import { getPendingTransactions, reconcilePendingTransactions } from '@/lib/pending-transactions';
+import { getSorobanTransactionStatus } from '@/utils/soroban';
+import { notifyTxSuccess } from '@/utils/txEvents';
 import WalletSelectionModal from '@/components/WalletSelectionModal';
 import { useToast } from './ToastContext';
 import { getWalletErrorCode, type AuthErrorCode } from '@/lib/auth/errors';
 
 type WalletProviderName = WalletProviderType;
+
+interface FreighterExtension {
+  setNetwork?: (network: string) => Promise<void>;
+}
+
+interface FreighterWindow extends Window {
+  stellar?: { freighter?: FreighterExtension };
+  freighter?: FreighterExtension;
+}
+
+export const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+export const DEFAULT_WARNING_BEFORE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+
+export interface WalletProviderProps {
+  children: React.ReactNode;
+  idleTimeoutMs?: number;
+  idleWarningMs?: number;
+}
 
 export interface WalletContextType {
   address: string | null;
@@ -48,9 +76,11 @@ export interface WalletContextType {
   roles: WalletRole[];
   rolesLoading: boolean;
   connect: () => Promise<void>;
+  connectWalletConnect: (customAddress?: string) => Promise<void>;
   disconnect: () => void;
   signTx: (txXdr: string) => Promise<string>;
   switchNetwork: () => Promise<void>;
+  resetIdleTimer: () => void;
 }
 
 export const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -94,8 +124,12 @@ function extractAllowedState(result: unknown): boolean {
   return false;
 }
 
-export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { addToast, updateToast } = useToast();
+export const WalletProvider: React.FC<WalletProviderProps> = ({
+  children,
+  idleTimeoutMs,
+  idleWarningMs,
+}) => {
+  const { addToast, updateToast, removeToast } = useToast();
   const router = useRouter();
   const [address, setAddress] = useState<string | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -147,6 +181,28 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, []);
 
+  /**
+   * Refresh locally-remembered submissions from RPC network truth (#1143).
+   * Runs after every reconnect and on page reload (via the silent-reconnect
+   * effect below). Only the network can settle an entry; `not_found` keeps it
+   * for the next pass instead of assuming a verdict.
+   */
+  const reconcileStaleTransactions = useCallback(async () => {
+    try {
+      if (getPendingTransactions().length === 0) return;
+      const summary = await reconcilePendingTransactions(async (hash) => {
+        const status = await getSorobanTransactionStatus(hash);
+        return status === 'not_found' ? 'confirming' : status;
+      });
+      if (summary.confirmed.length > 0) {
+        // Settled while we were away — let chain-derived views refresh.
+        notifyTxSuccess();
+      }
+    } catch (e) {
+      console.error('Pending transaction reconciliation failed', e);
+    }
+  }, []);
+
   const checkConnection = useCallback(async () => {
     try {
       const installed = extractConnectionState(await isConnected());
@@ -158,12 +214,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           setAddress(address);
           localStorage.setItem(STORAGE_KEY, address);
           await checkNetwork();
+          // Background refresh: must not block connection setup.
+          void reconcileStaleTransactions();
         }
       }
     } catch (e) {
       console.error('Check connection failed', e);
     }
-  }, [checkNetwork]);
+  }, [checkNetwork, reconcileStaleTransactions]);
 
   const checkActiveWallet = useCallback(async () => {
     if (!address || checkingWalletRef.current) return;
@@ -219,11 +277,25 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const attemptSilentReconnect = useCallback(async () => {
     const savedProvider = getStoredWalletProvider();
     setSelectedProvider(savedProvider);
+    if (savedProvider === 'walletconnect') {
+      const wcAddress = getWalletConnectAddress();
+      if (wcAddress) {
+        setAddress(wcAddress);
+        localStorage.setItem(STORAGE_KEY, wcAddress);
+        // Background refresh: must not block connection setup.
+        void reconcileStaleTransactions();
+      }
+      return;
+    }
+
     if (savedProvider !== 'freighter') {
       return;
     }
 
     setIsReconnecting(true);
+    // The stored session was interrupted (fresh load / extension reset); start
+    // measuring how long until it is restored (#1160).
+    journeyRecovery.markInterruption('wallet', 'silent_reconnect');
 
     try {
       const installed = extractConnectionState(await isConnected());
@@ -232,6 +304,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!installed) {
         clearWalletStorage();
         setSelectedProvider(null);
+        journeyRecovery.clear('wallet');
         return;
       }
 
@@ -239,20 +312,25 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!address) {
         clearWalletStorage();
         setSelectedProvider(null);
+        journeyRecovery.clear('wallet');
         return;
       }
 
       setAddress(address);
       localStorage.setItem(STORAGE_KEY, address);
       await checkNetwork();
+      // Background refresh: must not block reconnect timing.
+      void reconcileStaleTransactions();
+      journeyRecovery.markRecovered('wallet');
     } catch (e) {
       console.error('Silent reconnect failed', e);
       clearWalletStorage();
       setSelectedProvider(null);
+      journeyRecovery.clear('wallet');
     } finally {
       setIsReconnecting(false);
     }
-  }, [checkNetwork]);
+  }, [checkNetwork, reconcileStaleTransactions]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -302,6 +380,125 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => clearInterval(interval);
   }, [checkActiveWallet]);
 
+  const warningToastIdRef = React.useRef<string | null>(null);
+  const disconnectRef = React.useRef<() => void>(() => {});
+
+  const disconnect = useCallback(() => {
+    // Clear all in-memory wallet state...
+    setAddress(null);
+    setNetworkMismatch(false);
+    setRpcMismatch(false);
+    setMismatchDetails(null);
+    setSwitchingNetwork(false);
+    setWalletNetwork(null);
+    setError(null);
+    setErrorCode(null);
+    setRoles([]);
+    setRolesLoading(false);
+    setIsSelectingProvider(false);
+    setSelectedProvider(null);
+    setIsReconnecting(false);
+    if (warningToastIdRef.current) {
+      removeToast(warningToastIdRef.current);
+      warningToastIdRef.current = null;
+    }
+    // ...and every persisted/cached trace of the session (#4).
+    clearWalletStorage();
+    void disconnectWalletConnect();
+    trackEvent('wallet_disconnected');
+    addToast({ type: 'success', title: 'Disconnected' });
+    // Leave any wallet-gated view for the public home page.
+    router.push('/');
+  }, [addToast, removeToast, router]);
+
+  useEffect(() => {
+    disconnectRef.current = disconnect;
+  }, [disconnect]);
+
+  const resetIdleTimer = useCallback(() => {
+    if (warningToastIdRef.current) {
+      removeToast(warningToastIdRef.current);
+      warningToastIdRef.current = null;
+    }
+  }, [removeToast]);
+
+  // Session/idle timeout effect (#668)
+  useEffect(() => {
+    if (!address) return;
+
+    const timeout = idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+    const warningMs = idleWarningMs ?? DEFAULT_WARNING_BEFORE_TIMEOUT_MS;
+    const warningDelay = Math.max(100, timeout - warningMs);
+
+    let warnTimer: ReturnType<typeof setTimeout> | null = null;
+    let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const startTimers = () => {
+      if (warnTimer) clearTimeout(warnTimer);
+      if (disconnectTimer) clearTimeout(disconnectTimer);
+
+      warnTimer = setTimeout(() => {
+        const id = addToast({
+          type: 'warning',
+          title: 'Session Inactivity Warning',
+          message: 'Your wallet session will disconnect soon due to inactivity.',
+          action: {
+            label: 'Stay Connected',
+            onClick: () => {
+              if (warningToastIdRef.current) {
+                removeToast(warningToastIdRef.current);
+                warningToastIdRef.current = null;
+              }
+              startTimers();
+            },
+          },
+        });
+        warningToastIdRef.current = id;
+      }, warningDelay);
+
+      disconnectTimer = setTimeout(() => {
+        if (warningToastIdRef.current) {
+          removeToast(warningToastIdRef.current);
+          warningToastIdRef.current = null;
+        }
+        disconnectRef.current();
+        addToast({
+          type: 'info',
+          title: 'Wallet Disconnected',
+          message: 'Your wallet connection timed out due to inactivity.',
+        });
+      }, timeout);
+    };
+
+    startTimers();
+
+    let lastActivity = Date.now();
+    const handleActivity = () => {
+      const now = Date.now();
+      if (now - lastActivity > 1000) {
+        lastActivity = now;
+        if (warningToastIdRef.current) {
+          removeToast(warningToastIdRef.current);
+          warningToastIdRef.current = null;
+        }
+        startTimers();
+      }
+    };
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach((event) => window.addEventListener(event, handleActivity, { passive: true }));
+
+    return () => {
+      if (warnTimer) clearTimeout(warnTimer);
+      if (disconnectTimer) clearTimeout(disconnectTimer);
+      if (warningToastIdRef.current) {
+        removeToast(warningToastIdRef.current);
+        warningToastIdRef.current = null;
+      }
+      events.forEach((event) => window.removeEventListener(event, handleActivity));
+    };
+  }, [address, idleTimeoutMs, idleWarningMs, addToast, removeToast]);
+
   // Opening the wallet picker is what "Connect Wallet" now triggers (#2); the
   // actual per-provider connect runs once the user chooses.
   const connect = async () => {
@@ -333,6 +530,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const { address, error: freighterError } = await getAddress();
 
         if (freighterError) {
+          journeyRecovery.markInterruption('auth', 'access_error');
           setError(freighterError);
           setErrorCode(getWalletErrorCode(freighterError));
           updateToast(toastId, {
@@ -348,6 +546,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           localStorage.setItem(STORAGE_KEY, address);
           setSelectedProvider('freighter');
           setStoredWalletProvider('freighter');
+          // Authorization now succeeds — close any earlier denial window (#1160).
+          journeyRecovery.markRecovered('auth');
 
           const isCorrectNetwork = await checkNetwork();
           if (!isCorrectNetwork) {
@@ -365,6 +565,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           }
         }
       } else {
+        journeyRecovery.markInterruption('auth', 'access_denied');
         const msg = 'Connection rejected by user.';
         setError(msg);
         setErrorCode('wallet_rejected');
@@ -372,9 +573,37 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     } catch (e: unknown) {
       console.error('Connection error:', e);
+      journeyRecovery.markInterruption('auth', 'access_error');
       const msg = e instanceof Error ? e.message : 'Connection failed';
       setError(msg);
       setErrorCode(getWalletErrorCode(e));
+      updateToast(toastId, { type: 'error', title: 'Connection Failed', message: msg });
+    }
+  };
+
+  const connectWalletConnectProvider = async (customAddress?: string) => {
+    setIsSelectingProvider(false);
+    setError(null);
+    const toastId = addToast({ type: 'pending', title: 'Connecting via WalletConnect...' });
+
+    try {
+      const session = await connectWalletConnect({ address: customAddress });
+      if (session?.address) {
+        setAddress(session.address);
+        localStorage.setItem(STORAGE_KEY, session.address);
+        setSelectedProvider('walletconnect');
+        setStoredWalletProvider('walletconnect');
+        updateToast(toastId, {
+          type: 'success',
+          title: 'Connected',
+          message: `Connected as ${session.address.substring(0, 6)}... via WalletConnect`,
+        });
+        trackEvent('wallet_connected', { provider: 'walletconnect', network: NETWORK_NAME });
+      }
+    } catch (e: any) {
+      console.error('WalletConnect error:', e);
+      const msg = e.message || 'WalletConnect connection failed';
+      setError(msg);
       updateToast(toastId, { type: 'error', title: 'Connection Failed', message: msg });
     }
   };
@@ -385,7 +614,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const targetNetwork = getConfiguredStellarNetwork() === 'mainnet' ? 'PUBLIC' : 'TESTNET';
 
-      const extension = (window as any).stellar?.freighter || (window as any).freighter;
+      const freighterWindow = window as unknown as FreighterWindow;
+      const extension = freighterWindow.stellar?.freighter || freighterWindow.freighter;
       if (extension?.setNetwork) {
         await extension.setNetwork(targetNetwork);
         await checkNetwork();
@@ -418,29 +648,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [address, networkMismatch, checkNetwork, addToast]);
 
-  const disconnect = () => {
-    // Clear all in-memory wallet state...
-    setAddress(null);
-    setNetworkMismatch(false);
-    setRpcMismatch(false);
-    setMismatchDetails(null);
-    setSwitchingNetwork(false);
-    setWalletNetwork(null);
-    setError(null);
-    setErrorCode(null);
-    setRoles([]);
-    setRolesLoading(false);
-    setIsSelectingProvider(false);
-    setSelectedProvider(null);
-    setIsReconnecting(false);
-    // ...and every persisted/cached trace of the session (#4).
-    clearWalletStorage();
-    trackEvent('wallet_disconnected');
-    addToast({ type: 'success', title: 'Disconnected' });
-    // Leave any wallet-gated view for the public home page.
-    router.push('/');
-  };
-
   const signTx = async (txXdr: string) => {
     const isCorrectNetwork = await checkNetwork();
     if (!isCorrectNetwork) {
@@ -448,12 +655,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       addToast({ type: 'error', title: 'Transaction Failed', message: msg });
       throw new Error(msg);
     }
+
+    if (selectedProvider === 'walletconnect') {
+      return await signTransactionWithWalletConnect(txXdr, {
+        networkPassphrase: NETWORK_PASSPHRASE,
+      });
+    }
+
     const signed = await signTransaction(txXdr, {
       networkPassphrase: NETWORK_PASSPHRASE,
     });
 
     if (typeof signed === 'string') {
       return signed;
+    }
+
+    // Wallet closed / dismissed without returning a payload: treat as an
+    // explicit cancellation without touching local UI state (#1144).
+    if (!signed || typeof signed !== 'object') {
+      throw new Error(
+        'USER_REJECTED: Wallet closed before signing completed. No changes were made.'
+      );
     }
 
     if (signed.error) {
@@ -470,6 +692,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const handleSelectWalletConnect = () => {
     setSelectedProvider('walletconnect');
     setStoredWalletProvider('walletconnect');
+    void connectWalletConnectProvider();
   };
 
   return (
@@ -490,9 +713,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         roles,
         rolesLoading,
         connect,
+        connectWalletConnect: connectWalletConnectProvider,
         disconnect,
         signTx,
         switchNetwork,
+        resetIdleTimer,
       }}
     >
       {children}

@@ -9,6 +9,8 @@ vi.mock('@/utils/soroban', () => ({
 
 beforeEach(() => {
   getReputation.mockReset();
+  // Default to an in-flight request; individual tests override as needed.
+  getReputation.mockReturnValue(new Promise(() => {}));
 });
 
 describe('useReputationDecay', () => {

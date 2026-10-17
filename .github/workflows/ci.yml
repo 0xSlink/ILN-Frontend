@@ -20,8 +20,9 @@ jobs:
       - name: Check file-size policy
         run: node scripts/check-file-sizes.mjs
 
-  lint:
-    runs-on: namespace-profile-nursca
+  package-manager-drift:
+    name: Package-manager drift check
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -33,25 +34,94 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check package-manager drift
+        run: pnpm run pm:drift-check
+
+      - name: Verify lockfile integrity
+        run: |
+          git diff --exit-code -- pnpm-lock.yaml pnpm-workspace.yaml package.json
+          echo "### Lockfile integrity" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Frozen install left tracked dependency declarations unmodified." >> "$GITHUB_STEP_SUMMARY"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify lockfile integrity
+        run: |
+          git diff --exit-code -- pnpm-lock.yaml pnpm-workspace.yaml package.json
+          echo "### Lockfile integrity" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Frozen install left tracked dependency declarations unmodified." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run ESLint
         run: pnpm run lint
 
+      - name: Flag snapshot changes for review
+        if: github.event_name == 'pull_request'
+        run: |
+          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.snap' '__tests__/__snapshots__/*')
+          if [ -n "$changed" ]; then
+            echo "## ⚠️ Snapshot files changed" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "The following snapshot files were modified in this PR:" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "$changed" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Per testing guidelines, snapshot diffs must be explained in the PR description." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Check env example sync
         run: pnpm run env:check
+
+      - name: Check for unfilled placeholders in docs
+        run: pnpm run docs:check-placeholders
+
+      - name: Check configuration drift
+        run: pnpm run env:drift-check
+
+      - name: Check locale key parity
+        run: pnpm run i18n:check
 
       - name: Check formatting with Prettier
         run: pnpm run format:check
 
       - name: Run TypeScript type check
-        run: pnpm exec tsc --noEmit
+        run: pnpm run typecheck
+
+      - name: Run security audit for vulnerabilities
+        run: pnpm run security:audit
+
+      - name: Check for postinstall script changes in dependencies
+        run: |
+          echo "Scanning for packages with install/postinstall scripts..."
+          pnpm ls --depth=0 --json | jq -r '.dependencies[] | select(has("scripts")) | select(.scripts | has("postinstall") or has("install")) | .name + " (" + .version + ")"' || true
+          echo "For dependency-level postinstall detection, review pnpm-lock.yaml for 'prebuiltBinaries' and 'peerDependenciesMeta' entries on suspicious packages."
 
   tests:
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -63,7 +133,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -72,7 +142,7 @@ jobs:
         run: pnpm test
 
   coverage:
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -84,12 +154,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: "pnpm"
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Run tests with full coverage
+        # This scans all of src/ for the Codecov report below (informational,
+        # fail_ci_if_error: false) - it deliberately zeroes out the thresholds
+        # from vitest.config.ts, which are scoped to the contract layer only
+        # and are already enforced by contract-tests.yml.
         run: >-
           pnpm exec vitest run
           --coverage
@@ -99,6 +173,10 @@ jobs:
           --coverage.exclude='**/__tests__/**'
           --coverage.exclude='src/stories/**'
           --coverage.exclude='src/test-utils/**'
+          --coverage.thresholds.lines=0
+          --coverage.thresholds.functions=0
+          --coverage.thresholds.branches=0
+          --coverage.thresholds.statements=0
 
       - name: Upload coverage report
         if: always()
@@ -117,7 +195,29 @@ jobs:
           fail_ci_if_error: false
 
   build:
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+  config-drift:
+    name: Check configuration drift
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -134,5 +234,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm run build
+      - name: Check mainnet vs testnet configuration drift
+        run: pnpm run env:drift-check
+

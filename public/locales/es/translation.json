@@ -14,6 +14,7 @@
     "close": "Cerrar"
   },
   "nav": {
+    "mainNavigation": "Navegación principal",
     "howItWorks": "Cómo funciona",
     "forFreelancers": "Para Freelancers",
     "forLPs": "Para Inversores",
@@ -21,7 +22,8 @@
     "payInvoices": "Pagar Facturas",
     "dashboard": "Panel",
     "analytics": "Mis Analíticas",
-    "stats": "Estadísticas",
+    "stats": "Estadísticas del Protocolo",
+    "leaderboard": "Clasificación",
     "docs": "Documentos"
   },
   "landing": {

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import BuiltOnStellar from './BuiltOnStellar';
 
 const meta: Meta<typeof BuiltOnStellar> = {

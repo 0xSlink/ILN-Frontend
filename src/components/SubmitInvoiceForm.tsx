@@ -348,7 +348,7 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
             <div className="mt-4">
               <Link
                 href="/invoices/batch"
-                className="inline-flex items-center gap-2 text-sm text-primary hover:underline font-medium"
+                className="-my-2.5 inline-flex items-center gap-2 py-2.5 text-sm text-primary hover:underline font-medium"
               >
                 <span className="material-symbols-outlined text-[18px]">upload_file</span>
                 Submit multiple invoices (CSV/Batch)
@@ -469,6 +469,7 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                       value={form.payer}
                       onBlur={() => handleBlur('payer')}
                       aria-describedby={displayErrors.payer ? 'payer-error' : undefined}
+                      aria-invalid={Boolean(displayErrors.payer)}
                       onChange={(event) => {
                         setField('payer', event.target.value);
                         setAddressBookQuery(event.target.value);
@@ -487,7 +488,11 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                           searchAddresses(addressBookQuery).map((entry, index) => (
                             <div
                               key={entry.id}
-                              className={`px-4 py-3 text-sm cursor-pointer ${highlightedIndex === index ? 'bg-primary text-surface-container-lowest' : 'hover:bg-surface-variant/50'}`}
+                              className={`px-4 py-3 text-sm cursor-pointer ${
+                                highlightedIndex === index
+                                  ? 'bg-primary text-surface-container-lowest'
+                                  : 'hover:bg-surface-variant/50'
+                              }`}
                               onClick={() => handleSelectAddress(entry.address)}
                             >
                               <div className="flex justify-between">
@@ -510,7 +515,9 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
 
                 <div className="grid gap-5 md:grid-cols-2">
                   <Field
-                    label={`${t('submitForm.amountLabel')}${selectedToken ? ` (${selectedToken.symbol})` : ''}`}
+                    label={`${t('submitForm.amountLabel')}${
+                      selectedToken ? ` (${selectedToken.symbol})` : ''
+                    }`}
                     tooltip="The full value of the invoice. This is what the payer owes you in total."
                     error={displayErrors.amount}
                     errorId="amount-error"
@@ -519,6 +526,7 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                       value={form.amount}
                       onBlur={() => handleBlur('amount')}
                       aria-describedby={displayErrors.amount ? 'amount-error' : undefined}
+                      aria-invalid={Boolean(displayErrors.amount)}
                       onChange={(event) => handleAmountChange(event.target.value)}
                       className="w-full rounded-2xl bg-surface-container-low px-4 py-3.5 text-sm border border-outline-variant/15 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                       placeholder="5000.00"
@@ -563,6 +571,7 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                       value={form.dueDate}
                       onBlur={() => handleBlur('dueDate')}
                       aria-describedby={displayErrors.dueDate ? 'due-date-error' : undefined}
+                      aria-invalid={Boolean(displayErrors.dueDate)}
                       onChange={(event) => setField('dueDate', event.target.value)}
                       min={getMinimumDueDate()}
                       className="w-full rounded-2xl bg-surface-container-low px-4 py-3.5 text-sm border border-outline-variant/15 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
@@ -626,6 +635,7 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                       aria-describedby={
                         displayErrors.discountRate ? 'discount-rate-error' : undefined
                       }
+                      aria-invalid={Boolean(displayErrors.discountRate)}
                       onChange={(event) => setField('discountRate', event.target.value)}
                       className="w-full rounded-2xl bg-surface-container-low px-4 py-3.5 text-sm border border-outline-variant/15 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"
                       placeholder="3.00"

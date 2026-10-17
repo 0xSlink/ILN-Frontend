@@ -2,14 +2,13 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import { useWallet } from '@/context/WalletContext';
-import { useInvoices } from '@/hooks/useInvoices';
+import { useInvoices } from '@/hooks/queries';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
 import { usePayerScores } from '@/hooks/usePayerScores';
 import { Invoice } from '@/utils/soroban';
 import { calculateYield, formatTokenAmount, formatAddress, formatDate } from '@/utils/format';
 import { RiskLevel } from '@/utils/risk';
 import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 import InvoiceMarketplaceCard from '@/components/InvoiceMarketplaceCard';
 import FundConfirmModal from '@/components/FundConfirmModal';
 import LPSettingsModal from '@/components/LPSettingsModal';
@@ -524,7 +523,6 @@ export default function MarketplacePage() {
           </div>
         )}
       </main>
-      <Footer />
 
       {/* Fund Modal */}
       <FundConfirmModal
@@ -588,14 +586,15 @@ export default function MarketplacePage() {
                           formatTokenAmount(
                             inv.amount,
                             defaultToken ??
-                              tokenMap.get(inv.token ?? '') ??
-                              ({
+                              tokenMap.get(inv.token ?? '') ?? {
+                                contractId: '',
+                                name: 'USD Coin',
                                 symbol: 'USDC',
                                 decimals: 7,
-                                contractId: '',
-                                name: '',
-                                iconLabel: '',
-                              } as any)
+                                iconLabel: 'US',
+                                logo: '/tokens/usdc.svg',
+                                isAllowed: true,
+                              }
                           ),
                       },
                       {
@@ -605,7 +604,11 @@ export default function MarketplacePage() {
                       {
                         label: 'Effective Yield',
                         get: (inv: Invoice) =>
-                          `${((Number(calculateYield(inv.amount, inv.discount_rate)) / Number(inv.amount)) * 100).toFixed(2)}%`,
+                          `${(
+                            (Number(calculateYield(inv.amount, inv.discount_rate)) /
+                              Number(inv.amount)) *
+                            100
+                          ).toFixed(2)}%`,
                       },
                       { label: 'Due Date', get: (inv: Invoice) => formatDate(inv.due_date) },
                       { label: 'Submitter', get: (inv: Invoice) => formatAddress(inv.freelancer) },
@@ -637,7 +640,9 @@ export default function MarketplacePage() {
                           return (
                             <td
                               key={compareInvoices[idx].id.toString()}
-                              className={`p-4 text-center text-sm border-l border-outline-variant/10 ${isBest ? 'bg-green-50/50 font-bold text-green-700' : ''}`}
+                              className={`p-4 text-center text-sm border-l border-outline-variant/10 ${
+                                isBest ? 'bg-green-50/50 font-bold text-green-700' : ''
+                              }`}
                             >
                               {val}
                               {isBest && (

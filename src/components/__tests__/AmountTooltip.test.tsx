@@ -58,7 +58,7 @@ describe('AmountTooltip (#163)', () => {
     fireEvent.mouseEnter(screen.getByTestId('amount-tooltip-wrapper'));
     const content = screen.getByTestId('amount-tooltip-content');
     expect(content).toHaveTextContent('Invoice amount');
-    expect(content).toHaveTextContent('$1.5M');
+    expect(content).toHaveTextContent('$1.50M');
   });
 
   test('shows EURC currency symbol in tooltip rows', () => {
@@ -88,7 +88,8 @@ describe('AmountTooltip (#163)', () => {
     fireEvent.mouseEnter(screen.getByTestId('amount-tooltip-wrapper'));
     const content = screen.getByTestId('amount-tooltip-content');
     expect(content).toHaveTextContent('1.2345678 XLM');
-    expect(content).toHaveTextContent('−0.0123457 XLM');
+    // Discount uses integer (truncating) bps math, matching the contract.
+    expect(content).toHaveTextContent('−0.0123456 XLM');
   });
 
   test('shows correct LP breakdown rows', () => {

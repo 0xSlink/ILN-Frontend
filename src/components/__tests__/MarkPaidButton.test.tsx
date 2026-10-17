@@ -64,7 +64,7 @@ describe('MarkPaidButton (#12)', () => {
     fireEvent.click(screen.getByRole('button', { name: /mark paid/i }));
     fireEvent.click(screen.getByRole('button', { name: /confirm payment/i }));
 
-    await waitFor(() => expect(markPaid).toHaveBeenCalledWith(PAYER, 5n));
+    await waitFor(() => expect(markPaid).toHaveBeenCalledWith(PAYER, 5n, 1000n));
     expect(execute).toHaveBeenCalled();
     await waitFor(() =>
       expect(onPaid).toHaveBeenCalledWith(expect.objectContaining({ status: 'Paid' }))

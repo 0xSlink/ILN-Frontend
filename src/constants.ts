@@ -15,6 +15,7 @@ export const TESTNET_USDC_TOKEN_ID =
   'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75';
 export const NEXT_PUBLIC_INSURANCE_POOL_ENABLED =
   process.env.NEXT_PUBLIC_INSURANCE_POOL_ENABLED === 'true';
+export const NEXT_PUBLIC_ORACLE_ENABLED = process.env.NEXT_PUBLIC_ORACLE_ENABLED === 'true';
 export const TESTNET_EURC_TOKEN_ID =
   process.env.NEXT_PUBLIC_TESTNET_EURC_TOKEN_ID ||
   'GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP';
@@ -22,6 +23,9 @@ export const TESTNET_XLM_TOKEN_ID = process.env.NEXT_PUBLIC_TESTNET_XLM_TOKEN_ID
 export const GOVERNANCE_ADMIN_ADDRESS =
   process.env.NEXT_PUBLIC_GOVERNANCE_ADMIN_ADDRESS ||
   'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
+export const GOVERNANCE_CONTRACT_ID = process.env.NEXT_PUBLIC_GOVERNANCE_CONTRACT_ID || CONTRACT_ID;
+/** ILN governance token contract — used for voting power and quorum calculations. */
+export const ILN_TOKEN_CONTRACT_ID = process.env.NEXT_PUBLIC_ILN_TOKEN_CONTRACT_ID || CONTRACT_ID;
 
 // ─── Invoice NFT display (#234) ───────────────────────────────────────────────
 
@@ -39,3 +43,22 @@ export const NFT_EVENT_HINTS = process.env.NEXT_PUBLIC_NFT_EVENT_HINTS || '';
 // ─── Indexer WebSocket Configuration ────────────────────────────────────────────
 
 export const INDEXER_WS_URL = process.env.NEXT_PUBLIC_INDEXER_WS_URL || 'ws://localhost:8080/ws';
+
+// ─── Indexer API Configuration ──────────────────────────────────────────────
+
+/**
+ * Public indexer API URL (exposed to browser, no auth required)
+ */
+export const INDEXER_API_URL = process.env.NEXT_PUBLIC_INDEXER_API_URL || 'https://api.iln.example.com';
+
+/**
+ * Server-side indexer URL with optional authentication.
+ * Used for leaderboard, analytics, and higher-volume server calls.
+ */
+export const INDEXER_SERVER_URL = process.env.INDEXER_URL || process.env.NEXT_PUBLIC_INDEXER_API_URL || 'https://api.iln.example.com';
+
+/**
+ * Server-side API key for authenticated indexer calls (never expose to client).
+ * When set, enables higher rate limits vs. anonymous requests.
+ */
+export const INDEXER_API_KEY = process.env.INDEXER_API_KEY || '';

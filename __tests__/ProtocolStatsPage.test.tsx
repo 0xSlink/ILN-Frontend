@@ -1,7 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import type { ContractStats } from '@/utils/contract-stats';
 
 // ─── Mocks ───────────────────────────────────────────────────────────────────
@@ -16,6 +15,21 @@ vi.mock('@/context/WalletContext', () => ({
     isInstalled: true,
     error: null,
     networkMismatch: false,
+  }),
+}));
+
+// These pages render the app chrome (notification bell), which needs the
+// notification context.
+vi.mock('@/context/NotificationContext', () => ({
+  useNotification: () => ({
+    notifications: [],
+    unreadCount: 0,
+    setNotifications: vi.fn(),
+    addNotification: vi.fn(),
+    markAsRead: vi.fn(),
+    markAllAsRead: vi.fn(),
+    clearUnread: vi.fn(),
+    isRead: vi.fn(() => true),
   }),
 }));
 
@@ -132,10 +146,10 @@ describe('ProtocolStatsPage', () => {
     render(<ProtocolStatsScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Total Invoices/i)).toBeInTheDocument();
-      expect(screen.getByText(/Total Funded/i)).toBeInTheDocument();
-      expect(screen.getByText(/Total Paid/i)).toBeInTheDocument();
-      expect(screen.getByText(/Total Volume/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Total Invoices/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Total Funded/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Total Paid/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Total Volume/i).length).toBeGreaterThan(0);
     });
   });
 
@@ -144,9 +158,9 @@ describe('ProtocolStatsPage', () => {
     render(<ProtocolStatsScreen />);
 
     await waitFor(() => {
-      expect(screen.getByText('USDC')).toBeInTheDocument();
-      expect(screen.getByText('EURC')).toBeInTheDocument();
-      expect(screen.getByText('XLM')).toBeInTheDocument();
+      expect(screen.getAllByText('USDC').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('EURC').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('XLM').length).toBeGreaterThan(0);
     });
   });
 

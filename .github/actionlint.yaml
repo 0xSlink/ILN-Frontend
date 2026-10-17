@@ -1,0 +1,4 @@
+self-hosted-runner:
+  # Custom runner label used across our workflows (Namespace-hosted runners)
+  labels:
+    - namespace-profile-nursca

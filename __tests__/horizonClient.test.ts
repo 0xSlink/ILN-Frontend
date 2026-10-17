@@ -155,6 +155,16 @@ describe('invalidateCachePrefix', () => {
 
 // ─── fetchHorizonAccount (batch deduplication) ────────────────────────────────
 
+/**
+ * Account fetches are batched behind a `setTimeout(..., 0)`. With fake timers
+ * the callers never settle until the timer runs, so the pending promise has to
+ * be created first and awaited only after the timers are flushed.
+ */
+async function settle<T>(pending: Promise<T>): Promise<T> {
+  await vi.runAllTimersAsync();
+  return pending;
+}
+
 describe('fetchHorizonAccount', () => {
   it('batches multiple calls for the same address into one fetch', async () => {
     const account = makeAccount('GABC');
@@ -162,14 +172,13 @@ describe('fetchHorizonAccount', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(JSON.stringify(account), { status: 200 }));
 
-    const [r1, r2, r3] = await Promise.all([
-      fetchHorizonAccount('GABC'),
-      fetchHorizonAccount('GABC'),
-      fetchHorizonAccount('GABC'),
-    ]);
-
-    // Flush the microtask batch timer
-    await vi.runAllTimersAsync();
+    const [r1, r2, r3] = await settle(
+      Promise.all([
+        fetchHorizonAccount('GABC'),
+        fetchHorizonAccount('GABC'),
+        fetchHorizonAccount('GABC'),
+      ])
+    );
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(r1.account_id).toBe('GABC');
@@ -186,8 +195,7 @@ describe('fetchHorizonAccount', () => {
         return new Response(JSON.stringify(makeAccount(addr)), { status: 200 });
       });
 
-    await Promise.all([fetchHorizonAccount('GABC'), fetchHorizonAccount('GDEF')]);
-    await vi.runAllTimersAsync();
+    await settle(Promise.all([fetchHorizonAccount('GABC'), fetchHorizonAccount('GDEF')]));
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
@@ -195,8 +203,7 @@ describe('fetchHorizonAccount', () => {
   it('returns empty balances for a 404 (unfunded account)', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('Not Found', { status: 404 }));
 
-    const result = await fetchHorizonAccount('GUNFUNDED');
-    await vi.runAllTimersAsync();
+    const result = await settle(fetchHorizonAccount('GUNFUNDED'));
 
     expect(result.balances).toHaveLength(0);
   });
@@ -206,26 +213,26 @@ describe('fetchHorizonAccount', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(JSON.stringify(makeAccount('GCACHED')), { status: 200 }));
 
-    await fetchHorizonAccount('GCACHED');
-    await vi.runAllTimersAsync();
-    await fetchHorizonAccount('GCACHED');
+    await settle(fetchHorizonAccount('GCACHED'));
+    await settle(fetchHorizonAccount('GCACHED'));
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it('re-fetches after BALANCE TTL expires', async () => {
+    // A Response body can only be read once, so build a fresh one per call.
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(new Response(JSON.stringify(makeAccount('GTTL')), { status: 200 }));
+      .mockImplementation(
+        async () => new Response(JSON.stringify(makeAccount('GTTL')), { status: 200 })
+      );
 
-    await fetchHorizonAccount('GTTL');
-    await vi.runAllTimersAsync();
+    await settle(fetchHorizonAccount('GTTL'));
 
     vi.advanceTimersByTime(TTL.BALANCE + 1);
     __resetHorizonClient(); // clear cache to simulate expiry without time travel issues
 
-    await fetchHorizonAccount('GTTL');
-    await vi.runAllTimersAsync();
+    await settle(fetchHorizonAccount('GTTL'));
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
@@ -239,8 +246,7 @@ describe('fetchNativeXlmBalance', () => {
       new Response(JSON.stringify(makeAccount('GXLM', '250.5000000')), { status: 200 })
     );
 
-    const balance = await fetchNativeXlmBalance('GXLM');
-    await vi.runAllTimersAsync();
+    const balance = await settle(fetchNativeXlmBalance('GXLM'));
 
     expect(balance).toBe(250.5);
   });
@@ -248,8 +254,7 @@ describe('fetchNativeXlmBalance', () => {
   it('returns 0 for an unfunded account (404)', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('Not Found', { status: 404 }));
 
-    const balance = await fetchNativeXlmBalance('GNEW');
-    await vi.runAllTimersAsync();
+    const balance = await settle(fetchNativeXlmBalance('GNEW'));
 
     expect(balance).toBe(0);
   });
@@ -261,11 +266,9 @@ describe('fetchNativeXlmBalance', () => {
         new Response(JSON.stringify(makeAccount('GDUP', '10.0000000')), { status: 200 })
       );
 
-    const [b1, b2] = await Promise.all([
-      fetchNativeXlmBalance('GDUP'),
-      fetchNativeXlmBalance('GDUP'),
-    ]);
-    await vi.runAllTimersAsync();
+    const [b1, b2] = await settle(
+      Promise.all([fetchNativeXlmBalance('GDUP'), fetchNativeXlmBalance('GDUP')])
+    );
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(b1).toBe(10);
@@ -281,8 +284,7 @@ describe('fetchHomeDomain', () => {
       new Response(JSON.stringify(makeAccount('GDOMAIN')), { status: 200 })
     );
 
-    const domain = await fetchHomeDomain('GDOMAIN');
-    await vi.runAllTimersAsync();
+    const domain = await settle(fetchHomeDomain('GDOMAIN'));
 
     expect(domain).toBe('example.com');
   });
@@ -293,8 +295,7 @@ describe('fetchHomeDomain', () => {
       new Response(JSON.stringify(account), { status: 200 })
     );
 
-    const domain = await fetchHomeDomain('GNODOMAIN');
-    await vi.runAllTimersAsync();
+    const domain = await settle(fetchHomeDomain('GNODOMAIN'));
 
     expect(domain).toBeNull();
   });
@@ -304,9 +305,8 @@ describe('fetchHomeDomain', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response(JSON.stringify(makeAccount('GCACHE2')), { status: 200 }));
 
-    await fetchHomeDomain('GCACHE2');
-    await vi.runAllTimersAsync();
-    await fetchHomeDomain('GCACHE2');
+    await settle(fetchHomeDomain('GCACHE2'));
+    await settle(fetchHomeDomain('GCACHE2'));
 
     // Only one Horizon fetch despite two calls
     expect(fetchSpy).toHaveBeenCalledTimes(1);

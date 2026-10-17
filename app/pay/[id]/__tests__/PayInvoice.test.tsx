@@ -1,20 +1,34 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import PayInvoicePage from '../page';
-import * as soroban from '../../../../utils/soroban';
-import { useWallet } from '../../../../context/WalletContext';
-import { useToast } from '../../../../context/ToastContext';
+import * as soroban from '@/utils/soroban';
+import { useWallet } from '@/context/WalletContext';
+import { useToast } from '@/context/ToastContext';
 
 // Mock context and utils
-vi.mock('../../../../context/WalletContext', () => ({
+vi.mock('@/context/WalletContext', () => ({
   useWallet: vi.fn(),
 }));
 
-vi.mock('../../../../context/ToastContext', () => ({
+// The page renders the app chrome (notification bell).
+vi.mock('@/context/NotificationContext', () => ({
+  useNotification: () => ({
+    notifications: [],
+    unreadCount: 0,
+    setNotifications: vi.fn(),
+    addNotification: vi.fn(),
+    markAsRead: vi.fn(),
+    markAllAsRead: vi.fn(),
+    clearUnread: vi.fn(),
+    isRead: vi.fn(() => true),
+  }),
+}));
+
+vi.mock('@/context/ToastContext', () => ({
   useToast: vi.fn(),
 }));
 
-vi.mock('../../../../utils/soroban', () => ({
+vi.mock('@/utils/soroban', () => ({
   getInvoice: vi.fn(),
   markPaid: vi.fn(),
   submitSignedTransaction: vi.fn(),
@@ -53,7 +67,7 @@ describe('PayInvoicePage', () => {
     render(<PayInvoicePage params={params} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/100\s+USDC/)).toBeInTheDocument();
+      expect(screen.getAllByText(/1,000\s+USDC/).length).toBeGreaterThan(0);
       expect(screen.getByText('Connect Wallet and Pay')).toBeInTheDocument();
     });
   });
@@ -124,7 +138,7 @@ describe('PayInvoicePage', () => {
     fireEvent.click(screen.getByText('Make Payment'));
 
     await waitFor(() => {
-      expect(screen.getByText('Payment Amount')).toBeInTheDocument();
+      expect(screen.getAllByText('Payment Amount').length).toBeGreaterThan(0);
     });
   });
 

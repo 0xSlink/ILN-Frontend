@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import LPSettingsModal from './LPSettingsModal';
 
 const meta: Meta<typeof LPSettingsModal> = {

@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import LPPortfolio from './LPPortfolio';
 
 const meta: Meta<typeof LPPortfolio> = {

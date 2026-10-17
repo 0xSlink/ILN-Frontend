@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import StatsDisputeRateCard from './StatsDisputeRateCard';
 import type { DisputeRateMetrics } from '@/utils/dispute-rate';
 

@@ -69,7 +69,9 @@ export default function InvoiceMarketplaceCard({
   return (
     <article
       data-testid="invoice-card"
-      className={`group invoice rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 hover:border-primary/30 hover:shadow-md transition-all relative ${isBelowThreshold ? 'opacity-50 grayscale-[0.5]' : ''} ${isSelected ? 'ring-2 ring-primary' : ''}`}
+      className={`group invoice rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 hover:border-primary/30 hover:shadow-md transition-all relative ${
+        isBelowThreshold ? 'opacity-50 grayscale-[0.5]' : ''
+      } ${isSelected ? 'ring-2 ring-primary' : ''}`}
     >
       {isBelowThreshold && (
         <div className="absolute inset-x-0 h-full w-full z-10 flex flex-col items-center justify-center bg-surface-container-lowest/40 backdrop-blur-[1px] rounded-2xl pointer-events-none">

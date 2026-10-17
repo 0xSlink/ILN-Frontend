@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import StatsMetricCards from './StatsMetricCards';
 import type { ContractStats } from '@/utils/contract-stats';
 

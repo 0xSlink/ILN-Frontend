@@ -1,0 +1,6 @@
+{
+  "$schema": "https://knip.dev/schema.json",
+  "entry": ["app/**/page.tsx", "app/layout.tsx", "src/hooks/queries/index.ts"],
+  "ignore": ["app/api/**"],
+  "ignoreDependencies": ["@next/bundle-analyzer"]
+}

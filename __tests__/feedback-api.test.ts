@@ -18,10 +18,13 @@ const validPayload = {
   email: 'tester@example.com',
 };
 
-function makeRequest(body: unknown) {
+let ipCounter = 0;
+
+function makeRequest(body: unknown, ip?: string) {
   return new NextRequest('http://localhost/api/feedback', {
     method: 'POST',
     body: JSON.stringify(body),
+    headers: { 'x-forwarded-for': ip ?? `10.0.0.${++ipCounter}` },
   });
 }
 
@@ -174,6 +177,75 @@ describe('/api/feedback API route', () => {
 
       expect(response.status).toBe(500);
       expect(body).toEqual({ error: 'Internal server error' });
+    });
+  });
+
+  describe('malformed and malicious input', () => {
+    it.each([
+      ['a non-integer', { ...validPayload, rating: 4.5 }],
+      ['a string', { ...validPayload, rating: '5' }],
+      ['out of range (negative)', { ...validPayload, rating: -1 }],
+      ['out of range (6)', { ...validPayload, rating: 6 }],
+    ])('rejects a rating that is %s', async (_desc, payload) => {
+      const response = await POST(makeRequest(payload));
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(body).toEqual({ error: 'Invalid rating' });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a category outside the allow-list', async () => {
+      const response = await POST(
+        makeRequest({ ...validPayload, category: '<script>alert(1)</script>' })
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(body).toEqual({ error: 'Invalid category' });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects feedback text that exceeds the max length', async () => {
+      const response = await POST(makeRequest({ ...validPayload, feedback: 'a'.repeat(5001) }));
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(body).toEqual({ error: 'Invalid feedback' });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a malformed email address', async () => {
+      const response = await POST(makeRequest({ ...validPayload, email: 'not-an-email' }));
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(body).toEqual({ error: 'Invalid email' });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rate limiting', () => {
+    it('returns 429 after exceeding the per-IP request limit', async () => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 201,
+        headers: new Headers(),
+        json: async () => ({ html_url: 'https://github.com/test-owner/test-repo/issues/1' }),
+      });
+      const ip = '203.0.113.9';
+
+      for (let i = 0; i < 5; i += 1) {
+        const response = await POST(makeRequest(validPayload, ip));
+        expect(response.status).toBe(200);
+      }
+
+      const limited = await POST(makeRequest(validPayload, ip));
+      const body = await limited.json();
+
+      expect(limited.status).toBe(429);
+      expect(body.error).toBe('rate_limit');
+      expect(limited.headers.get('Retry-After')).toBeTruthy();
     });
   });
 });

@@ -9,7 +9,6 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useToast } from '@/context/ToastContext';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -150,6 +149,7 @@ export default function NotificationSettings() {
     }
     setTestingWebhook(true);
     try {
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
       await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

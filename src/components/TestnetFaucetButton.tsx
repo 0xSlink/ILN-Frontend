@@ -52,6 +52,7 @@ export default function TestnetFaucetButton() {
     const toastId = addToast({ type: 'pending', title: 'Requesting testnet XLM...' });
 
     try {
+      // eslint-disable-next-line no-restricted-globals, no-restricted-syntax -- Legacy inline exception pending query hook migration
       const response = await fetch(
         `https://friendbot.stellar.org?addr=${encodeURIComponent(address)}`
       );
@@ -67,7 +68,9 @@ export default function TestnetFaucetButton() {
       updateToast(toastId, {
         type: 'success',
         title: 'Testnet XLM received',
-        message: `Funded ${fundedAmount.toFixed(2)} XLM. Current balance: ${nextBalance.toFixed(2)} XLM.`,
+        message: `Funded ${fundedAmount.toFixed(2)} XLM. Current balance: ${nextBalance.toFixed(
+          2
+        )} XLM.`,
       });
     } catch (error) {
       updateToast(toastId, {
@@ -85,7 +88,7 @@ export default function TestnetFaucetButton() {
       type="button"
       onClick={handleFund}
       disabled={isFunding || isLoadingBalance || hasSufficientBalance}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-primary/20 bg-primary-container/60 px-3 py-2 text-xs font-bold text-on-primary-container transition-colors hover:bg-primary-container disabled:cursor-not-allowed disabled:opacity-55"
+      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-on-surface transition-colors hover:bg-surface-container-highest disabled:cursor-not-allowed disabled:opacity-55"
       title={
         hasSufficientBalance
           ? `Wallet already has ${xlmBalance.toFixed(2)} XLM`

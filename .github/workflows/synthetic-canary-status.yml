@@ -1,0 +1,76 @@
+name: Synthetic Canary — Status Page Feed
+
+# #938 — schedules e2e/synthetic-integration-health.spec.ts, which existed
+# but (per docs/status-page-incident-tooling-readiness-report.md, finding 5)
+# was never actually wired to a schedule despite docs/slos.md claiming a
+# 15-minute cadence. Every run reports its result to Instatus and the
+# shared alert-routing path via scripts/report-canary-result.ts.
+#
+# Cadence coordination with the backend repo's synthetic canary (#938):
+# this workflow runs at :05/:20/:35/:50 — offset 5 minutes from a
+# :00/:15/:30/:45 cadence — so the two repos' canaries don't fire in the
+# same instant and double-trip alert-routing/Instatus rate limits for a
+# single underlying blip. Confirm/adjust against the backend repo's actual
+# cron once its schedule is known; this is a documented assumption, not a
+# verified handshake — see docs/alert-routing-integration.md.
+on:
+  schedule:
+    - cron: '5,20,35,50 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  canary:
+    name: Run Synthetic Integration Health Canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.0.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run synthetic integration health canary
+        id: canary
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ vars.CANARY_TARGET_URL || 'https://app.iln.finance' }}
+          NEXT_PUBLIC_API_MOCKING: disabled
+        run: pnpm exec playwright test e2e/synthetic-integration-health.spec.ts --project=chromium
+        continue-on-error: true
+
+      - name: Report result to status page and alert routing
+        if: always()
+        env:
+          INSTATUS_API_KEY: ${{ secrets.INSTATUS_API_KEY }}
+          INSTATUS_PAGE_ID: ${{ secrets.INSTATUS_PAGE_ID }}
+          INSTATUS_WEBAPP_COMPONENT_ID: ${{ secrets.INSTATUS_WEBAPP_COMPONENT_ID }}
+          INSTATUS_OPEN_CANARY_INCIDENT_ID: ${{ vars.INSTATUS_OPEN_CANARY_INCIDENT_ID }}
+          ALERT_ROUTING_WEBHOOK_URL: ${{ secrets.ALERT_ROUTING_WEBHOOK_URL }}
+          ALERT_ROUTING_SECRET: ${{ secrets.ALERT_ROUTING_SECRET }}
+        run: |
+          npx tsx scripts/report-canary-result.ts ${{ steps.canary.outcome == 'success' && '0' || '1' }}
+
+      - name: Fail the job if the canary failed
+        if: steps.canary.outcome != 'success'
+        run: exit 1

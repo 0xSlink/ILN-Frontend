@@ -32,101 +32,107 @@ export default function Footer() {
               {t('footer.tagline')}
             </p>
             <div className="flex gap-4">
-              <a
+              <button
+                type="button"
                 className="w-10 h-10 rounded-full bg-on-primary-container/10 flex items-center justify-center text-on-primary-container hover:bg-on-primary-container/20 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-primary-container"
-                href="#"
                 aria-label={t('footer.website') || 'Visit our website'}
               >
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">
                   public
                 </span>
-              </a>
-              <a
+              </button>
+              <button
+                type="button"
                 className="w-10 h-10 rounded-full bg-on-primary-container/10 flex items-center justify-center text-on-primary-container hover:bg-on-primary-container/20 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-primary-container"
-                href="#"
                 aria-label={t('footer.github') || 'View our GitHub repository'}
               >
                 <span className="material-symbols-outlined text-lg" aria-hidden="true">
                   terminal
                 </span>
-              </a>
+              </button>
             </div>
           </div>
-          <nav>
-            <h5 className="text-xs font-bold uppercase tracking-widest text-on-primary-container mb-6">
+          <nav aria-labelledby="footer-network-heading">
+            <h5
+              id="footer-network-heading"
+              className="text-xs font-bold uppercase tracking-widest text-on-primary-container mb-6"
+            >
               {t('footer.network')}
             </h5>
             <ul className="space-y-4 text-sm text-on-primary-container/80">
               <li>
-                <a
+                <button
+                  type="button"
                   className="hover:text-on-primary-container transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-primary-container focus:rounded px-1"
-                  href="#"
                 >
                   {t('footer.howItWorks')}
-                </a>
+                </button>
               </li>
               <li>
-                <a
+                <button
+                  type="button"
                   className="hover:text-on-primary-container transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-primary-container focus:rounded px-1"
-                  href="#"
                 >
                   {t('footer.forFreelancers')}
-                </a>
+                </button>
               </li>
               <li>
-                <a
+                <button
+                  type="button"
                   className="hover:text-on-primary-container transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-primary-container focus:rounded px-1"
-                  href="#"
                 >
                   {t('footer.forLPs')}
-                </a>
+                </button>
               </li>
               <li>
-                <a
+                <button
+                  type="button"
                   className="hover:text-on-primary-container transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-primary-container focus:rounded px-1"
-                  href="#"
                 >
                   {t('footer.dashboard')}
-                </a>
+                </button>
               </li>
             </ul>
           </nav>
-          <nav>
-            <h5 className="text-xs font-bold uppercase tracking-widest text-on-primary-container mb-6">
+          <nav aria-labelledby="footer-developers-heading">
+            <h5
+              id="footer-developers-heading"
+              className="text-xs font-bold uppercase tracking-widest text-on-primary-container mb-6"
+            >
               {t('footer.developers')}
             </h5>
             <ul className="space-y-4 text-sm text-on-primary-container/80">
               <li>
-                <a
+                <button
+                  type="button"
                   className="hover:text-on-primary-container transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-primary-container focus:rounded px-1"
-                  href="#"
                 >
                   {t('footer.documentation')}
-                </a>
+                </button>
               </li>
               <li>
-                <a
+                <button
+                  type="button"
                   className="hover:text-on-primary-container transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-primary-container focus:rounded px-1"
-                  href="#"
                 >
                   {t('footer.githubRepository')}
-                </a>
+                </button>
               </li>
               <li>
-                <a
+                <button
+                  type="button"
                   className="hover:text-on-primary-container transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-primary-container focus:rounded px-1"
-                  href="#"
                 >
                   {t('footer.technicalSpecs')}
-                </a>
+                </button>
               </li>
               <li>
-                <a
+                <button
+                  type="button"
                   className="hover:text-on-primary-container transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-primary-container focus:rounded px-1"
-                  href="#"
                 >
                   {t('footer.openSourcePolicy')}
-                </a>
+                </button>
               </li>
             </ul>
           </nav>

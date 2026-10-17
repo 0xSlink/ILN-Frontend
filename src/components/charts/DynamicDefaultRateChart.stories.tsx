@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import DynamicDefaultRateChart from './DynamicDefaultRateChart';
 
 const meta: Meta<typeof DynamicDefaultRateChart> = {

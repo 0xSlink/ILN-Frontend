@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
+import { StrKey } from '@stellar/stellar-sdk';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { getNotificationsServiceStatus } from '@/lib/notifications';
 import PaymentReminderEmail from '@/emails/PaymentReminder';
 import { getAllInvoices, getTokenMetadata } from '@/utils/soroban';
 import { formatTokenAmount } from '@/utils/format';
+import { checkRateLimit, getClientKey } from '@/lib/rate-limit';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_EMAIL_LENGTH = 320;
+const POST_RATE_LIMIT_MAX_REQUESTS = 5;
+const POST_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const GET_RATE_LIMIT_MAX_REQUESTS = 10;
+const GET_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 let _resend: Resend | null = null;
 function getResend(): Resend {
@@ -15,6 +25,19 @@ function getResend(): Resend {
 
 // POST: Save/Update opt-in preference
 export async function POST(req: NextRequest) {
+  const clientKey = getClientKey(req);
+  const rateLimit = checkRateLimit(
+    `reminders-post:${clientKey}`,
+    POST_RATE_LIMIT_MAX_REQUESTS,
+    POST_RATE_LIMIT_WINDOW_MS
+  );
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } }
+    );
+  }
+
   try {
     const { address, email, enabled } = await req.json();
 
@@ -22,10 +45,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Address and email are required' }, { status: 400 });
     }
 
+    if (typeof address !== 'string' || !StrKey.isValidEd25519PublicKey(address.trim())) {
+      return NextResponse.json({ error: 'Invalid Stellar address' }, { status: 400 });
+    }
+
+    if (typeof email !== 'string' || email.length > MAX_EMAIL_LENGTH || !EMAIL_RE.test(email)) {
+      return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
+    }
+
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      return NextResponse.json({ error: 'Invalid enabled flag' }, { status: 400 });
+    }
+
     const supabase = getSupabaseAdmin();
     const { error } = await supabase.from('reminder_preferences').upsert(
       {
-        address,
+        address: address.trim(),
         email,
         enabled: enabled ?? true,
         updated_at: new Date().toISOString(),
@@ -35,7 +70,27 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({ success: true });
+    // The preference is persisted regardless of delivery health (a "saved but
+    // delivery temporarily degraded" state). Distinguish that from a failed
+    // save so the client can show the right guidance. See
+    // docs/notifications-service.md.
+    const delivery = await getNotificationsServiceStatus();
+
+    const response: {
+      success: true;
+      saved: true;
+      delivery: 'ok' | 'degraded';
+      retryAfterSeconds?: number;
+    } = {
+      success: true,
+      saved: true,
+      delivery: delivery.status === 'ok' ? 'ok' : 'degraded',
+    };
+    if (delivery.status !== 'ok' && delivery.retryAfterSeconds !== undefined) {
+      response.retryAfterSeconds = delivery.retryAfterSeconds;
+    }
+
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error saving reminder preference:', error);
     return NextResponse.json({ error: 'Failed to save preference' }, { status: 500 });
@@ -48,6 +103,19 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const clientKey = getClientKey(req);
+  const rateLimit = checkRateLimit(
+    `reminders-get:${clientKey}`,
+    GET_RATE_LIMIT_MAX_REQUESTS,
+    GET_RATE_LIMIT_WINDOW_MS
+  );
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } }
+    );
   }
 
   try {
@@ -104,7 +172,30 @@ export async function GET(req: NextRequest) {
             const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.iln.finance';
             const payerLink = `${baseUrl}/payer`;
             const payNowLink = `${baseUrl}/pay/${inv.id.toString()}`;
-            const unsubscribeUrl = `${baseUrl}/api/reminders/unsubscribe?address=${pref.address}`;
+
+            const supabase = getSupabaseAdmin();
+            const { data: prefData } = await supabase
+              .from('reminder_preferences')
+              .select('unsubscribe_token')
+              .eq('address', pref.address)
+              .maybeSingle();
+
+            let unsubscribeToken = prefData?.unsubscribe_token;
+            if (!unsubscribeToken) {
+              const crypto = await import('crypto');
+              unsubscribeToken = crypto.randomBytes(32).toString('hex');
+              await supabase
+                .from('reminder_preferences')
+                .update({ unsubscribe_token: unsubscribeToken })
+                .eq('address', pref.address);
+            }
+
+            const tokenHash = require('crypto')
+              .createHash('sha256')
+              .update(unsubscribeToken + (process.env.UNSUBSCRIBE_TOKEN_SECRET || 'default-secret'))
+              .digest('hex');
+
+            const unsubscribeUrl = `${baseUrl}/api/reminders/unsubscribe?address=${pref.address}&token=${tokenHash}`;
 
             const { error: sendError } = await getResend().emails.send({
               from: 'ILN Reminders <reminders@iln.finance>',

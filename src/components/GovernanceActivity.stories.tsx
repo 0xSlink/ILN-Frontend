@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import GovernanceActivity from './GovernanceActivity';
 
 const meta: Meta<typeof GovernanceActivity> = {

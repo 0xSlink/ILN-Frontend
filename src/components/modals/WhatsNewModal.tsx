@@ -68,7 +68,7 @@ export default function WhatsNewModal() {
             🎉
           </div>
           <h2 id="whats-new-title" className="text-xl font-headline font-bold text-on-surface">
-            What's New in{' '}
+            What&apos;s New in{' '}
             <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-sm text-primary">
               {currentVersion}
             </span>

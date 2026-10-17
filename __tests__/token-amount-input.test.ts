@@ -9,13 +9,13 @@ import {
 } from '@/utils/token-amount-input';
 
 describe('getTokenInputDecimals', () => {
-  it('returns 7 for XLM', () => {
+  it('returns 7 for XLM and EURC', () => {
     expect(getTokenInputDecimals('XLM')).toBe(7);
+    expect(getTokenInputDecimals('EURC')).toBe(7);
   });
 
-  it('returns 6 for USDC and EURC', () => {
+  it('returns 6 for USDC', () => {
     expect(getTokenInputDecimals('USDC')).toBe(6);
-    expect(getTokenInputDecimals('EURC')).toBe(6);
   });
 });
 

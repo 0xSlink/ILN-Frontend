@@ -1,9 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import React from 'react';
 import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 import {
   roadmapItems,
   getRoadmapPhases,
@@ -137,7 +135,6 @@ function PhaseColumn({ phase, items }: PhaseColumnProps) {
 
 export default function RoadmapPage() {
   useDocumentTitle({ pageTitle: 'Public Roadmap' });
-  const { t } = useTranslation();
   const phases = getRoadmapPhases();
 
   return (
@@ -148,7 +145,7 @@ export default function RoadmapPage() {
         <div className="mb-16 text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">ILN Roadmap</h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
-            See what's coming to Invoice Liquidity Network. Our roadmap is transparent,
+            See what&apos;s coming to Invoice Liquidity Network. Our roadmap is transparent,
             community-driven, and updated regularly.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
@@ -199,7 +196,6 @@ export default function RoadmapPage() {
           </a>
         </div>
       </div>
-      <Footer />
     </main>
   );
 }

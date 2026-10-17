@@ -1,15 +1,12 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslation } from 'react-i18next';
 import { useWallet } from '@/context/WalletContext';
 import { useToast } from '@/context/ToastContext';
 import BatchInvoiceForm from '@/components/BatchInvoiceForm';
 
 export default function BatchInvoiceSubmissionPage() {
   const router = useRouter();
-  const { t } = useTranslation();
   const { isConnected, connect } = useWallet();
   const { addToast } = useToast();
 

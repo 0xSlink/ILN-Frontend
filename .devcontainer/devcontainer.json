@@ -1,0 +1,51 @@
+{
+  "name": "ILN Frontend",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20.9.0-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "none"
+    }
+  },
+  "onCreateCommand": "npm install -g pnpm@9.0.0",
+  "postCreateCommand": "pnpm install --frozen-lockfile",
+  "forwardPorts": [3000, 6006],
+  "portsAttributes": {
+    "3000": {
+      "label": "Next.js Dev Server",
+      "onAutoForward": "notify"
+    },
+    "6006": {
+      "label": "Storybook",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "prisma.prisma",
+        "ms-vscode.vscode-typescript-next",
+        "styled-components.vscode-styled-components",
+        "mikestead.dotenv",
+        "streetsidesoftware.code-spell-checker",
+        "github.vscode-pull-request-github",
+        "EditorConfig.EditorConfig",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "typescript.preferences.importModuleSpecifier": "relative",
+        "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"]
+      }
+    }
+  },
+  "remoteEnv": {
+    "NODE_ENV": "development"
+  }
+}

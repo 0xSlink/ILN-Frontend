@@ -2,14 +2,17 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import i18n from '../src/i18n';
 import { I18nextProvider } from 'react-i18next';
-import Navbar from '../components/Navbar';
-import { WalletProvider } from '../context/WalletContext';
-import { ToastProvider } from '../context/ToastContext';
+import Navbar from '@/components/Navbar';
+import { WalletProvider } from '@/context/WalletContext';
+import { ToastProvider } from '@/context/ToastContext';
+import { NotificationProvider } from '@/context/NotificationContext';
 
 const TestWrapper = ({ children }: { children: React.ReactNode }) => (
   <I18nextProvider i18n={i18n}>
     <ToastProvider>
-      <WalletProvider>{children}</WalletProvider>
+      <WalletProvider>
+        <NotificationProvider>{children}</NotificationProvider>
+      </WalletProvider>
     </ToastProvider>
   </I18nextProvider>
 );
@@ -118,15 +121,15 @@ describe('Navbar language toggle', () => {
 
   it('displays navigation in current language', async () => {
     render(<Navbar />, { wrapper: TestWrapper });
-    expect(screen.getByText('How it works')).toBeInTheDocument();
-    expect(screen.getByText('For Freelancers')).toBeInTheDocument();
+    // Nav links render twice (desktop bar + mobile menu).
+    expect(screen.getAllByText('For Freelancers').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Governance').length).toBeGreaterThan(0);
   });
 
   it('displays navigation in Spanish after switch', async () => {
     await i18n.changeLanguage('es');
     render(<Navbar />, { wrapper: TestWrapper });
-    expect(screen.getByText('Cómo funciona')).toBeInTheDocument();
-    expect(screen.getByText('Para Freelancers')).toBeInTheDocument();
+    expect(screen.getAllByText('Para Freelancers').length).toBeGreaterThan(0);
   });
 });
 

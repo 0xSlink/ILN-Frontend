@@ -8,7 +8,7 @@ import { formatUsdcFromStroops } from '@/utils/invoiceSubmission';
 import { useWallet } from '@/context/WalletContext';
 import { useToast } from '@/context/ToastContext';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { TESTNET_USDC_TOKEN_ID, NETWORK_NAME } from '@/constants';
+import { NETWORK_NAME } from '@/constants';
 import ActivityFeed from '@/components/ActivityFeed';
 import PartialPaymentModal from '@/components/PartialPaymentModal';
 

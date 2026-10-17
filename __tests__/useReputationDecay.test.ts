@@ -10,7 +10,6 @@ vi.mock('../src/utils/soroban', () => ({
 
 describe('useReputationDecay', () => {
   const mockGetReputation = soroban.getReputation as any;
-  const DECAY_THRESHOLD_LEDGERS = 1_555_200;
 
   beforeEach(() => {
     vi.clearAllMocks();

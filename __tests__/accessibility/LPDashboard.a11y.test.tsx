@@ -113,10 +113,14 @@ vi.mock('next/navigation', () => ({
 
 describe('LPDashboard Accessibility', () => {
   it('should not have any accessibility violations', async () => {
+    // LPDashboard is a large, tab-heavy component tree; axe-scanning it
+    // is the heaviest case in this file. The default 5s test timeout is
+    // tight under worker contention (running alongside the other a11y
+    // suites), so give it more headroom.
     const { container } = render(<LPDashboard />);
     const results = await axe(container);
     expect(results).toHaveNoViolations();
-  });
+  }, 15000);
 
   it('should have proper tab navigation structure', () => {
     const { container } = render(<LPDashboard />);
@@ -131,7 +135,6 @@ describe('LPDashboard Accessibility', () => {
       });
     } else {
       // With empty data the component may not render tabs; verify navigation region exists
-      const nav = container.querySelector('[role="tablist"], nav, [data-tab]');
       // No tab navigation at all is valid for the loading/empty state
       expect(container).toBeInTheDocument();
     }

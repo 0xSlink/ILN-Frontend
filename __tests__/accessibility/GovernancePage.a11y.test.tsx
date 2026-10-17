@@ -29,6 +29,9 @@ vi.mock('@/hooks/useDocumentTitle', () => ({
 }));
 
 vi.mock('@/utils/governance', () => ({
+  GOVERNANCE_INTEGRATION_STATUS: {
+    getVotingPower: { status: 'Stubbed', label: 'Voting power lookup' },
+  },
   fetchProposals: vi.fn(() => Promise.resolve([])),
   getVotingPower: vi.fn(() => Promise.resolve(100)),
   timeRemaining: vi.fn(() => '2 days'),
@@ -44,7 +47,7 @@ vi.mock('@/components/Navbar', () => ({
 }));
 
 vi.mock('@/components/VoteProgressBar', () => ({
-  default: ({ proposal }: any) => <div data-testid="vote-progress">Vote Progress</div>,
+  default: ({ proposal: _proposal }: any) => <div data-testid="vote-progress">Vote Progress</div>,
 }));
 
 vi.mock('@/components/governance/TokenAllowlistPanel', () => ({

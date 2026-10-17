@@ -9,12 +9,14 @@ Additional candidates can be proposed by repository contributors by referencing 
 ## Active Candidates
 
 ### 1. Issue #551: Add a `pnpm run clean` script
+
 - **Status**: Proposed for `good first issue` labeling.
 - **Description**: Add a clean script in `package.json` to prune local cache and build folders (such as `.next`, `.turbo`, `storybook-static`, etc.).
 - **Complexity**: Trivial complexity.
 - **Why it fits**: Extremely self-contained. Only requires modifying `package.json` and adding basic script documentation. No familiarity with blockchain/Stellar, route structures, or complex UI components is required.
 
 ### 2. Issue #553: Add `docs/troubleshooting.md`
+
 - **Status**: Proposed for `good first issue` labeling.
 - **Description**: Consolidate existing setup issues and common failure symptoms (Supabase RLS, Freighter, Resend, package managers) into a single, searchable guide.
 - **Complexity**: Trivial complexity / Documentation.

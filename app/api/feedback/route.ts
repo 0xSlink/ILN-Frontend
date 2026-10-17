@@ -1,12 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { checkRateLimit, getClientKey } from '@/lib/rate-limit';
+
+const ALLOWED_CATEGORIES = ['Bug', 'Feature', 'UX', 'Other'];
+const MAX_FEEDBACK_LENGTH = 5000;
+const MAX_EMAIL_LENGTH = 320;
+const RATE_LIMIT_MAX_REQUESTS = 5;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest) {
+  const clientKey = getClientKey(req);
+  const rateLimit = checkRateLimit(
+    `feedback:${clientKey}`,
+    RATE_LIMIT_MAX_REQUESTS,
+    RATE_LIMIT_WINDOW_MS
+  );
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: 'rate_limit', retryAfter: rateLimit.retryAfterSeconds },
+      { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSeconds) } }
+    );
+  }
+
   try {
     const body = await req.json();
     const { rating, category, feedback, email } = body;
 
     if (!rating || !category || !feedback) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    if (typeof rating !== 'number' || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return NextResponse.json({ error: 'Invalid rating' }, { status: 400 });
+    }
+
+    if (typeof category !== 'string' || !ALLOWED_CATEGORIES.includes(category)) {
+      return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
+    }
+
+    if (
+      typeof feedback !== 'string' ||
+      feedback.trim().length === 0 ||
+      feedback.length > MAX_FEEDBACK_LENGTH
+    ) {
+      return NextResponse.json({ error: 'Invalid feedback' }, { status: 400 });
+    }
+
+    if (email !== undefined && email !== null && email !== '') {
+      if (typeof email !== 'string' || email.length > MAX_EMAIL_LENGTH || !EMAIL_RE.test(email)) {
+        return NextResponse.json({ error: 'Invalid email' }, { status: 400 });
+      }
     }
 
     const githubToken = process.env.GITHUB_TOKEN;

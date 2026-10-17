@@ -38,6 +38,9 @@ const walletState = {
   isInstalled: true,
   isReconnecting: false,
   preferredWalletProvider: null as string | null,
+  connect: vi.fn(),
+  disconnect: vi.fn(),
+  switchNetwork: vi.fn(),
   signTx: vi.fn(),
 };
 

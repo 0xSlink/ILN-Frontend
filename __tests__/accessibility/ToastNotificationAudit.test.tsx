@@ -1,24 +1,29 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { axe } from 'jest-axe';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ToastProvider } from '@/context/ToastContext';
 import { NotificationProvider } from '@/context/NotificationContext';
+
+// NotificationProvider reads the connected wallet address to key its
+// localStorage cache; mock it like the other context-mock tests in this
+// suite so useNotification() (via NotificationProvider) doesn't throw.
+vi.mock('@/context/WalletContext', () => ({
+  useWallet: () => ({
+    address: 'GTESTWALLET123',
+    isConnected: true,
+  }),
+}));
 
 // Simple test components
 function ToastAuditComponent() {
   return (
     <div data-testid="toast-audit">
       <h1>Toast Accessibility Audit</h1>
-      <div
-        id="toast-live-region"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className="sr-only"
-      >
-        Toast announcements for screen readers
-      </div>
+      {/* ToastProvider (rendered as the ancestor below) already renders its
+          own #toast-live-region; this component intentionally doesn't
+          duplicate it - a second element with the same id/role would trip
+          both the "no duplicate ids" and "multiple role=status" checks. */}
     </div>
   );
 }

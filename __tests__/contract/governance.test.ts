@@ -3,11 +3,13 @@
  * These operate as mocked Soroban calls until the governance contract is deployed.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { rpc, nativeToScVal } from '@stellar/stellar-sdk';
 
 import {
   castVote,
   createProposal,
   fetchProposals,
+  getProposals,
   fetchProposal,
   fetchProtocolParameters,
   getVotingPower,
@@ -19,9 +21,17 @@ import {
   formatVotingPower,
   isValidStellarAddress,
   parameterLabel,
+  parseProposalStatus,
+  parseProposalFromNative,
+  simulateProposalEffect,
   MOCK_PROPOSALS,
   type CreateProposalPayload,
 } from '@/utils/governance';
+import {
+  combineRecorders,
+  detectMockBacking,
+  expectMockBackingStatus,
+} from '@/test-utils/mock-detection';
 
 const SIGNER = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const mockSignTx = vi.fn(async (_xdr: string) => 'signedXDR');
@@ -66,34 +76,70 @@ describe('governance – castVote', () => {
     const after = MOCK_PROPOSALS.find((p) => p.id === proposalId)?.votesAgainst ?? 0;
     expect(after).toBeGreaterThan(before);
   });
-
-  it('increments votesAbstain when voting Abstain', async () => {
-    const proposalId = 2;
-    const before = MOCK_PROPOSALS.find((p) => p.id === proposalId)?.votesAbstain ?? 0;
-    vi.runAllTimersAsync();
-    await castVote(proposalId, 'Abstain', SIGNER, mockSignTx);
-    const after = MOCK_PROPOSALS.find((p) => p.id === proposalId)?.votesAbstain ?? 0;
-    expect(after).toBeGreaterThan(before);
-  });
 });
 
-describe('governance – fetchProposals', () => {
-  it('returns an array of proposals', async () => {
-    vi.useFakeTimers();
-    const p = fetchProposals();
-    vi.runAllTimers();
-    const proposals = await p;
+describe('governance – fetchProposals & SDK boundary', () => {
+  it('calls Soroban list_proposals and parses on-chain response correctly', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData: {} as any,
+        minResourceFee: '100',
+        events: [],
+        result: {
+          retval: nativeToScVal([
+            {
+              id: 10,
+              title: 'On-Chain Governance Proposal',
+              description: 'Proposal description from Soroban contract',
+              type: { ParameterUpdate: [] },
+              status: { Rejected: [] },
+              proposer: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+              created_at: 1700000000,
+              voting_starts_at: 1700000000,
+              voting_ends_at: 1700864000,
+              votes_for: 1000,
+              votes_against: 2500,
+              quorum_required: 500,
+            },
+          ]),
+        },
+      } as any);
+
+    const proposals = await fetchProposals();
+
+    expect(mockSimulate).toHaveBeenCalled();
+    expect(proposals.length).toBe(1);
+    expect(proposals[0].id).toBe(10);
+    expect(proposals[0].title).toBe('On-Chain Governance Proposal');
+    expect(proposals[0].status).toBe('Rejected');
+    expect(proposals[0].type).toBe('ParameterUpdate');
+    expect(proposals[0].votesFor).toBe(1000);
+    expect(proposals[0].votesAgainst).toBe(2500);
+
+    mockSimulate.mockRestore();
+  });
+
+  it('getProposals is an alias to fetchProposals', () => {
+    expect(getProposals).toBe(fetchProposals);
+  });
+
+  it('returns an array of proposals on fallback', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValueOnce(new Error('RPC Connection Error'));
+    const proposals = await fetchProposals();
     expect(Array.isArray(proposals)).toBe(true);
     expect(proposals.length).toBeGreaterThan(0);
-    vi.useRealTimers();
+    mockSimulate.mockRestore();
   });
 
   it('each proposal has required fields', async () => {
-    vi.useFakeTimers();
-    const p = fetchProposals();
-    vi.runAllTimers();
-    const proposals = await p;
-    vi.useRealTimers();
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValueOnce(new Error('Simulate Error'));
+    const proposals = await fetchProposals();
     for (const proposal of proposals) {
       expect(proposal).toHaveProperty('id');
       expect(proposal).toHaveProperty('title');
@@ -101,6 +147,50 @@ describe('governance – fetchProposals', () => {
       expect(proposal).toHaveProperty('votesFor');
       expect(proposal).toHaveProperty('votesAgainst');
     }
+    mockSimulate.mockRestore();
+  });
+});
+
+describe('governance – parseProposalStatus & contract parsers', () => {
+  it('maps contract Rejected status correctly', () => {
+    expect(parseProposalStatus({ Rejected: [] })).toBe('Rejected');
+    expect(parseProposalStatus('Rejected')).toBe('Rejected');
+  });
+
+  it('maps other contract enum statuses correctly', () => {
+    expect(parseProposalStatus({ Active: [] })).toBe('Active');
+    expect(parseProposalStatus({ Passed: [] })).toBe('Passed');
+    expect(parseProposalStatus({ Executed: [] })).toBe('Executed');
+    expect(parseProposalStatus({ Vetoed: [] })).toBe('Vetoed');
+    expect(parseProposalStatus('Active')).toBe('Active');
+    expect(parseProposalStatus('Passed')).toBe('Passed');
+  });
+
+  it('falls back to Active for unknown status', () => {
+    expect(parseProposalStatus('UnknownVal')).toBe('Active');
+  });
+
+  it('parseProposalFromNative parses native struct correctly', () => {
+    const nativeStruct = {
+      id: 42,
+      title: 'Upgrade Protocol',
+      description: 'Upgrade to v2',
+      type: { ProtocolUpgrade: [] },
+      status: { Rejected: [] },
+      proposer: 'GPROPOSER',
+      created_at: 100,
+      voting_starts_at: 100,
+      voting_ends_at: 200,
+      votes_for: 300,
+      votes_against: 150,
+      quorum_required: 100,
+    };
+    const parsed = parseProposalFromNative(nativeStruct);
+    expect(parsed.id).toBe(42);
+    expect(parsed.title).toBe('Upgrade Protocol');
+    expect(parsed.type).toBe('ProtocolUpgrade');
+    expect(parsed.status).toBe('Rejected');
+    expect(parsed.proposer).toBe('GPROPOSER');
   });
 });
 
@@ -229,9 +319,9 @@ describe('governance – stateful write paths', () => {
 describe('governance – vote helper functions', () => {
   const proposal = MOCK_PROPOSALS[0];
 
-  it('totalVotes sums all vote types correctly', () => {
+  it('totalVotes sums votes correctly', () => {
     const total = totalVotes(proposal);
-    expect(total).toBe(proposal.votesFor + proposal.votesAgainst + proposal.votesAbstain);
+    expect(total).toBe(proposal.votesFor + proposal.votesAgainst);
   });
 
   it('votePercent returns 0 for zero total', () => {
@@ -247,7 +337,6 @@ describe('governance – vote helper functions', () => {
       ...proposal,
       votesFor: 200_000,
       votesAgainst: 0,
-      votesAbstain: 0,
       quorumRequired: 100_000,
     };
     expect(quorumReached(mockProposal)).toBe(true);
@@ -258,7 +347,6 @@ describe('governance – vote helper functions', () => {
       ...proposal,
       votesFor: 10_000,
       votesAgainst: 5_000,
-      votesAbstain: 1_000,
       quorumRequired: 100_000,
     };
     expect(quorumReached(mockProposal)).toBe(false);
@@ -315,13 +403,33 @@ describe('governance – parameterLabel', () => {
 
 describe('governance – getVotingPower', () => {
   it('returns a positive number', async () => {
-    vi.useFakeTimers();
-    const p = getVotingPower(SIGNER);
-    vi.runAllTimers();
-    const power = await p;
-    vi.useRealTimers();
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData: {} as any,
+        minResourceFee: '100',
+        events: [],
+        result: {
+          retval: nativeToScVal(1234),
+        },
+      } as any);
+
+    const power = await getVotingPower(SIGNER);
+    expect(mockSimulate).toHaveBeenCalled();
+    mockSimulate.mockRestore();
     expect(typeof power).toBe('number');
     expect(power).toBeGreaterThan(0);
+  });
+
+  it('returns 0 when the contract simulation is unsuccessful', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({ error: 'simulation failed' } as any);
+
+    const power = await getVotingPower(SIGNER);
+    mockSimulate.mockRestore();
+    expect(power).toBe(0);
   });
 });
 
@@ -336,5 +444,169 @@ describe('governance – fetchProtocolParameters', () => {
     expect(params).toHaveProperty('maxDiscountRateBps');
     expect(params).toHaveProperty('acceptedTokens');
     expect(Array.isArray(params.acceptedTokens)).toBe(true);
+  });
+});
+
+describe('governance – simulateProposalEffect', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('returns a result with isContractVerified and estimatedEffect fields', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Update Fee Rate',
+      description: 'Proposal to update fee rate',
+      newValueBps: 300,
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    expect(result).toHaveProperty('isContractVerified');
+    expect(result).toHaveProperty('estimatedEffect');
+    expect(typeof result.isContractVerified).toBe('boolean');
+    expect(typeof result.estimatedEffect).toBe('string');
+  });
+
+  it('generates estimate for FeeRate proposals', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Update Fee Rate',
+      description: 'Test proposal',
+      newValueBps: 400,
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    expect(result.estimatedEffect).toContain('fee rate');
+    expect(result.estimatedEffect).toContain('4');
+  });
+
+  it('generates estimate for MaxDiscountRate proposals', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'MaxDiscountRate',
+      title: 'Update Discount Rate',
+      description: 'Test proposal',
+      newValueBps: 600,
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    expect(result.estimatedEffect).toContain('discount rate');
+    expect(result.estimatedEffect).toContain('6');
+  });
+
+  it('generates estimate for AddToken proposals', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'AddToken',
+      title: 'Add Token',
+      description: 'Test proposal',
+      tokenAddress: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
+      tokenName: 'Wrapped Bitcoin',
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    expect(result.estimatedEffect).toContain('Add');
+    expect(result.estimatedEffect).toContain('Wrapped Bitcoin');
+  });
+
+  it('generates estimate for RemoveToken proposals', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'RemoveToken',
+      title: 'Remove Token',
+      description: 'Test proposal',
+      removeTokenAddress: 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75',
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    expect(result.estimatedEffect).toContain('Remove');
+  });
+
+  it('includes disclaimer for client-side estimates', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Update Fee Rate',
+      description: 'Test proposal',
+      newValueBps: 250,
+    };
+    vi.runAllTimersAsync();
+    const result = await simulateProposalEffect(payload);
+    vi.useRealTimers();
+    if (!result.isContractVerified) {
+      expect(result.warnings).toBeDefined();
+      if (result.warnings) {
+        expect(result.warnings.length).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+// ─── Mock-backing detection (#857) ────────────────────────────────────────────
+//
+// Each function records its current expected status. While the real
+// implementation is still pending the status is 'mock' and the test stays
+// green; once the linked issue lands, detection flips and this test fails
+// until the status is changed to 'real', from which point a regression back
+// to a Math.random()/no-network mock fails here, next to the function.
+// Flipping to 'real' may also require stubbing the RPC calls the new
+// implementation makes (see docs/testing.md → "Mock-backing detection").
+
+describe('governance – mock-backing detection', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  async function settle<T>(promise: Promise<T>): Promise<T> {
+    await vi.runAllTimersAsync();
+    return promise;
+  }
+
+  it('castVote (#839): tx hash provenance and signTx usage', async () => {
+    const signTx = vi.fn(async (_xdr: string) => 'signedXDR');
+    const report = await detectMockBacking({
+      run: () => settle(castVote(1, 'For', SIGNER, signTx)),
+      boundaries: { signTx },
+    });
+    expectMockBackingStatus('castVote', report, 'mock');
+  });
+
+  it('createProposal (#841): tx hash provenance and signTx usage', async () => {
+    const signTx = vi.fn(async (_xdr: string) => 'signedXDR');
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Mock detection probe',
+      description: 'Probe proposal used by the mock-backing detection test.',
+      newValueBps: 40,
+    };
+    const report = await detectMockBacking({
+      run: () => settle(createProposal(payload, SIGNER, signTx)),
+      identify: (result) => result.txHash,
+      boundaries: { signTx },
+    });
+    expectMockBackingStatus('createProposal', report, 'mock');
+  });
+
+  it('fetchProtocolParameters (#844): reaches Soroban RPC or the network', async () => {
+    const simulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValue(new Error('offline'));
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+    const report = await detectMockBacking({
+      run: () => settle(fetchProtocolParameters().catch(() => undefined)),
+      identify: () => undefined,
+      boundaries: { network: combineRecorders(simulate, fetchSpy) },
+    });
+    expectMockBackingStatus('fetchProtocolParameters', report, 'mock');
   });
 });

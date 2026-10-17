@@ -21,8 +21,11 @@ Saves or updates the reminder opt-in preference for a wallet address.
   { "success": true }
   ```
 - Auth requirement: none. The route uses the Supabase admin client on the server.
+- Validation: `address` must be a well-formed Ed25519 Stellar public key (`StrKey.isValidEd25519PublicKey`); `email` must match a basic email shape and stay under 320 characters; `enabled`, if present, must be a boolean.
+- Rate limit: 5 requests per minute per client IP (see [Rate limits and operational notes](#rate-limits-and-operational-notes)).
 - Error responses:
-  - `400` when `address` or `email` is missing.
+  - `400` when `address` or `email` is missing or malformed.
+  - `429` when the rate limit is exceeded.
   - `500` when the Supabase upsert fails.
 
 ### `GET`
@@ -30,6 +33,7 @@ Saves or updates the reminder opt-in preference for a wallet address.
 Triggers reminder emails for active preferences. This is intended for a cron job or manual admin run.
 
 - Auth requirement: `Authorization: Bearer <CRON_SECRET>`.
+- Rate limit: 10 requests per minute per client IP, applied after the `CRON_SECRET` check.
 - Response:
   ```json
   {
@@ -46,6 +50,7 @@ Triggers reminder emails for active preferences. This is intended for a cron job
   ```
 - Error responses:
   - `401` when the bearer token does not match `CRON_SECRET`.
+  - `429` when the rate limit is exceeded.
   - `200` with `{ "message": "No active preferences" }` when no reminder preferences are enabled.
   - `500` on internal failures.
 
@@ -168,9 +173,11 @@ Accepts feedback from the UI and forwards it to GitHub issues when GitHub creden
   - Success without GitHub config: `{ "success": true }`
   - Success with GitHub config: `{ "success": true, "issueUrl": "https://github.com/..." }`
 - Auth requirement: none.
+- Validation: `rating` must be an integer 1-5, `category` must be one of `Bug`, `Feature`, `UX`, `Other`, `feedback` must be a non-empty string under 5,000 characters, and `email` (if provided) must be a valid email under 320 characters.
+- Rate limit: 5 requests per minute per client IP.
 - Error responses:
-  - `400` when `rating`, `category`, or `feedback` is missing.
-  - `429` when GitHub returns a rate-limit response; the body includes `error: "rate_limit"` and `retryAfter`.
+  - `400` when a required field is missing or fails validation.
+  - `429` when the local rate limit is exceeded, or when GitHub returns a rate-limit response; the body includes `error: "rate_limit"` and `retryAfter`.
   - `500` for unexpected failures.
 
 Example curl:
@@ -204,7 +211,11 @@ Returns the notification list for a given wallet address.
   ]
   ```
 - Auth requirement: none.
+- Validation: the `address` path segment must be a well-formed Ed25519 Stellar public key; requests with a malformed address are rejected with `400` before reaching the notification backend.
+- Rate limit: 30 requests per minute per client IP.
 - Error responses:
+  - `400` when `address` is not a valid Stellar public key.
+  - `429` when the rate limit is exceeded.
   - The route returns an empty array `[]` if notification fetching fails or the upstream service is not configured.
 
 Example curl:
@@ -213,8 +224,36 @@ Example curl:
 curl "http://localhost:3000/api/notifications/G..."
 ```
 
+## `/api/leaderboard`
+
+### `GET`
+
+Returns leaderboard entries for LPs, payers, or freelancers over a given period. This route lives at
+[app/api/leaderboard/route.ts](../app/api/leaderboard/route.ts) and backs `TopFundersWidget`.
+
+- Query string: `?type=<lp|payer|freelancer>&period=<7d|30d|90d|all>&limit=<1-100>`
+- Response: a JSON array of leaderboard entries, or `[]` if the upstream indexer request fails.
+- Auth requirement: none.
+- Validation: `type` and `period` are checked against fixed allow-lists; `limit`, if provided, must be an integer between 1 and 100.
+- Rate limit: 30 requests per minute per client IP.
+- Error responses:
+  - `400` when `type`, `period`, or `limit` is invalid.
+  - `429` when the rate limit is exceeded.
+
+Example curl:
+
+```bash
+curl "http://localhost:3000/api/leaderboard?type=lp&period=30d&limit=10"
+```
+
 ## Rate limits and operational notes
 
-- The reminders route has no built-in throttling; protect it behind `CRON_SECRET` and a scheduler if you expose it publicly.
+- All routes above (`reminders`, `feedback`, `notifications/[address]`, `leaderboard`) apply an in-memory,
+  per-client-IP rate limit via [src/lib/rate-limit.ts](../src/lib/rate-limit.ts). This is a best-effort,
+  per-instance fixed window - it does not share state across serverless instances or regions, so it should be
+  treated as defense-in-depth rather than a hard guarantee. If stricter enforcement becomes necessary (e.g. under
+  active abuse), replace it with a shared store such as Upstash Redis.
+- The reminders `GET` route additionally requires `CRON_SECRET`; treat it as a privileged endpoint and keep it
+  behind a scheduler rather than exposing it to end users.
 - The feedback route inherits GitHub API rate limits and returns a `429` response if the upstream API refuses the request.
-- The notifications route is a thin bridge and does not add its own authentication layer.
+- All routes return generic, non-identifying error messages to callers; detailed errors are only logged server-side via `console.error`, never included in the response body.

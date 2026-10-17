@@ -97,7 +97,6 @@ describe('HomePage Accessibility', () => {
 
   it('should have proper heading structure', () => {
     const { container } = render(<HomePage />);
-    const headings = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
 
     // Should have at least one h1
     const h1Elements = container.querySelectorAll('h1');

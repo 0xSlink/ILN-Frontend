@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react-vite';
 import WeeklyYieldChart from './WeeklyYieldChart';
 import type { TokenYieldMetrics } from '@/utils/per-token-yield';
 
