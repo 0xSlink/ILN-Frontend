@@ -195,6 +195,8 @@ export default function ProposalDetailPage() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(true);
   const [votingPower, setVotingPower] = useState<number>(0);
+  const [votingPowerError, setVotingPowerError] = useState<string | null>(null);
+  const [loadingVotingPower, setLoadingVotingPower] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [vetoModalOpen, setVetoModalOpen] = useState(false);
   const [vetoReason, setVetoReason] = useState('');
@@ -220,12 +222,29 @@ export default function ProposalDetailPage() {
 
   useEffect(() => {
     if (isConnected && address) {
-      getVotingPower(address).then(setVotingPower);
+      setLoadingVotingPower(true);
+      setVotingPowerError(null);
+      getVotingPower(address)
+        .then((power) => {
+          setVotingPower(power);
+          setVotingPowerError(null);
+        })
+        .catch((err) => {
+          setVotingPower(0);
+          setVotingPowerError(err instanceof Error ? err.message : 'Voting power unavailable');
+        })
+        .finally(() => {
+          setLoadingVotingPower(false);
+        });
+    } else {
+      setVotingPower(0);
+      setVotingPowerError(null);
+      setLoadingVotingPower(false);
     }
   }, [isConnected, address]);
 
   const handleVote = async (choice: VoteChoice) => {
-    if (!proposal || !address) return;
+    if (!proposal || !address || votingPowerError || votingPower <= 0) return;
 
     const result = await execute(async (signTx) => castVote(proposal.id, choice, address, signTx), {
       expectedAction: 'cast_vote',
@@ -307,7 +326,8 @@ export default function ProposalDetailPage() {
   const isActive = proposal?.status === 'Active';
   const isPassed = proposal?.status === 'Passed';
   const isAdmin = !!address && address === GOVERNANCE_ADMIN_ADDRESS;
-  const canVote = isActive && !alreadyVoted && isConnected && votingPower > 0;
+  const canVote =
+    isActive && !alreadyVoted && isConnected && votingPower > 0 && !votingPowerError;
 
   const remaining = proposal ? timeRemaining(proposal) : '';
   const now = Math.floor(Date.now() / 1000);
@@ -528,14 +548,25 @@ export default function ProposalDetailPage() {
                   Your Voting Power
                 </p>
                 {isConnected ? (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-primary">
-                      {formatVotingPower(votingPower)}
-                    </span>
-                    {votingPower === 0 && (
-                      <span className="text-xs text-on-surface-variant">(no voting power)</span>
-                    )}
-                  </div>
+                  votingPowerError ? (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs">
+                      <p className="font-semibold">Voting Power Unavailable</p>
+                      <p className="text-on-surface-variant mt-0.5">
+                        Could not verify voting power from governance authority. Voting is disabled.
+                      </p>
+                    </div>
+                  ) : loadingVotingPower ? (
+                    <div className="h-8 bg-surface-container animate-pulse rounded" />
+                  ) : (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-bold text-primary">
+                        {formatVotingPower(votingPower)}
+                      </span>
+                      {votingPower === 0 && (
+                        <span className="text-xs text-on-surface-variant">(no voting power)</span>
+                      )}
+                    </div>
+                  )
                 ) : (
                   <button
                     onClick={connect}

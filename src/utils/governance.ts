@@ -465,10 +465,18 @@ export function getUserVote(proposalId: number): VoteChoice | undefined {
   return userVotes.get(proposalId);
 }
 
+export class VotingPowerError extends Error {
+  readonly code = 'VOTING_POWER_UNAVAILABLE';
+  constructor(message: string, readonly cause?: unknown) {
+    super(`VOTING_POWER_UNAVAILABLE: ${message}`);
+    this.name = 'VotingPowerError';
+  }
+}
+
 /**
  * Optional, additive hooks for every governance write path.
  *
- * Both callbacks are opt-in so existing call sites keep their behaviour:
+ * Callbacks are opt-in so existing call sites keep their behaviour:
  *
  * - `simulate` runs a Soroban dry-run *before* the wallet prompt. A failed
  *   simulation throws a typed {@link import('@/lib/governance/simulation').GovernanceSimulationError}
@@ -476,10 +484,13 @@ export function getUserVote(proposalId: number): VoteChoice | undefined {
  * - `onConfirmed` runs only after the mutation has completed successfully.
  *   Query-cache invalidation belongs here so rejected / failed / pending
  *   writes cannot refresh data (#1065).
+ * - `votingPower` explicit voting power to apply; if omitted, read from the
+ *   governance contract authority (#1048, #1049).
  */
 export interface GovernanceMutationOptions {
   simulate?: () => Promise<GovernanceSimulationOutcome>;
   onConfirmed?: (txHash: string) => void | Promise<void>;
+  votingPower?: number;
 }
 
 // ─── Contract Parsers ─────────────────────────────────────────────────────────
@@ -692,6 +703,28 @@ export async function castVote(
       await assertGovernanceSimulationPassed(options.simulate);
     }
 
+    // Fail closed if voting power cannot be verified (#1049)
+    let power = options.votingPower;
+    if (power === undefined && signerAddress) {
+      try {
+        power = await getVotingPower(signerAddress);
+      } catch (err) {
+        throw new Error(
+          `VOTING_POWER_UNAVAILABLE: Voting power could not be verified from governance authority (${
+            err instanceof Error ? err.message : String(err)
+          }). Mutation blocked.`
+        );
+      }
+    }
+
+    if (signerAddress && (power === undefined || power <= 0)) {
+      throw new Error(
+        'VOTING_POWER_UNAVAILABLE: Voter has zero or unavailable voting power. Mutation blocked.'
+      );
+    }
+
+    const effectivePower = power ?? 0;
+
     // Signature gate before any mutation: a declined wallet changes nothing (#1144).
     const signed = await requireGovernanceSignature(
       `vote:${proposalId}:${choice}:${signerAddress}`,
@@ -701,23 +734,21 @@ export async function castVote(
 
     // If user changed their vote, adjust previous choice count
     if (proposal && previousVote && previousVote !== choice) {
-      const power = 1250;
       if (previousVote === 'For') {
-        proposal.votesFor = Math.max(0, proposal.votesFor - power);
+        proposal.votesFor = Math.max(0, proposal.votesFor - effectivePower);
       } else if (previousVote === 'Against') {
-        proposal.votesAgainst = Math.max(0, proposal.votesAgainst - power);
+        proposal.votesAgainst = Math.max(0, proposal.votesAgainst - effectivePower);
       } else if (previousVote === 'Abstain') {
-        proposal.votesAbstain = Math.max(0, (proposal.votesAbstain ?? 0) - power);
+        proposal.votesAbstain = Math.max(0, (proposal.votesAbstain ?? 0) - effectivePower);
       }
     }
 
     userVotes.set(proposalId, choice);
 
     if (proposal && previousVote !== choice) {
-      const power = 1250;
-      if (choice === 'For') proposal.votesFor += power;
-      else if (choice === 'Against') proposal.votesAgainst += power;
-      else if (choice === 'Abstain') proposal.votesAbstain = (proposal.votesAbstain ?? 0) + power;
+      if (choice === 'For') proposal.votesFor += effectivePower;
+      else if (choice === 'Against') proposal.votesAgainst += effectivePower;
+      else if (choice === 'Abstain') proposal.votesAbstain = (proposal.votesAbstain ?? 0) + effectivePower;
     }
 
     // Deterministic hash rooted in the collected signature; cached so an
@@ -862,21 +893,25 @@ export function getVetoHistory(proposalId: number): VetoRecord[] {
 }
 
 export async function getVotingPower(address: string): Promise<number> {
+  if (!address || !isValidStellarAddress(address)) {
+    throw new VotingPowerError('Invalid or missing Stellar address for voting power read');
+  }
+  let callResult: rpc.Api.SimulateTransactionResponse;
   try {
     const params: xdr.ScVal[] = [Address.fromString(address).toScVal()];
-    const callResult = await server.simulateTransaction(
+    callResult = await server.simulateTransaction(
       buildGovernanceReadTransaction('get_voting_power', params)
     );
-    if (!rpc.Api.isSimulationSuccess(callResult) || !callResult.result?.retval) {
-      // No authoritative power available: report zero rather than a
-      // fabricated voting-power constant.
-      return 0;
-    }
-    const balance = BigInt(scValToNative(callResult.result.retval));
-    return Number(balance);
-  } catch {
-    return 0;
+  } catch (err) {
+    throw new VotingPowerError('Failed to simulate voting power read on governance contract', err);
   }
+  if (!rpc.Api.isSimulationSuccess(callResult) || !callResult.result?.retval) {
+    throw new VotingPowerError(
+      'Governance authority returned an unsuccessful simulation for voting power'
+    );
+  }
+  const balance = BigInt(scValToNative(callResult.result.retval));
+  return Number(balance);
 }
 
 /**
