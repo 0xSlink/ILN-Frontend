@@ -7,6 +7,7 @@ import { rpc, nativeToScVal } from '@stellar/stellar-sdk';
 
 import {
   castVote,
+  clearGovernanceIdempotencyCache,
   createProposal,
   fetchProposals,
   getProposals,
@@ -32,6 +33,18 @@ import {
   detectMockBacking,
   expectMockBackingStatus,
 } from '@/test-utils/mock-detection';
+import {
+  clearGovernanceTestSession,
+  establishGovernanceTestSession,
+} from '@/utils/__tests__/helpers/governanceSession';
+import {
+  CREATE_TX_HASH,
+  PROPOSAL_CONTEXT,
+  USDC_CONTRACT,
+  XLM_SAC_CONTRACT,
+  passthroughSignTx,
+  stubProposalRpc,
+} from '@/utils/__tests__/helpers/proposalRpc';
 
 const SIGNER = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const mockSignTx = vi.fn(async (_xdr: string) => 'signedXDR');
@@ -216,8 +229,20 @@ describe('governance – fetchProposal', () => {
 });
 
 describe('governance – createProposal', () => {
-  it('creates a FeeRate proposal and returns txHash + proposalId', async () => {
-    vi.useFakeTimers();
+  let rpcStub: ReturnType<typeof stubProposalRpc>;
+
+  beforeEach(() => {
+    clearGovernanceIdempotencyCache();
+    establishGovernanceTestSession(SIGNER);
+    rpcStub = stubProposalRpc({ proposalId: 12 });
+  });
+
+  afterEach(() => {
+    rpcStub.restore();
+    clearGovernanceTestSession();
+  });
+
+  it('creates a FeeRate proposal on-chain and returns txHash + proposalId', async () => {
     const payload: CreateProposalPayload = {
       formType: 'FeeRate',
       title: 'Reduce fee to 0.2%',
@@ -225,63 +250,54 @@ describe('governance – createProposal', () => {
       newValueBps: 20,
     };
 
-    const promise = createProposal(payload, SIGNER, mockSignTx);
-    vi.runAllTimers();
-    const result = await promise;
-    vi.useRealTimers();
+    const result = await createProposal(payload, SIGNER, passthroughSignTx, {
+      context: PROPOSAL_CONTEXT,
+    });
 
-    expect(typeof result.txHash).toBe('string');
-    expect(typeof result.proposalId).toBe('number');
-    expect(result.proposalId).toBeGreaterThan(0);
+    expect(result).toEqual({ txHash: CREATE_TX_HASH, proposalId: 12 });
+    expect(rpcStub.simulateTransaction).toHaveBeenCalled();
+    expect(rpcStub.sendTransaction).toHaveBeenCalledTimes(1);
   });
 
-  it('creates an AddToken proposal with parameterChanges', async () => {
-    vi.useFakeTimers();
+  it('creates an AddToken proposal without fabricating a local record', async () => {
+    const before = MOCK_PROPOSALS.length;
     const payload: CreateProposalPayload = {
       formType: 'AddToken',
-      title: 'Add wBTC',
-      description: 'Add wrapped Bitcoin as accepted token',
-      tokenAddress: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
-      tokenName: 'Wrapped Bitcoin',
+      title: 'Add XLM',
+      description: 'Add the native asset contract as an accepted token',
+      tokenAddress: XLM_SAC_CONTRACT,
+      tokenName: 'XLM',
+      tokenDecimals: 7,
     };
 
-    const promise = createProposal(payload, SIGNER, mockSignTx);
-    vi.runAllTimers();
-    const result = await promise;
-    vi.useRealTimers();
+    const result = await createProposal(payload, SIGNER, passthroughSignTx, {
+      context: PROPOSAL_CONTEXT,
+    });
 
-    expect(result.proposalId).toBeGreaterThan(0);
-    const created = MOCK_PROPOSALS.find((p) => p.id === result.proposalId);
-    expect(created?.parameterChanges).toBeDefined();
+    expect(result.proposalId).toBe(12);
+    expect(MOCK_PROPOSALS).toHaveLength(before);
+    expect(MOCK_PROPOSALS.find((p) => p.id === result.proposalId)).toBeUndefined();
   });
 
-  it('persists the proposal payload and vote state for the created record', async () => {
-    vi.useFakeTimers();
+  it('surfaces a contract rejection from simulation and submits nothing', async () => {
+    rpcStub.restore();
+    rpcStub = stubProposalRpc({ simulationError: 'HostError: Error(Contract, #19)' });
+    const signTx = vi.fn(passthroughSignTx);
     const payload: CreateProposalPayload = {
       formType: 'RemoveToken',
-      title: 'Remove EURC',
-      description: 'Remove EURC from active token set',
-      removeTokenAddress: 'CDTKPWPLOURQA2SGTKTUQOWRCBZEORB4BWBOMJ3D3ZTQQSGE5F6JBQLV',
+      title: 'Remove USDC',
+      description: 'Remove USDC from the active token set',
+      removeTokenAddress: USDC_CONTRACT,
     };
 
-    const resultPromise = createProposal(payload, SIGNER, mockSignTx);
-    await vi.runAllTimersAsync();
-    const result = await resultPromise;
-    const created = MOCK_PROPOSALS.find((p) => p.id === result.proposalId);
-
-    expect(created).toMatchObject({
-      proposer: SIGNER,
-      title: payload.title,
-      description: payload.description,
-      type: 'ProtocolUpgrade',
-      status: 'Active',
-      quorumRequired: 100_000,
+    await expect(
+      createProposal(payload, SIGNER, signTx, { context: PROPOSAL_CONTEXT })
+    ).rejects.toMatchObject({
+      code: 'SIMULATION_FAILED',
+      details: { contractError: { code: 19, name: 'InsufficientProposerBalance' } },
     });
-    expect(created?.parameterChanges?.[0]).toMatchObject({
-      parameter: 'accepted_tokens',
-      newValue: expect.stringContaining('removes EURC'),
-    });
-    vi.useRealTimers();
+    expect(signTx).not.toHaveBeenCalled();
+    expect(rpcStub.sendTransaction).not.toHaveBeenCalled();
   });
 });
 
@@ -434,16 +450,18 @@ describe('governance – getVotingPower', () => {
 });
 
 describe('governance – fetchProtocolParameters', () => {
-  it('returns protocol parameters with expected shape', async () => {
-    vi.useFakeTimers();
-    const p = fetchProtocolParameters();
-    vi.runAllTimers();
-    const params = await p;
-    vi.useRealTimers();
-    expect(params).toHaveProperty('feeRateBps');
-    expect(params).toHaveProperty('maxDiscountRateBps');
-    expect(params).toHaveProperty('acceptedTokens');
-    expect(Array.isArray(params.acceptedTokens)).toBe(true);
+  it('fails with a typed error instead of returning hard-coded parameters', async () => {
+    const simulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValue(new Error('offline'));
+    try {
+      await expect(fetchProtocolParameters()).rejects.toMatchObject({
+        code: 'CHAIN_PARAMETERS_UNAVAILABLE',
+      });
+      expect(simulate).toHaveBeenCalled();
+    } finally {
+      simulate.mockRestore();
+    }
   });
 });
 
@@ -582,19 +600,32 @@ describe('governance – mock-backing detection', () => {
   });
 
   it('createProposal (#841): tx hash provenance and signTx usage', async () => {
-    const signTx = vi.fn(async (_xdr: string) => 'signedXDR');
+    establishGovernanceTestSession(SIGNER);
+    const rpcStub = stubProposalRpc();
+    const signTx = vi.fn(passthroughSignTx);
     const payload: CreateProposalPayload = {
       formType: 'FeeRate',
       title: 'Mock detection probe',
       description: 'Probe proposal used by the mock-backing detection test.',
       newValueBps: 40,
     };
-    const report = await detectMockBacking({
-      run: () => settle(createProposal(payload, SIGNER, signTx)),
-      identify: (result) => result.txHash,
-      boundaries: { signTx },
-    });
-    expectMockBackingStatus('createProposal', report, 'mock');
+    try {
+      const report = await detectMockBacking({
+        run: () => {
+          // settle() runs all timers, which includes the session-expiry timer.
+          establishGovernanceTestSession(SIGNER);
+          clearGovernanceIdempotencyCache();
+          return settle(createProposal(payload, SIGNER, signTx, { context: PROPOSAL_CONTEXT }));
+        },
+        identify: (result) => result.txHash,
+        boundaries: { signTx, network: rpcStub.sendTransaction },
+      });
+      // Signed, submitted, and identified by the hash the network returned (#1055).
+      expectMockBackingStatus('createProposal', report, 'real');
+    } finally {
+      rpcStub.restore();
+      clearGovernanceTestSession();
+    }
   });
 
   it('fetchProtocolParameters (#844): reaches Soroban RPC or the network', async () => {
@@ -607,6 +638,7 @@ describe('governance – mock-backing detection', () => {
       identify: () => undefined,
       boundaries: { network: combineRecorders(simulate, fetchSpy) },
     });
-    expectMockBackingStatus('fetchProtocolParameters', report, 'mock');
+    // Reads governance getters over Soroban RPC; no hard-coded fallback (#1054).
+    expectMockBackingStatus('fetchProtocolParameters', report, 'real');
   });
 });

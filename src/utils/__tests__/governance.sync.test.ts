@@ -56,6 +56,12 @@ import {
   clearGovernanceTestSession,
   establishGovernanceTestSession,
 } from './helpers/governanceSession';
+import {
+  PROPOSAL_CONTEXT,
+  PROPOSER,
+  passthroughSignTx,
+  stubProposalRpc,
+} from './helpers/proposalRpc';
 
 const SIGNER = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
@@ -127,13 +133,24 @@ describe('governance rejected signature (#1062)', () => {
     const payload: CreateProposalPayload = {
       formType: 'FeeRate',
       title: 'Rejected proposal must not exist',
-      description: 'Wallet declines',
+      description: 'Wallet declines the create_proposal signature',
       newValueBps: 42,
     };
+    establishGovernanceTestSession(PROPOSER);
+    const rpcStub = stubProposalRpc();
 
-    await expect(
-      createProposal(payload, SIGNER, rejectSignTx, { simulate: okSimulation, onConfirmed })
-    ).rejects.toThrow(/USER_REJECTED/i);
+    try {
+      await expect(
+        createProposal(payload, PROPOSER, rejectSignTx, {
+          simulate: okSimulation,
+          onConfirmed,
+          context: PROPOSAL_CONTEXT,
+        })
+      ).rejects.toThrow(/USER_REJECTED/i);
+      expect(rpcStub.sendTransaction).not.toHaveBeenCalled();
+    } finally {
+      rpcStub.restore();
+    }
 
     expect((await fetchProposals()).length).toBe(beforeCount);
     expect(onConfirmed).not.toHaveBeenCalled();
@@ -264,20 +281,29 @@ describe('governance failed simulation (#1063)', () => {
     const payload: CreateProposalPayload = {
       formType: 'FeeRate',
       title: 'Passing simulation',
-      description: 'Dry-run succeeds',
+      description: 'Dry-run succeeds, so the wallet is asked to sign',
       newValueBps: 21,
     };
+    establishGovernanceTestSession(PROPOSER);
+    const rpcStub = stubProposalRpc();
+    const signTx = vi.fn(passthroughSignTx);
+    const options = { simulate: okSimulation, context: PROPOSAL_CONTEXT };
 
-    const first = await createProposal(payload, SIGNER, okSignTx, { simulate: okSimulation });
-    expect(okSignTx).toHaveBeenCalledTimes(1);
-    assertNoRandomFallback(first.txHash, 'createProposal after successful simulation');
+    try {
+      const first = await createProposal(payload, PROPOSER, signTx, options);
+      expect(signTx).toHaveBeenCalledTimes(1);
+      assertNoRandomFallback(first.txHash, 'createProposal after successful simulation');
 
-    // Replaying the identical payload is deduplicated and returns the same
-    // confirmation without re-signing — same inputs, same hash.
-    const second = await createProposal(payload, SIGNER, okSignTx, { simulate: okSimulation });
-    expect(second.txHash).toBe(first.txHash);
-    expect(second.proposalId).toBe(first.proposalId);
-    expect(okSignTx).toHaveBeenCalledTimes(1);
+      // Replaying the identical payload is deduplicated and returns the same
+      // confirmation without re-signing — same inputs, same hash.
+      const second = await createProposal(payload, PROPOSER, signTx, options);
+      expect(second.txHash).toBe(first.txHash);
+      expect(second.proposalId).toBe(first.proposalId);
+      expect(signTx).toHaveBeenCalledTimes(1);
+      expect(rpcStub.sendTransaction).toHaveBeenCalledTimes(1);
+    } finally {
+      rpcStub.restore();
+    }
   });
 
   it('castVote: a passing simulation applies the vote exactly once', async () => {

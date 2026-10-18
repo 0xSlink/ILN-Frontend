@@ -22,6 +22,7 @@ import {
   clearGovernanceTestSession,
   establishGovernanceTestSession,
 } from './helpers/governanceSession';
+import { PROPOSAL_CONTEXT, PROPOSER, stubProposalRpc } from './helpers/proposalRpc';
 
 const SIGNER = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const okSignTx = vi.fn(async (xdr: string) => `signed-${xdr}`);
@@ -56,19 +57,15 @@ describe('governance cancellation leaves state unchanged', () => {
   });
 
   it('vetoProposal adds no record when signing is declined', async () => {
-    const payload: CreateProposalPayload = {
-      formType: 'FeeRate',
-      title: 'Veto target',
-      description: 'Created then veto-declined',
-      newValueBps: 30,
-    };
-    const created = await createProposal(payload, SIGNER, okSignTx);
-    const historyBefore = getVetoHistory(created.proposalId);
-    await expect(
-      vetoProposal(created.proposalId, '0xreason', SIGNER, rejectSignTx)
-    ).rejects.toThrow(/USER_REJECTED/i);
-    expect(getVetoHistory(created.proposalId)).toEqual(historyBefore);
-    expect((await fetchProposal(created.proposalId))?.status).toBe('Active');
+    // Proposal creation is on-chain now, so veto an existing active proposal.
+    const target = 6;
+    expect((await fetchProposal(target))?.status).toBe('Active');
+    const historyBefore = getVetoHistory(target);
+    await expect(vetoProposal(target, '0xreason', SIGNER, rejectSignTx)).rejects.toThrow(
+      /USER_REJECTED/i
+    );
+    expect(getVetoHistory(target)).toEqual(historyBefore);
+    expect((await fetchProposal(target))?.status).toBe('Active');
   });
 
   it('createProposal appends nothing when signing is declined', async () => {
@@ -76,10 +73,19 @@ describe('governance cancellation leaves state unchanged', () => {
     const payload: CreateProposalPayload = {
       formType: 'FeeRate',
       title: 'Declined proposal',
-      description: 'Should never be appended',
+      description: 'Should never be submitted or appended',
       newValueBps: 30,
     };
-    await expect(createProposal(payload, SIGNER, rejectSignTx)).rejects.toThrow(/USER_REJECTED/i);
+    establishGovernanceTestSession(PROPOSER);
+    const rpcStub = stubProposalRpc();
+    try {
+      await expect(
+        createProposal(payload, PROPOSER, rejectSignTx, { context: PROPOSAL_CONTEXT })
+      ).rejects.toThrow(/USER_REJECTED/i);
+      expect(rpcStub.sendTransaction).not.toHaveBeenCalled();
+    } finally {
+      rpcStub.restore();
+    }
     expect((await fetchProposals()).length).toBe(beforeCount);
   });
 
