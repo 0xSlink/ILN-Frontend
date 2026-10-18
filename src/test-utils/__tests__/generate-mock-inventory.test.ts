@@ -41,13 +41,6 @@ describe('scanMockInventory', () => {
     expect(castVote?.status).toBe('Mock');
     expect(castVote?.trackingIssue).toBe('#839');
 
-    const createProposal = data.functions.find(
-      (f: { name: string }) => f.name === 'createProposal'
-    );
-    expect(createProposal).toBeDefined();
-    expect(createProposal?.status).toBe('Mock');
-    expect(createProposal?.trackingIssue).toBe('#841');
-
     const delegateVotingPower = data.functions.find(
       (f: { name: string }) => f.name === 'delegateVotingPower'
     );
@@ -58,6 +51,13 @@ describe('scanMockInventory', () => {
 
   it('tracks verified real contract integrations', () => {
     const data = scanMockInventory();
+
+    // Proposal creation is a signed create_proposal transaction (#1055).
+    const createProposal = data.functions.find(
+      (f: { name: string }) => f.name === 'createProposal'
+    );
+    expect(createProposal?.status).toBe('Real');
+    expect(createProposal?.trackingIssue).toBe('#841');
 
     const submitInvoice = data.functions.find((f: { name: string }) => f.name === 'submitInvoice');
     expect(submitInvoice).toBeDefined();

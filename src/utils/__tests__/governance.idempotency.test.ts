@@ -13,6 +13,12 @@ import {
   clearGovernanceTestSession,
   establishGovernanceTestSession,
 } from './helpers/governanceSession';
+import {
+  PROPOSAL_CONTEXT,
+  PROPOSER,
+  passthroughSignTx,
+  stubProposalRpc,
+} from './helpers/proposalRpc';
 
 const signTx = vi.fn(async (xdr: string) => `signed-${xdr}`);
 const SIGNER = 'GBZXN7PIRZGNMHGA728RGRTDGBLTYNGHXMH2Y7QGE2FMQ3GVFCYX2O64';
@@ -40,13 +46,8 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
     });
 
     it('returns the same txHash and does not double-count votes on retry with identical choice', async () => {
-      const payload: CreateProposalPayload = {
-        formType: 'FeeRate',
-        title: 'Proposal for voting idempotency',
-        description: 'Testing vote deduplication',
-        newValueBps: 10,
-      };
-      const created = await createProposal(payload, SIGNER, signTx);
+      // Proposal creation is on-chain now; vote on an existing active proposal.
+      const created = { proposalId: 6 };
       const initialProposal = await fetchProposal(created.proposalId);
       const initialVotesFor = initialProposal?.votesFor ?? 0;
 
@@ -81,13 +82,7 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
 
   describe('executeProposal idempotency', () => {
     it('returns a valid 64-char hash and preserves confirmation on duplicate execution', async () => {
-      const payload: CreateProposalPayload = {
-        formType: 'FeeRate',
-        title: 'Proposal for execution idempotency',
-        description: 'Testing execute deduplication',
-        newValueBps: 15,
-      };
-      const created = await createProposal(payload, SIGNER, signTx);
+      const created = { proposalId: 1 };
 
       const firstHash = await executeProposal(created.proposalId, SIGNER, signTx);
       expect(isValidTxHash(firstHash)).toBe(true);
@@ -103,13 +98,7 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
 
   describe('vetoProposal idempotency', () => {
     it('returns a valid 64-char hash and returns existing confirmation on duplicate veto', async () => {
-      const payload: CreateProposalPayload = {
-        formType: 'FeeRate',
-        title: 'Proposal for veto idempotency',
-        description: 'Testing veto deduplication',
-        newValueBps: 20,
-      };
-      const created = await createProposal(payload, SIGNER, signTx);
+      const created = { proposalId: 2 };
 
       const reasonHash = '0xidempotent_reason_hash';
       const firstHash = await vetoProposal(created.proposalId, reasonHash, SIGNER, signTx);
@@ -125,17 +114,32 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
       const payload: CreateProposalPayload = {
         formType: 'MaxDiscountRate',
         title: 'Deduplicated discount proposal',
-        description: 'Testing deduplication',
+        description: 'Testing deduplication of identical submissions',
         newValueBps: 500,
       };
+      establishGovernanceTestSession(PROPOSER);
+      const rpcStub = stubProposalRpc();
+      const proposalSignTx = vi.fn(passthroughSignTx);
+      const options = { context: PROPOSAL_CONTEXT };
 
-      const firstRes = await createProposal(payload, SIGNER, signTx);
-      expect(isValidTxHash(firstRes.txHash)).toBe(true);
+      try {
+        // Concurrent double-submit shares one in-flight transaction.
+        const [firstRes, concurrentRes] = await Promise.all([
+          createProposal(payload, PROPOSER, proposalSignTx, options),
+          createProposal(payload, PROPOSER, proposalSignTx, options),
+        ]);
+        expect(isValidTxHash(firstRes.txHash)).toBe(true);
+        expect(concurrentRes).toEqual(firstRes);
 
-      // Immediate second submission
-      const secondRes = await createProposal(payload, SIGNER, signTx);
-      expect(secondRes.proposalId).toBe(firstRes.proposalId);
-      expect(secondRes.txHash).toBe(firstRes.txHash);
+        // Immediate second submission
+        const secondRes = await createProposal(payload, PROPOSER, proposalSignTx, options);
+        expect(secondRes.proposalId).toBe(firstRes.proposalId);
+        expect(secondRes.txHash).toBe(firstRes.txHash);
+        expect(proposalSignTx).toHaveBeenCalledTimes(1);
+        expect(rpcStub.sendTransaction).toHaveBeenCalledTimes(1);
+      } finally {
+        rpcStub.restore();
+      }
     });
   });
 });

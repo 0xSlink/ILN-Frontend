@@ -8,7 +8,8 @@
  * core write paths:
  *
  *  - castVote: For / Against / Abstain tally increments + userVote recording
- *  - createProposal: FeeRate / MaxDiscountRate / AddToken / RemoveToken mapping
+ *  - createProposal: signed `create_proposal` for FeeRate / MaxDiscountRate /
+ *    AddToken / RemoveToken, with no local proposal mutation (#1055)
  *  - vetoProposal: success + "Proposal not found" guard
  *  - executeProposal / getVotingPower happy paths
  *
@@ -32,14 +33,30 @@ import {
   fetchProposal,
   fetchProposals,
   getVotingPower,
+  MOCK_PROPOSALS,
   vetoProposal,
   type CreateProposalPayload,
 } from '../governance';
+import {
+  scValToNative,
+  Networks,
+  TransactionBuilder,
+  type Transaction,
+} from '@stellar/stellar-sdk';
 import { isValidTxHash } from '../explorer';
 import {
   clearGovernanceTestSession,
   establishGovernanceTestSession,
 } from './helpers/governanceSession';
+import {
+  CREATE_TX_HASH,
+  PROPOSAL_CONTEXT,
+  PROPOSER,
+  USDC_CONTRACT,
+  XLM_SAC_CONTRACT,
+  passthroughSignTx,
+  stubProposalRpc,
+} from './helpers/proposalRpc';
 
 const signTx = vi.fn(async (xdr: string) => `signed-${xdr}`);
 const SIGNER = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -130,96 +147,158 @@ describe('governance.castVote (critical path)', () => {
 });
 
 describe('governance.createProposal (critical path)', () => {
+  const proposalSignTx = vi.fn(passthroughSignTx);
+  let rpcStub: ReturnType<typeof stubProposalRpc>;
+
   beforeEach(() => {
-    signTx.mockClear();
+    proposalSignTx.mockClear();
     clearGovernanceIdempotencyCache();
+    establishGovernanceTestSession(PROPOSER);
+    rpcStub = stubProposalRpc({ proposalId: 77 });
   });
 
-  it('creates a ParameterUpdate for FeeRate with fee_rate_bps change', async () => {
-    const beforeCount = (await fetchProposals()).length;
-    const payload: CreateProposalPayload = {
+  afterEach(() => {
+    rpcStub.restore();
+  });
+
+  /** Decode the `create_proposal` invocation the wallet was asked to sign. */
+  function signedInvocation() {
+    expect(proposalSignTx).toHaveBeenCalledTimes(1);
+    const tx = TransactionBuilder.fromXDR(
+      proposalSignTx.mock.calls[0][0],
+      Networks.TESTNET
+    ) as Transaction;
+    const op = tx.operations[0] as unknown as {
+      func: {
+        invokeContract(): { functionName(): Buffer; args(): Parameters<typeof scValToNative>[0][] };
+      };
+    };
+    const invoke = op.func.invokeContract();
+    return {
+      fn: invoke.functionName().toString(),
+      action: scValToNative(invoke.args()[1]),
+      proposedValue: scValToNative(invoke.args()[3]),
+    };
+  }
+
+  async function create(payload: CreateProposalPayload) {
+    const mockBefore = MOCK_PROPOSALS.length;
+    const listBefore = (await fetchProposals()).length;
+    const res = await createProposal(payload, PROPOSER, proposalSignTx, {
+      context: PROPOSAL_CONTEXT,
+    });
+    // No local proposal is fabricated: the record only exists on-chain.
+    expect(MOCK_PROPOSALS.length).toBe(mockBefore);
+    expect((await fetchProposals()).length).toBe(listBefore);
+    return res;
+  }
+
+  it('signs create_proposal(UpdateFeeRate) and returns the id from the chain', async () => {
+    const res = await create({
       formType: 'FeeRate',
       title: 'Reduce protocol fee rate',
-      description: 'Lower the fee to stay competitive',
+      description: 'Lower the fee to stay competitive with other pools',
       newValueBps: 30,
-    };
-    const res = await createProposal(payload, SIGNER, signTx);
+    });
 
-    expect(signTx).toHaveBeenCalled();
+    expect(res).toEqual({ txHash: CREATE_TX_HASH, proposalId: 77 });
     assertNoRandomFallback(res.txHash, 'createProposal FeeRate');
-    expect(res.proposalId).toBeGreaterThan(0);
-
-    const afterCount = (await fetchProposals()).length;
-    expect(afterCount).toBe(beforeCount + 1);
-
-    const created = await fetchProposal(res.proposalId);
-    expect(created?.type).toBe('ParameterUpdate');
-    expect(created?.parameterChanges?.[0]?.parameter).toBe('fee_rate_bps');
-    expect(created?.parameterChanges?.[0]?.newValue).toContain('30');
+    expect(signedInvocation()).toEqual({
+      fn: 'create_proposal',
+      action: ['UpdateFeeRate', 30],
+      proposedValue: 30n,
+    });
+    expect(rpcStub.sendTransaction).toHaveBeenCalledTimes(1);
+    expect(rpcStub.pollTransaction).toHaveBeenCalledWith(CREATE_TX_HASH, expect.anything());
   });
 
-  it('maps MaxDiscountRate to a ParameterUpdate with max_discount_rate_bps', async () => {
-    const payload: CreateProposalPayload = {
+  it('maps MaxDiscountRate to UpdateMaxDiscountRate', async () => {
+    await create({
       formType: 'MaxDiscountRate',
       title: 'Raise max discount rate',
-      description: 'Allow deeper early-pay discounts',
+      description: 'Allow deeper early-pay discounts for suppliers',
       newValueBps: 400,
-    };
-    const res = await createProposal(payload, SIGNER, signTx);
-
-    expect(signTx).toHaveBeenCalled();
-    assertNoRandomFallback(res.txHash, 'createProposal MaxDiscountRate');
-
-    const created = await fetchProposal(res.proposalId);
-    expect(created?.parameterChanges?.[0]?.parameter).toBe('max_discount_rate_bps');
+    });
+    expect(signedInvocation().action).toEqual(['UpdateMaxDiscountRate', 400]);
   });
 
-  it('maps AddToken to a ProtocolUpgrade adding the token', async () => {
-    const payload: CreateProposalPayload = {
+  it('maps AddToken to AddToken(address, decimals)', async () => {
+    await create({
       formType: 'AddToken',
-      title: 'List NEWT',
-      description: 'Add NewToken to accepted tokens',
-      tokenAddress: 'CNEWTOKENADDRESS',
-      tokenName: 'NEWT',
-    };
-    const res = await createProposal(payload, SIGNER, signTx);
-
-    expect(signTx).toHaveBeenCalled();
-    assertNoRandomFallback(res.txHash, 'createProposal AddToken');
-
-    const created = await fetchProposal(res.proposalId);
-    expect(created?.type).toBe('ProtocolUpgrade');
-    expect(created?.parameterChanges?.[0]?.parameter).toBe('accepted_tokens');
-    expect(created?.parameterChanges?.[0]?.newValue).toContain('NEWT');
+      title: 'List XLM',
+      description: 'Add the native asset contract to accepted tokens',
+      tokenAddress: XLM_SAC_CONTRACT,
+      tokenName: 'XLM',
+      tokenDecimals: 7,
+    });
+    expect(signedInvocation()).toMatchObject({
+      action: ['AddToken', XLM_SAC_CONTRACT, 7],
+      proposedValue: 0n,
+    });
   });
 
-  it('maps RemoveToken to a ProtocolUpgrade removing the token', async () => {
-    const payload: CreateProposalPayload = {
+  it('maps RemoveToken to RemoveToken(address)', async () => {
+    await create({
       formType: 'RemoveToken',
-      title: 'Delist token',
-      description: 'Remove a deprecated token',
-      removeTokenAddress: 'CNEWTOKENADDRESS',
-    };
-    const res = await createProposal(payload, SIGNER, signTx);
+      title: 'Delist USDC',
+      description: 'Remove a deprecated token from accepted tokens',
+      removeTokenAddress: USDC_CONTRACT,
+    });
+    expect(signedInvocation().action).toEqual(['RemoveToken', USDC_CONTRACT]);
+  });
 
-    expect(signTx).toHaveBeenCalled();
-    assertNoRandomFallback(res.txHash, 'createProposal RemoveToken');
+  it('rejects schema-invalid payloads before signing', async () => {
+    await expect(
+      createProposal(
+        {
+          formType: 'RemoveToken',
+          title: 'Delist unknown',
+          description: 'Remove a token that is not accepted at all',
+          removeTokenAddress: XLM_SAC_CONTRACT,
+        },
+        PROPOSER,
+        proposalSignTx,
+        { context: PROPOSAL_CONTEXT }
+      )
+    ).rejects.toMatchObject({ code: 'PROPOSAL_VALIDATION_FAILED' });
+    expect(proposalSignTx).not.toHaveBeenCalled();
+    expect(rpcStub.sendTransaction).not.toHaveBeenCalled();
+  });
 
-    const created = await fetchProposal(res.proposalId);
-    expect(created?.parameterChanges?.[0]?.parameter).toBe('accepted_tokens');
+  it('requires a SEP-10 session', async () => {
+    clearGovernanceTestSession();
+    await expect(
+      createProposal(
+        {
+          formType: 'FeeRate',
+          title: 'No session',
+          description: 'Should be blocked before any network call',
+          newValueBps: 10,
+        },
+        PROPOSER,
+        proposalSignTx,
+        { context: PROPOSAL_CONTEXT }
+      )
+    ).rejects.toThrow(/SEP10_SESSION_REQUIRED/);
+    expect(rpcStub.getAccount).not.toHaveBeenCalled();
   });
 
   it('createProposal hash is deterministic across two independent calls with same payload', async () => {
     const payload: CreateProposalPayload = {
       formType: 'FeeRate',
       title: 'Determinism check',
-      description: 'Same payload, same hash',
+      description: 'Same payload, same signed transaction',
       newValueBps: 50,
     };
-    const res1 = await createProposal(payload, SIGNER, signTx);
+    const res1 = await createProposal(payload, PROPOSER, proposalSignTx, {
+      context: PROPOSAL_CONTEXT,
+    });
     clearGovernanceIdempotencyCache();
-    const res2 = await createProposal(payload, SIGNER, signTx);
+    const res2 = await createProposal(payload, PROPOSER, proposalSignTx, {
+      context: PROPOSAL_CONTEXT,
+    });
     expect(res1.txHash).toBe(res2.txHash);
+    expect(proposalSignTx.mock.calls[0][0]).toBe(proposalSignTx.mock.calls[1][0]);
   });
 });
 
@@ -230,14 +309,8 @@ describe('governance.vetoProposal', () => {
   });
 
   it('vetoes an existing proposal and prepends a veto record', async () => {
-    const payload: CreateProposalPayload = {
-      formType: 'FeeRate',
-      title: 'Proposal to veto',
-      description: 'A proposal we will veto',
-      newValueBps: 25,
-    };
-    const created = await createProposal(payload, SIGNER, signTx);
-    signTx.mockClear();
+    // Proposal creation is on-chain now; veto an existing active proposal.
+    const created = { proposalId: 6 };
 
     const res = await vetoProposal(created.proposalId, '0xreason', SIGNER, signTx);
 
@@ -282,24 +355,27 @@ describe('governance write-path regression: no mock/random fallback (#1070)', ()
     const payload: CreateProposalPayload = {
       formType: 'FeeRate',
       title: 'Regression check',
-      description: 'No random hashes allowed',
+      description: 'No random hashes allowed for proposals',
       newValueBps: 10,
     };
-    const res1 = await createProposal(payload, SIGNER, signTx);
-    clearGovernanceIdempotencyCache();
-    const res2 = await createProposal(payload, SIGNER, signTx);
-    expect(res1.txHash).toBe(res2.txHash);
-    assertNoRandomFallback(res1.txHash, 'createProposal regression');
+    establishGovernanceTestSession(PROPOSER);
+    const rpcStub = stubProposalRpc();
+    try {
+      const options = { context: PROPOSAL_CONTEXT };
+      const res1 = await createProposal(payload, PROPOSER, passthroughSignTx, options);
+      clearGovernanceIdempotencyCache();
+      const res2 = await createProposal(payload, PROPOSER, passthroughSignTx, options);
+      expect(res1.txHash).toBe(res2.txHash);
+      // The hash is the one the network returned for the submitted transaction.
+      expect(res1.txHash).toBe(CREATE_TX_HASH);
+      assertNoRandomFallback(res1.txHash, 'createProposal regression');
+    } finally {
+      rpcStub.restore();
+    }
   });
 
   it('vetoProposal does not return Math.random()-based hash when signer is present', async () => {
-    const payload: CreateProposalPayload = {
-      formType: 'FeeRate',
-      title: 'Veto regression',
-      description: 'Veto hash must be deterministic',
-      newValueBps: 15,
-    };
-    const created = await createProposal(payload, SIGNER, signTx);
+    const created = { proposalId: 2 };
 
     const hash1 = await vetoProposal(created.proposalId, '0xreason', SIGNER, signTx);
     clearGovernanceIdempotencyCache();
