@@ -447,11 +447,18 @@ const proposalCreationInFlight: Map<
   string,
   Promise<{ txHash: string; proposalId: number }>
 > = new Map();
+// In-flight mutations, so concurrent duplicate submissions share one transaction (#1046).
+const voteInFlight: Map<string, Promise<string>> = new Map();
+const executeInFlight: Map<string, Promise<string>> = new Map();
+const vetoInFlight: Map<string, Promise<string>> = new Map();
 
 export function clearGovernanceIdempotencyCache(): void {
   proposalTxHashes.clear();
   proposalCreationCache.clear();
   proposalCreationInFlight.clear();
+  voteInFlight.clear();
+  executeInFlight.clear();
+  vetoInFlight.clear();
 }
 
 export function getUserVote(proposalId: number): VoteChoice | undefined {
@@ -657,12 +664,9 @@ export async function castVote(
   options: GovernanceMutationOptions = {}
 ): Promise<string> {
   requireSep10Session(signerAddress);
-  // TODO: Replace with actual Soroban transaction once governance contract is deployed
-  // Ref: #111
-  await new Promise((r) => setTimeout(r, 2000));
 
-  const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   const cacheKey = `${signerAddress || 'anon'}:vote:${proposalId}`;
+  const inFlightKey = `${signerAddress || 'anon'}:vote:${proposalId}:${choice}`;
   const previousVote = userVotes.get(proposalId);
 
   // Idempotency: if user already voted with this exact choice, return confirmed hash without duplicate counting (#1146)
@@ -671,47 +675,66 @@ export async function castVote(
     if (existingHash) return existingHash;
   }
 
-  // Dry-run before the wallet prompt: a failed simulation is rendered to the
-  // user without ever opening the wallet, and nothing is mutated (#1063).
-  if (options.simulate) {
-    await assertGovernanceSimulationPassed(options.simulate);
-  }
+  // Concurrent deduplication: rapid duplicate submissions share one in-flight transaction (#1046).
+  const inFlight = voteInFlight.get(inFlightKey);
+  if (inFlight) return inFlight;
 
-  // Signature gate before any mutation: a declined wallet changes nothing (#1144).
-  const signed = await requireGovernanceSignature(
-    `vote:${proposalId}:${choice}:${signerAddress}`,
-    signerAddress,
-    signTx
-  );
+  const run = (async () => {
+    // TODO: Replace with actual Soroban transaction once governance contract is deployed
+    // Ref: #111
+    await new Promise((r) => setTimeout(r, 2000));
 
-  // If user changed their vote, adjust previous choice count
-  if (proposal && previousVote && previousVote !== choice) {
-    const power = 1250;
-    if (previousVote === 'For') {
-      proposal.votesFor = Math.max(0, proposal.votesFor - power);
-    } else if (previousVote === 'Against') {
-      proposal.votesAgainst = Math.max(0, proposal.votesAgainst - power);
-    } else if (previousVote === 'Abstain') {
-      proposal.votesAbstain = Math.max(0, (proposal.votesAbstain ?? 0) - power);
+    const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
+
+    // Dry-run before the wallet prompt: a failed simulation is rendered to the
+    // user without ever opening the wallet, and nothing is mutated (#1063).
+    if (options.simulate) {
+      await assertGovernanceSimulationPassed(options.simulate);
     }
+
+    // Signature gate before any mutation: a declined wallet changes nothing (#1144).
+    const signed = await requireGovernanceSignature(
+      `vote:${proposalId}:${choice}:${signerAddress}`,
+      signerAddress,
+      signTx
+    );
+
+    // If user changed their vote, adjust previous choice count
+    if (proposal && previousVote && previousVote !== choice) {
+      const power = 1250;
+      if (previousVote === 'For') {
+        proposal.votesFor = Math.max(0, proposal.votesFor - power);
+      } else if (previousVote === 'Against') {
+        proposal.votesAgainst = Math.max(0, proposal.votesAgainst - power);
+      } else if (previousVote === 'Abstain') {
+        proposal.votesAbstain = Math.max(0, (proposal.votesAbstain ?? 0) - power);
+      }
+    }
+
+    userVotes.set(proposalId, choice);
+
+    if (proposal && previousVote !== choice) {
+      const power = 1250;
+      if (choice === 'For') proposal.votesFor += power;
+      else if (choice === 'Against') proposal.votesAgainst += power;
+      else if (choice === 'Abstain') proposal.votesAbstain = (proposal.votesAbstain ?? 0) + power;
+    }
+
+    // Deterministic hash rooted in the collected signature; cached so an
+    // idempotent replay returns the identical confirmation (#1141, #1146).
+    const txHash = deriveGovernanceTxHash(signed, `vote:${proposalId}:${choice}:${signerAddress}`);
+    proposalTxHashes.set(cacheKey, txHash);
+    // Cache refresh is a confirmed-only concern (#1065).
+    await options.onConfirmed?.(txHash);
+    return txHash;
+  })();
+
+  voteInFlight.set(inFlightKey, run);
+  try {
+    return await run;
+  } finally {
+    voteInFlight.delete(inFlightKey);
   }
-
-  userVotes.set(proposalId, choice);
-
-  if (proposal && previousVote !== choice) {
-    const power = 1250;
-    if (choice === 'For') proposal.votesFor += power;
-    else if (choice === 'Against') proposal.votesAgainst += power;
-    else if (choice === 'Abstain') proposal.votesAbstain = (proposal.votesAbstain ?? 0) + power;
-  }
-
-  // Deterministic hash rooted in the collected signature; cached so an
-  // idempotent replay returns the identical confirmation (#1141, #1146).
-  const txHash = deriveGovernanceTxHash(signed, `vote:${proposalId}:${choice}:${signerAddress}`);
-  proposalTxHashes.set(cacheKey, txHash);
-  // Cache refresh is a confirmed-only concern (#1065).
-  await options.onConfirmed?.(txHash);
-  return txHash;
 }
 
 export async function executeProposal(
@@ -721,9 +744,6 @@ export async function executeProposal(
   options: GovernanceMutationOptions = {}
 ): Promise<string> {
   requireSep10Session(signerAddress);
-  // TODO: Replace with actual Soroban transaction once governance contract is deployed
-  // Ref: #111
-  await new Promise((r) => setTimeout(r, 2000));
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   if (!proposal) throw new Error('Proposal not found');
@@ -736,22 +756,39 @@ export async function executeProposal(
     if (existing) return existing;
   }
 
-  // Simulation fails before signing: no wallet prompt, no status change (#1063).
-  if (options.simulate) {
-    await assertGovernanceSimulationPassed(options.simulate);
+  // Concurrent deduplication: rapid duplicate executions share one in-flight transaction (#1046).
+  const inFlight = executeInFlight.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const run = (async () => {
+    // TODO: Replace with actual Soroban transaction once governance contract is deployed
+    // Ref: #111
+    await new Promise((r) => setTimeout(r, 2000));
+
+    // Simulation fails before signing: no wallet prompt, no status change (#1063).
+    if (options.simulate) {
+      await assertGovernanceSimulationPassed(options.simulate);
+    }
+
+    const executedSigned = await requireGovernanceSignature(
+      `execute:${proposalId}:${signerAddress}`,
+      signerAddress,
+      signTx
+    );
+
+    proposal.status = 'Executed';
+    const txHash = deriveGovernanceTxHash(executedSigned, `execute:${proposalId}`);
+    proposalTxHashes.set(cacheKey, txHash);
+    await options.onConfirmed?.(txHash);
+    return txHash;
+  })();
+
+  executeInFlight.set(cacheKey, run);
+  try {
+    return await run;
+  } finally {
+    executeInFlight.delete(cacheKey);
   }
-
-  const executedSigned = await requireGovernanceSignature(
-    `execute:${proposalId}:${signerAddress}`,
-    signerAddress,
-    signTx
-  );
-
-  proposal.status = 'Executed';
-  const txHash = deriveGovernanceTxHash(executedSigned, `execute:${proposalId}`);
-  proposalTxHashes.set(cacheKey, txHash);
-  await options.onConfirmed?.(txHash);
-  return txHash;
 }
 
 export async function vetoProposal(
@@ -762,7 +799,6 @@ export async function vetoProposal(
   options: GovernanceMutationOptions = {}
 ): Promise<string> {
   requireSep10Session(adminAddress);
-  await new Promise((r) => setTimeout(r, 1200));
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
   if (!proposal) throw new Error('Proposal not found');
@@ -778,32 +814,47 @@ export async function vetoProposal(
     if (existing) return existing;
   }
 
-  // Simulation fails before signing: no wallet prompt, no veto record (#1063).
-  if (options.simulate) {
-    await assertGovernanceSimulationPassed(options.simulate);
+  // Concurrent deduplication: rapid duplicate vetoes share one in-flight transaction (#1046).
+  const inFlight = vetoInFlight.get(cacheKey);
+  if (inFlight) return inFlight;
+
+  const run = (async () => {
+    await new Promise((r) => setTimeout(r, 1200));
+
+    // Simulation fails before signing: no wallet prompt, no veto record (#1063).
+    if (options.simulate) {
+      await assertGovernanceSimulationPassed(options.simulate);
+    }
+
+    // Signature gate before any mutation (#1144).
+    const signed = await requireGovernanceSignature(
+      `veto:${proposalId}:${reasonHash}:${adminAddress}`,
+      adminAddress,
+      signTx
+    );
+
+    proposal.status = 'Vetoed';
+    const record: VetoRecord = {
+      proposalId,
+      admin: adminAddress,
+      reasonHash,
+      createdAt: Math.floor(Date.now() / 1000),
+    };
+    vetoHistory.unshift(record);
+    proposal.vetoHistory = [record, ...(proposal.vetoHistory ?? [])];
+
+    const vetoTxHash = deriveGovernanceTxHash(signed, `veto:${proposalId}:${reasonHash}`);
+    proposalTxHashes.set(cacheKey, vetoTxHash);
+    await options.onConfirmed?.(vetoTxHash);
+    return vetoTxHash;
+  })();
+
+  vetoInFlight.set(cacheKey, run);
+  try {
+    return await run;
+  } finally {
+    vetoInFlight.delete(cacheKey);
   }
-
-  // Signature gate before any mutation (#1144).
-  const signed = await requireGovernanceSignature(
-    `veto:${proposalId}:${reasonHash}:${adminAddress}`,
-    adminAddress,
-    signTx
-  );
-
-  proposal.status = 'Vetoed';
-  const record: VetoRecord = {
-    proposalId,
-    admin: adminAddress,
-    reasonHash,
-    createdAt: Math.floor(Date.now() / 1000),
-  };
-  vetoHistory.unshift(record);
-  proposal.vetoHistory = [record, ...(proposal.vetoHistory ?? [])];
-
-  const vetoTxHash = deriveGovernanceTxHash(signed, `veto:${proposalId}:${reasonHash}`);
-  proposalTxHashes.set(cacheKey, vetoTxHash);
-  await options.onConfirmed?.(vetoTxHash);
-  return vetoTxHash;
 }
 
 export function getVetoHistory(proposalId: number): VetoRecord[] {
