@@ -11,6 +11,7 @@ import { useToast } from '@/context/ToastContext';
 import { useWallet } from '@/context/WalletContext';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useTransaction } from '@/hooks/useTransaction';
+import { useInvalidateGovernanceQueries } from '@/hooks/queries';
 import { hashEvidence } from '@/utils/evidence';
 import {
   Proposal,
@@ -189,6 +190,7 @@ export default function ProposalDetailPage() {
   const { address, isConnected, connect, signTx } = useWallet();
   const { addToast, updateToast } = useToast();
   const { execute, loading: isVoting } = useTransaction();
+  const invalidateGovernanceQueries = useInvalidateGovernanceQueries();
 
   const proposalId = Number(params.id);
 
@@ -246,13 +248,24 @@ export default function ProposalDetailPage() {
   const handleVote = async (choice: VoteChoice) => {
     if (!proposal || !address || votingPowerError || votingPower <= 0) return;
 
-    const result = await execute(async (signTx) => castVote(proposal.id, choice, address, signTx), {
-      expectedAction: 'cast_vote',
-      title: `Casting vote: ${choice}…`,
-      pendingMessage: 'Waiting for wallet signature...',
-      successTitle: 'Vote submitted',
-      successMessage: `Your ${choice.toLowerCase()} vote has been recorded.`,
-    });
+    const result = await execute(
+      async (signTx) =>
+        castVote(proposal.id, choice, address, signTx, {
+          onConfirmed: async () => {
+            await invalidateGovernanceQueries({
+              proposalId: proposal.id,
+              voterAddress: address,
+            });
+          },
+        }),
+      {
+        expectedAction: 'cast_vote',
+        title: `Casting vote: ${choice}…`,
+        pendingMessage: 'Waiting for wallet signature...',
+        successTitle: 'Vote submitted',
+        successMessage: `Your ${choice.toLowerCase()} vote has been recorded.`,
+      }
+    );
 
     if (result) {
       await load();
@@ -263,12 +276,23 @@ export default function ProposalDetailPage() {
     if (!proposal || !address) return;
 
     setIsExecuting(true);
-    const result = await execute(async (signTx) => executeProposal(proposal.id, address, signTx), {
-      title: 'Executing proposal…',
-      pendingMessage: 'Waiting for wallet signature...',
-      successTitle: 'Proposal executed',
-      successMessage: 'The proposal has been successfully executed.',
-    });
+    const result = await execute(
+      async (signTx) =>
+        executeProposal(proposal.id, address, signTx, {
+          onConfirmed: async () => {
+            await invalidateGovernanceQueries({
+              proposalId: proposal.id,
+              voterAddress: address,
+            });
+          },
+        }),
+      {
+        title: 'Executing proposal…',
+        pendingMessage: 'Waiting for wallet signature...',
+        successTitle: 'Proposal executed',
+        successMessage: 'The proposal has been successfully executed.',
+      }
+    );
 
     if (result) {
       await load();
@@ -287,7 +311,14 @@ export default function ProposalDetailPage() {
     setIsVetoing(true);
     const toastId = addToast({ type: 'pending', title: 'Vetoing proposal...' });
     try {
-      const txHash = await vetoProposal(proposal.id, vetoReasonHash, address, signTx);
+      const txHash = await vetoProposal(proposal.id, vetoReasonHash, address, signTx, {
+        onConfirmed: async () => {
+          await invalidateGovernanceQueries({
+            proposalId: proposal.id,
+            voterAddress: address,
+          });
+        },
+      });
       updateToast(toastId, {
         type: 'success',
         title: 'Proposal vetoed',
