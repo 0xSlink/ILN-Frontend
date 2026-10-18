@@ -6,7 +6,7 @@
  * record, no appended proposal. Only a collected signature may mutate.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import {
   castVote,
   createProposal,
@@ -18,11 +18,24 @@ import {
   type CreateProposalPayload,
 } from '../governance';
 import { isValidTxHash } from '../explorer';
+import {
+  clearGovernanceTestSession,
+  establishGovernanceTestSession,
+} from './helpers/governanceSession';
 
 const SIGNER = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const okSignTx = vi.fn(async (xdr: string) => `signed-${xdr}`);
 const rejectSignTx = vi.fn(async (_xdr: string): Promise<string> => {
   throw new Error('User rejected the transaction');
+});
+
+// Governance writes require a valid SEP-10 session (#1076).
+beforeEach(() => {
+  establishGovernanceTestSession(SIGNER);
+});
+
+afterEach(() => {
+  clearGovernanceTestSession();
 });
 
 describe('governance cancellation leaves state unchanged', () => {
