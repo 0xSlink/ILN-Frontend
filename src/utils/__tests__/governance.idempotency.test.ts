@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   castVote,
   createProposal,
@@ -9,9 +9,22 @@ import {
   type CreateProposalPayload,
 } from '../governance';
 import { isValidTxHash } from '../explorer';
+import {
+  clearGovernanceTestSession,
+  establishGovernanceTestSession,
+} from './helpers/governanceSession';
 
 const signTx = vi.fn(async (xdr: string) => `signed-${xdr}`);
 const SIGNER = 'GBZXN7PIRZGNMHGA728RGRTDGBLTYNGHXMH2Y7QGE2FMQ3GVFCYX2O64';
+
+// Governance writes require a valid SEP-10 session (#1076).
+beforeEach(() => {
+  establishGovernanceTestSession(SIGNER);
+});
+
+afterEach(() => {
+  clearGovernanceTestSession();
+});
 
 describe('governance idempotency and valid transaction hashes (#1146, #1148)', () => {
   beforeEach(() => {

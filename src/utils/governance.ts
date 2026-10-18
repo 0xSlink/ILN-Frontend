@@ -17,6 +17,10 @@ import {
 } from '@/constants';
 import { isCancellationError } from '@/lib/transaction-lifecycle';
 import { sep10Session } from '@/lib/sep10Session';
+import {
+  assertGovernanceSimulationPassed,
+  type GovernanceSimulationOutcome,
+} from '@/lib/governance/simulation';
 
 // ─── RPC & Contract helpers ───────────────────────────────────────────────────
 
@@ -408,6 +412,23 @@ export function getUserVote(proposalId: number): VoteChoice | undefined {
   return userVotes.get(proposalId);
 }
 
+/**
+ * Optional, additive hooks for every governance write path.
+ *
+ * Both callbacks are opt-in so existing call sites keep their behaviour:
+ *
+ * - `simulate` runs a Soroban dry-run *before* the wallet prompt. A failed
+ *   simulation throws a typed {@link import('@/lib/governance/simulation').GovernanceSimulationError}
+ *   and neither signs nor mutates (#1063).
+ * - `onConfirmed` runs only after the mutation has completed successfully.
+ *   Query-cache invalidation belongs here so rejected / failed / pending
+ *   writes cannot refresh data (#1065).
+ */
+export interface GovernanceMutationOptions {
+  simulate?: () => Promise<GovernanceSimulationOutcome>;
+  onConfirmed?: (txHash: string) => void | Promise<void>;
+}
+
 // ─── Contract Parsers ─────────────────────────────────────────────────────────
 
 export function parseProposalStatus(status: unknown): ProposalStatus {
@@ -586,7 +607,8 @@ export async function castVote(
   proposalId: number,
   choice: VoteChoice,
   signerAddress: string,
-  signTx: (xdr: string) => Promise<string>
+  signTx: (xdr: string) => Promise<string>,
+  options: GovernanceMutationOptions = {}
 ): Promise<string> {
   requireSep10Session(signerAddress);
   // TODO: Replace with actual Soroban transaction once governance contract is deployed
@@ -601,6 +623,12 @@ export async function castVote(
   if (previousVote === choice) {
     const existingHash = proposalTxHashes.get(cacheKey);
     if (existingHash) return existingHash;
+  }
+
+  // Dry-run before the wallet prompt: a failed simulation is rendered to the
+  // user without ever opening the wallet, and nothing is mutated (#1063).
+  if (options.simulate) {
+    await assertGovernanceSimulationPassed(options.simulate);
   }
 
   // Signature gate before any mutation: a declined wallet changes nothing (#1144).
@@ -635,13 +663,16 @@ export async function castVote(
   // idempotent replay returns the identical confirmation (#1141, #1146).
   const txHash = deriveGovernanceTxHash(signed, `vote:${proposalId}:${choice}:${signerAddress}`);
   proposalTxHashes.set(cacheKey, txHash);
+  // Cache refresh is a confirmed-only concern (#1065).
+  await options.onConfirmed?.(txHash);
   return txHash;
 }
 
 export async function executeProposal(
   proposalId: number,
   signerAddress: string,
-  signTx: (xdr: string) => Promise<string>
+  signTx: (xdr: string) => Promise<string>,
+  options: GovernanceMutationOptions = {}
 ): Promise<string> {
   requireSep10Session(signerAddress);
   // TODO: Replace with actual Soroban transaction once governance contract is deployed
@@ -659,6 +690,11 @@ export async function executeProposal(
     if (existing) return existing;
   }
 
+  // Simulation fails before signing: no wallet prompt, no status change (#1063).
+  if (options.simulate) {
+    await assertGovernanceSimulationPassed(options.simulate);
+  }
+
   const executedSigned = await requireGovernanceSignature(
     `execute:${proposalId}:${signerAddress}`,
     signerAddress,
@@ -668,6 +704,7 @@ export async function executeProposal(
   proposal.status = 'Executed';
   const txHash = deriveGovernanceTxHash(executedSigned, `execute:${proposalId}`);
   proposalTxHashes.set(cacheKey, txHash);
+  await options.onConfirmed?.(txHash);
   return txHash;
 }
 
@@ -675,7 +712,8 @@ export async function vetoProposal(
   proposalId: number,
   reasonHash: string,
   adminAddress: string,
-  signTx: (xdr: string) => Promise<string>
+  signTx: (xdr: string) => Promise<string>,
+  options: GovernanceMutationOptions = {}
 ): Promise<string> {
   requireSep10Session(adminAddress);
   await new Promise((r) => setTimeout(r, 1200));
@@ -692,6 +730,11 @@ export async function vetoProposal(
   if (existingVeto && proposal.status === 'Vetoed') {
     const existing = proposalTxHashes.get(cacheKey);
     if (existing) return existing;
+  }
+
+  // Simulation fails before signing: no wallet prompt, no veto record (#1063).
+  if (options.simulate) {
+    await assertGovernanceSimulationPassed(options.simulate);
   }
 
   // Signature gate before any mutation (#1144).
@@ -713,6 +756,7 @@ export async function vetoProposal(
 
   const vetoTxHash = deriveGovernanceTxHash(signed, `veto:${proposalId}:${reasonHash}`);
   proposalTxHashes.set(cacheKey, vetoTxHash);
+  await options.onConfirmed?.(vetoTxHash);
   return vetoTxHash;
 }
 
@@ -914,7 +958,8 @@ export async function lookupToken(address: string): Promise<AcceptedToken> {
 export async function createProposal(
   payload: CreateProposalPayload,
   signerAddress: string,
-  signTx: (xdr: string) => Promise<string>
+  signTx: (xdr: string) => Promise<string>,
+  options: GovernanceMutationOptions = {}
 ): Promise<{ txHash: string; proposalId: number }> {
   requireSep10Session(signerAddress);
   await new Promise((r) => setTimeout(r, 2500));
@@ -930,6 +975,11 @@ export async function createProposal(
       txHash: cached.txHash,
       proposalId: cached.proposalId,
     };
+  }
+
+  // Simulation fails before signing: no wallet prompt, no appended proposal (#1063).
+  if (options.simulate) {
+    await assertGovernanceSimulationPassed(options.simulate);
   }
 
   // Signature gate: a declined wallet must not append a proposal (#1144).
@@ -1028,6 +1078,8 @@ export async function createProposal(
     proposalId: newId,
     timestamp: Date.now(),
   });
+
+  await options.onConfirmed?.(createdTxHash);
 
   return {
     txHash: createdTxHash,

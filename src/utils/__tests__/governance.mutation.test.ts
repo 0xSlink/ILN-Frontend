@@ -24,7 +24,7 @@
  * counters.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   castVote,
   createProposal,
@@ -36,6 +36,10 @@ import {
   type CreateProposalPayload,
 } from '../governance';
 import { isValidTxHash } from '../explorer';
+import {
+  clearGovernanceTestSession,
+  establishGovernanceTestSession,
+} from './helpers/governanceSession';
 
 const signTx = vi.fn(async (xdr: string) => `signed-${xdr}`);
 const SIGNER = 'GABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -53,6 +57,16 @@ function assertNoRandomFallback(hash: string, context: string) {
     `${context}: must be a valid 64-char hex tx hash, got "${hash}"`
   ).toBe(true);
 }
+
+// The governance write paths are gated behind a valid SEP-10 session (#1076),
+// so every test starts with a deterministic session and tears it down after.
+beforeEach(() => {
+  establishGovernanceTestSession(SIGNER);
+});
+
+afterEach(() => {
+  clearGovernanceTestSession();
+});
 
 describe('governance.castVote (critical path)', () => {
   beforeEach(() => {
