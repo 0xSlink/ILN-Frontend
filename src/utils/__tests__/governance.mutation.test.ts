@@ -39,10 +39,13 @@ import {
 } from '../governance';
 import {
   scValToNative,
+  nativeToScVal,
+  rpc,
   Networks,
   TransactionBuilder,
   type Transaction,
 } from '@stellar/stellar-sdk';
+import { GOVERNANCE_CONTRACT_ID } from '@/constants';
 import { isValidTxHash } from '../explorer';
 import {
   clearGovernanceTestSession,
@@ -333,6 +336,30 @@ describe('governance.getVotingPower', () => {
     const power = await getVotingPower(SIGNER);
     expect(Number.isFinite(power)).toBe(true);
     expect(power).toBeGreaterThanOrEqual(0);
+  });
+
+  it('queries delegated voting power from governance contract authority (#1048)', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData: {} as any,
+        minResourceFee: '100',
+        events: [],
+        result: {
+          retval: nativeToScVal(2500),
+        },
+      } as any);
+
+    const power = await getVotingPower(SIGNER);
+    expect(mockSimulate).toHaveBeenCalledTimes(1);
+    const tx = mockSimulate.mock.calls[0][0] as any;
+    const op = tx.operations[0];
+    expect(op.type).toBe('invokeContractFunction');
+    expect(op.contract).toBe(GOVERNANCE_CONTRACT_ID);
+    expect(op.function).toBe('get_voting_power');
+    expect(power).toBe(2500);
+    mockSimulate.mockRestore();
   });
 });
 

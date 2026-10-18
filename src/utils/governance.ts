@@ -235,7 +235,7 @@ export const GOVERNANCE_INTEGRATION_STATUS: Record<
     label: 'Proposal veto',
   },
   getVotingPower: {
-    status: 'Stubbed',
+    status: 'Real',
     label: 'Voting power lookup',
   },
   getGovTokenBalance: {
@@ -865,10 +865,10 @@ export async function getVotingPower(address: string): Promise<number> {
   try {
     const params: xdr.ScVal[] = [Address.fromString(address).toScVal()];
     const callResult = await server.simulateTransaction(
-      buildTokenReadTransaction(ILN_TOKEN_CONTRACT_ID, 'balance', params)
+      buildGovernanceReadTransaction('get_voting_power', params)
     );
     if (!rpc.Api.isSimulationSuccess(callResult) || !callResult.result?.retval) {
-      // No authoritative balance available: report zero rather than a
+      // No authoritative power available: report zero rather than a
       // fabricated voting-power constant.
       return 0;
     }
