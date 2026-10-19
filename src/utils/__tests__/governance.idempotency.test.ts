@@ -64,6 +64,22 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
       expect(afterSecondProposal?.votesFor).toBe(votesAfterFirst); // Must not increment again
     });
 
+    it('deduplicates concurrent duplicate vote submissions with identical choice (#1046)', async () => {
+      const proposalId = 6;
+      const initialProposal = await fetchProposal(proposalId);
+      const initialVotesFor = initialProposal?.votesFor ?? 0;
+
+      const [firstHash, concurrentHash] = await Promise.all([
+        castVote(proposalId, 'For', SIGNER, signTx),
+        castVote(proposalId, 'For', SIGNER, signTx),
+      ]);
+
+      expect(firstHash).toBe(concurrentHash);
+      expect(signTx).toHaveBeenCalledTimes(1);
+      const afterProposal = await fetchProposal(proposalId);
+      expect(afterProposal?.votesFor).toBe(initialVotesFor + 1250);
+    });
+
     it('adjusts tally cleanly if voter switches choice', async () => {
       await castVote(2, 'For', SIGNER, signTx);
       const forProposal = await fetchProposal(2);
@@ -94,6 +110,19 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
       const secondHash = await executeProposal(created.proposalId, SIGNER, signTx);
       expect(secondHash).toBe(firstHash);
     });
+
+    it('deduplicates concurrent duplicate executions of the same proposal (#1046)', async () => {
+      const proposalId = 1;
+      const [firstHash, concurrentHash] = await Promise.all([
+        executeProposal(proposalId, SIGNER, signTx),
+        executeProposal(proposalId, SIGNER, signTx),
+      ]);
+
+      expect(firstHash).toBe(concurrentHash);
+      expect(signTx).toHaveBeenCalledTimes(1);
+      const executedProposal = await fetchProposal(proposalId);
+      expect(executedProposal?.status).toBe('Executed');
+    });
   });
 
   describe('vetoProposal idempotency', () => {
@@ -106,6 +135,20 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
 
       const secondHash = await vetoProposal(created.proposalId, reasonHash, SIGNER, signTx);
       expect(secondHash).toBe(firstHash);
+    });
+
+    it('deduplicates concurrent duplicate vetoes of the same proposal (#1046)', async () => {
+      const proposalId = 2;
+      const reasonHash = '0xidempotent_concurrent_veto_hash';
+      const [firstHash, concurrentHash] = await Promise.all([
+        vetoProposal(proposalId, reasonHash, SIGNER, signTx),
+        vetoProposal(proposalId, reasonHash, SIGNER, signTx),
+      ]);
+
+      expect(firstHash).toBe(concurrentHash);
+      expect(signTx).toHaveBeenCalledTimes(1);
+      const vetoedProposal = await fetchProposal(proposalId);
+      expect(vetoedProposal?.status).toBe('Vetoed');
     });
   });
 

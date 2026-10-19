@@ -23,6 +23,7 @@ import {
   CreateProposalError,
   ChainParametersError,
 } from '@/utils/governance';
+import { useInvalidateGovernanceQueries } from '@/hooks/queries';
 import { CONTRACT_ERROR_MAP, parseContractError } from '@/lib/contract/errors';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
@@ -98,6 +99,7 @@ function describeSubmitError(error: unknown): string {
 export default function NewGovernanceProposalPage() {
   const router = useRouter();
   const { address, isConnected, signTx } = useWallet();
+  const invalidateGovernanceQueries = useInvalidateGovernanceQueries();
 
   const [formData, setFormData] = useState<FormData>({
     formType: '',
@@ -330,6 +332,11 @@ export default function NewGovernanceProposalPage() {
       const { proposalId } = await createProposal(payload, address, signTx, {
         context: toValidationContext(protocolParams),
         onStage: setStage,
+        onConfirmed: async () => {
+          await invalidateGovernanceQueries({
+            voterAddress: address,
+          });
+        },
       });
       router.push(`/governance/${proposalId}`);
     } catch (error: unknown) {

@@ -33,16 +33,20 @@ import {
   fetchProposal,
   fetchProposals,
   getVotingPower,
+  VotingPowerError,
   MOCK_PROPOSALS,
   vetoProposal,
   type CreateProposalPayload,
 } from '../governance';
 import {
   scValToNative,
+  nativeToScVal,
+  rpc,
   Networks,
   TransactionBuilder,
   type Transaction,
 } from '@stellar/stellar-sdk';
+import { GOVERNANCE_CONTRACT_ID } from '@/constants';
 import { isValidTxHash } from '../explorer';
 import {
   clearGovernanceTestSession,
@@ -143,6 +147,36 @@ describe('governance.castVote (critical path)', () => {
     clearGovernanceIdempotencyCache();
     const hash2 = await castVote(4, 'For', SIGNER, signTx);
     expect(hash1).toBe(hash2);
+  });
+
+  it('fails closed and blocks mutation when voting-power read fails (#1049)', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValueOnce(new Error('Network transport failure'));
+
+    await expect(castVote(1, 'For', SIGNER, signTx)).rejects.toThrow(
+      /VOTING_POWER_UNAVAILABLE/
+    );
+    expect(signTx).not.toHaveBeenCalled();
+    mockSimulate.mockRestore();
+  });
+
+  it('blocks mutation when voter has zero voting power (#1049)', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData: {} as any,
+        minResourceFee: '100',
+        events: [],
+        result: { retval: nativeToScVal(0n, { type: 'i128' }) },
+      } as any);
+
+    await expect(castVote(1, 'For', SIGNER, signTx)).rejects.toThrow(
+      /VOTING_POWER_UNAVAILABLE/
+    );
+    expect(signTx).not.toHaveBeenCalled();
+    mockSimulate.mockRestore();
   });
 });
 
@@ -329,10 +363,45 @@ describe('governance.vetoProposal', () => {
 });
 
 describe('governance.getVotingPower', () => {
-  it('resolves a numeric power, falling back to 0 (no fabricated constant)', async () => {
+  it('fails closed with a typed error when voting power read fails (#1049)', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: 'Simulation failed: host error',
+      } as any);
+
+    await expect(getVotingPower(SIGNER)).rejects.toThrow(VotingPowerError);
+    await expect(getVotingPower(SIGNER)).rejects.toThrow(/VOTING_POWER_UNAVAILABLE/);
+    mockSimulate.mockRestore();
+  });
+
+  it('fails closed when address is missing or invalid (#1049)', async () => {
+    await expect(getVotingPower('')).rejects.toThrow(VotingPowerError);
+    await expect(getVotingPower('INVALID_ADDR')).rejects.toThrow(VotingPowerError);
+  });
+
+  it('queries delegated voting power from governance contract authority (#1048)', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: undefined,
+        transactionData: {} as any,
+        minResourceFee: '100',
+        events: [],
+        result: {
+          retval: nativeToScVal(2500),
+        },
+      } as any);
+
     const power = await getVotingPower(SIGNER);
-    expect(Number.isFinite(power)).toBe(true);
-    expect(power).toBeGreaterThanOrEqual(0);
+    expect(mockSimulate).toHaveBeenCalledTimes(1);
+    const tx = mockSimulate.mock.calls[0][0] as any;
+    const op = tx.operations[0];
+    expect(op.type).toBe('invokeContractFunction');
+    expect(op.contract).toBe(GOVERNANCE_CONTRACT_ID);
+    expect(op.function).toBe('get_voting_power');
+    expect(power).toBe(2500);
+    mockSimulate.mockRestore();
   });
 });
 
