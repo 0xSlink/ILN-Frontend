@@ -29,11 +29,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   castVote,
   createProposal,
+  executeProposal,
   clearGovernanceIdempotencyCache,
   fetchProposal,
   fetchProposals,
   getVotingPower,
   VotingPowerError,
+  GovernanceNetworkMismatchError,
   MOCK_PROPOSALS,
   vetoProposal,
   type CreateProposalPayload,
@@ -451,5 +453,123 @@ describe('governance write-path regression: no mock/random fallback (#1070)', ()
     const hash2 = await vetoProposal(created.proposalId, '0xreason', SIGNER, signTx);
     expect(hash1).toBe(hash2);
     assertNoRandomFallback(hash1, 'vetoProposal regression');
+  });
+});
+
+describe('governance network mismatch protection (#1067)', () => {
+  beforeEach(() => {
+    signTx.mockClear();
+    clearGovernanceIdempotencyCache();
+    establishGovernanceTestSession(SIGNER);
+  });
+
+  it('castVote succeeds when wallet network matches configured network', async () => {
+    const result = await castVote(1, 'For', SIGNER, signTx, { walletNetwork: 'testnet' });
+    expect(signTx).toHaveBeenCalledWith(expect.stringContaining('vote:1:For'));
+    assertNoRandomFallback(result, 'castVote matching network');
+  });
+
+  it('castVote blocks signing and mutation when wallet network differs from configured network', async () => {
+    const proposalBefore = await fetchProposal(1);
+    const votesBefore = proposalBefore?.votesFor ?? 0;
+
+    await expect(
+      castVote(1, 'For', SIGNER, signTx, { walletNetwork: 'mainnet' })
+    ).rejects.toThrow(GovernanceNetworkMismatchError);
+
+    await expect(
+      castVote(1, 'For', SIGNER, signTx, { walletNetwork: 'PUBLIC' })
+    ).rejects.toThrow(/NETWORK_MISMATCH/);
+
+    expect(signTx).not.toHaveBeenCalled();
+    const proposalAfter = await fetchProposal(1);
+    expect(proposalAfter?.votesFor).toBe(votesBefore);
+  });
+
+  it('createProposal succeeds when wallet network matches configured network', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Valid network proposal',
+      description: 'Testing matching network configuration',
+      newValueBps: 25,
+    };
+    establishGovernanceTestSession(PROPOSER);
+    const rpcStub = stubProposalRpc({ proposalId: 88 });
+    try {
+      const res = await createProposal(payload, PROPOSER, passthroughSignTx, {
+        context: PROPOSAL_CONTEXT,
+        walletNetwork: 'testnet',
+      });
+      expect(res.proposalId).toBe(88);
+      expect(res.txHash).toBe(CREATE_TX_HASH);
+      assertNoRandomFallback(res.txHash, 'createProposal matching network');
+      expect(rpcStub.sendTransaction).toHaveBeenCalledTimes(1);
+    } finally {
+      rpcStub.restore();
+    }
+  });
+
+  it('createProposal blocks signing and submission when wallet network differs', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Mismatched network proposal',
+      description: 'Must fail before building or signing',
+      newValueBps: 25,
+    };
+    establishGovernanceTestSession(PROPOSER);
+    const rpcStub = stubProposalRpc();
+    const proposalSign = vi.fn(passthroughSignTx);
+    try {
+      await expect(
+        createProposal(payload, PROPOSER, proposalSign, {
+          context: PROPOSAL_CONTEXT,
+          walletNetwork: 'mainnet',
+        })
+      ).rejects.toThrow(GovernanceNetworkMismatchError);
+
+      expect(proposalSign).not.toHaveBeenCalled();
+      expect(rpcStub.sendTransaction).not.toHaveBeenCalled();
+    } finally {
+      rpcStub.restore();
+    }
+  });
+
+  it('vetoProposal blocks signing and mutation when wallet network differs', async () => {
+    const created = { proposalId: 3 };
+    const proposalBefore = await fetchProposal(created.proposalId);
+    const statusBefore = proposalBefore?.status;
+
+    await expect(
+      vetoProposal(created.proposalId, '0xmismatch_reason', SIGNER, signTx, {
+        walletNetwork: 'mainnet',
+      })
+    ).rejects.toThrow(GovernanceNetworkMismatchError);
+
+    expect(signTx).not.toHaveBeenCalled();
+    const proposalAfter = await fetchProposal(created.proposalId);
+    expect(proposalAfter?.status).toBe(statusBefore);
+  });
+
+  it('executeProposal blocks signing and mutation when wallet network differs', async () => {
+    const proposalId = 4;
+    const proposalBefore = await fetchProposal(proposalId);
+    const statusBefore = proposalBefore?.status;
+
+    await expect(
+      executeProposal(proposalId, SIGNER, signTx, {
+        walletNetwork: 'mainnet',
+      })
+    ).rejects.toThrow(GovernanceNetworkMismatchError);
+
+    expect(signTx).not.toHaveBeenCalled();
+    const proposalAfter = await fetchProposal(proposalId);
+    expect(proposalAfter?.status).toBe(statusBefore);
+  });
+
+  it('regression guard: no mock/random fallback returns on network mismatch attempts', async () => {
+    await expect(
+      castVote(1, 'For', SIGNER, signTx, { walletNetwork: 'PUBLIC' })
+    ).rejects.toThrow();
+    expect(signTx).not.toHaveBeenCalled();
   });
 });

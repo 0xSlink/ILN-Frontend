@@ -187,7 +187,7 @@ function VetoProposalModal({
 export default function ProposalDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { address, isConnected, connect, signTx } = useWallet();
+  const { address, isConnected, connect, signTx, walletNetwork } = useWallet();
   const { addToast, updateToast } = useToast();
   const { execute, loading: isVoting } = useTransaction();
   const invalidateGovernanceQueries = useInvalidateGovernanceQueries();
@@ -251,6 +251,7 @@ export default function ProposalDetailPage() {
     const result = await execute(
       async (signTx) =>
         castVote(proposal.id, choice, address, signTx, {
+          walletNetwork,
           onConfirmed: async () => {
             await invalidateGovernanceQueries({
               proposalId: proposal.id,
@@ -279,6 +280,7 @@ export default function ProposalDetailPage() {
     const result = await execute(
       async (signTx) =>
         executeProposal(proposal.id, address, signTx, {
+          walletNetwork,
           onConfirmed: async () => {
             await invalidateGovernanceQueries({
               proposalId: proposal.id,
@@ -312,6 +314,7 @@ export default function ProposalDetailPage() {
     const toastId = addToast({ type: 'pending', title: 'Vetoing proposal...' });
     try {
       const txHash = await vetoProposal(proposal.id, vetoReasonHash, address, signTx, {
+        walletNetwork,
         onConfirmed: async () => {
           await invalidateGovernanceQueries({
             proposalId: proposal.id,

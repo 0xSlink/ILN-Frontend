@@ -17,6 +17,7 @@ import {
   STELLAR_NETWORK,
 } from '@/constants';
 import { isCancellationError } from '@/lib/transaction-lifecycle';
+import { getConfiguredStellarNetwork, networksMatch } from '@/utils/network';
 import { sep10Session } from '@/lib/sep10Session';
 import {
   assertGovernanceSimulationPassed,
@@ -486,11 +487,36 @@ export class VotingPowerError extends Error {
  *   writes cannot refresh data (#1065).
  * - `votingPower` explicit voting power to apply; if omitted, read from the
  *   governance contract authority (#1048, #1049).
+ * - `walletNetwork` reported wallet network; verified against configured network
+ *   to ensure wrong-network transactions cannot be signed (#1067).
  */
+export class GovernanceNetworkMismatchError extends Error {
+  readonly code = 'NETWORK_MISMATCH';
+
+  constructor(configured: string, wallet: string) {
+    super(
+      `NETWORK_MISMATCH: Network mismatch detected. Configured network is ${configured}, but wallet network is ${wallet}. Transactions cannot be signed.`
+    );
+    this.name = 'GovernanceNetworkMismatchError';
+  }
+}
+
+/** Assert that wallet network matches configured network before signing (#1067). */
+export function assertGovernanceNetworkMatches(
+  walletNetwork?: string,
+  configuredNetwork: string = getConfiguredStellarNetwork()
+): void {
+  if (!walletNetwork) return;
+  if (!networksMatch(walletNetwork, configuredNetwork)) {
+    throw new GovernanceNetworkMismatchError(configuredNetwork, walletNetwork);
+  }
+}
+
 export interface GovernanceMutationOptions {
   simulate?: () => Promise<GovernanceSimulationOutcome>;
   onConfirmed?: (txHash: string) => void | Promise<void>;
   votingPower?: number;
+  walletNetwork?: string;
 }
 
 // ─── Contract Parsers ─────────────────────────────────────────────────────────
@@ -674,6 +700,7 @@ export async function castVote(
   signTx: (xdr: string) => Promise<string>,
   options: GovernanceMutationOptions = {}
 ): Promise<string> {
+  assertGovernanceNetworkMatches(options.walletNetwork);
   requireSep10Session(signerAddress);
 
   const cacheKey = `${signerAddress || 'anon'}:vote:${proposalId}`;
@@ -774,6 +801,7 @@ export async function executeProposal(
   signTx: (xdr: string) => Promise<string>,
   options: GovernanceMutationOptions = {}
 ): Promise<string> {
+  assertGovernanceNetworkMatches(options.walletNetwork);
   requireSep10Session(signerAddress);
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
@@ -829,6 +857,7 @@ export async function vetoProposal(
   signTx: (xdr: string) => Promise<string>,
   options: GovernanceMutationOptions = {}
 ): Promise<string> {
+  assertGovernanceNetworkMatches(options.walletNetwork);
   requireSep10Session(adminAddress);
 
   const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
@@ -1120,6 +1149,7 @@ export async function createProposal(
   signTx: (xdr: string) => Promise<string>,
   options: CreateProposalOptions = {}
 ): Promise<{ txHash: string; proposalId: number }> {
+  assertGovernanceNetworkMatches(options.walletNetwork);
   requireSep10Session(signerAddress);
 
   const idempotencyKey = `${signerAddress}:${payload.formType}:${payload.title}:${
@@ -1148,6 +1178,7 @@ export async function createProposal(
       governanceContractId: GOVERNANCE_CONTRACT_ID,
       networkPassphrase: NETWORK_PASSPHRASE,
       onStage: options.onStage,
+      walletNetwork: options.walletNetwork,
     });
     proposalCreationCache.set(idempotencyKey, {
       txHash: created.txHash,

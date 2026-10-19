@@ -98,7 +98,7 @@ function describeSubmitError(error: unknown): string {
 
 export default function NewGovernanceProposalPage() {
   const router = useRouter();
-  const { address, isConnected, signTx } = useWallet();
+  const { address, isConnected, signTx, walletNetwork } = useWallet();
   const invalidateGovernanceQueries = useInvalidateGovernanceQueries();
 
   const [formData, setFormData] = useState<FormData>({
@@ -330,6 +330,7 @@ export default function NewGovernanceProposalPage() {
     setStage(null);
     try {
       const { proposalId } = await createProposal(payload, address, signTx, {
+        walletNetwork,
         context: toValidationContext(protocolParams),
         onStage: setStage,
         onConfirmed: async () => {
