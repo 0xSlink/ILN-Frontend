@@ -589,38 +589,65 @@ export function parseProposalFromNative(native: any): Proposal {
 
 // ─── Contract Integration Calls ────────────────────────────────────────────────
 
-export async function fetchProposals(): Promise<Proposal[]> {
+export class GovernanceReadError extends Error {
+  readonly code = 'GOVERNANCE_READ_UNAVAILABLE';
+  constructor(message: string, readonly cause?: unknown) {
+    super(`GOVERNANCE_READ_UNAVAILABLE: ${message}`);
+    this.name = 'GovernanceReadError';
+  }
+}
+
+export interface FetchProposalsOptions {
+  allowMockFallback?: boolean;
+}
+
+export async function fetchProposals(options: FetchProposalsOptions = {}): Promise<Proposal[]> {
+  let callResult: rpc.Api.SimulateTransactionResponse;
   try {
     const tx = buildGovernanceReadTransaction('list_proposals');
-    const callResult = await server.simulateTransaction(tx);
-    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
-      const native = scValToNative(callResult.result.retval);
-      if (Array.isArray(native)) {
-        return native.map((p) => ({
-          ...parseProposalFromNative(p),
-          userVote: userVotes.get(Number(p.id)),
-          vetoHistory: getVetoHistory(Number(p.id)),
-        }));
-      }
-    }
+    callResult = await server.simulateTransaction(tx);
   } catch (err) {
-    console.warn(
-      'iln_governance list_proposals contract call failed, falling back to mock data:',
-      err
-    );
+    if (options.allowMockFallback) {
+      return MOCK_PROPOSALS.map((p) => ({
+        ...p,
+        userVote: userVotes.get(p.id),
+        vetoHistory: getVetoHistory(p.id),
+      }));
+    }
+    throw new GovernanceReadError('Failed to simulate list_proposals read on governance contract', err);
   }
 
-  return MOCK_PROPOSALS.map((p) => ({
-    ...p,
-    userVote: userVotes.get(p.id),
-    vetoHistory: getVetoHistory(p.id),
-  }));
+  if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
+    const native = scValToNative(callResult.result.retval);
+    if (Array.isArray(native)) {
+      return native.map((p) => ({
+        ...parseProposalFromNative(p),
+        userVote: userVotes.get(Number(p.id)),
+        vetoHistory: getVetoHistory(Number(p.id)),
+      }));
+    }
+  }
+
+  if (options.allowMockFallback) {
+    return MOCK_PROPOSALS.map((p) => ({
+      ...p,
+      userVote: userVotes.get(p.id),
+      vetoHistory: getVetoHistory(p.id),
+    }));
+  }
+
+  throw new GovernanceReadError(
+    'Governance authority returned an unsuccessful simulation for list_proposals'
+  );
 }
 
 export const getProposals = fetchProposals;
 
-export async function fetchProposal(id: number): Promise<Proposal | null> {
-  const proposals = await fetchProposals();
+export async function fetchProposal(
+  id: number,
+  options: FetchProposalsOptions = {}
+): Promise<Proposal | null> {
+  const proposals = await fetchProposals(options);
   const proposal = proposals.find((p) => p.id === id);
   if (!proposal) return null;
   return { ...proposal, userVote: userVotes.get(id), vetoHistory: getVetoHistory(id) };

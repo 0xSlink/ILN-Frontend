@@ -36,6 +36,7 @@ import {
   getVotingPower,
   VotingPowerError,
   GovernanceNetworkMismatchError,
+  GovernanceReadError,
   MOCK_PROPOSALS,
   vetoProposal,
   type CreateProposalPayload,
@@ -684,5 +685,83 @@ describe('governance duplicate-submit lock (#1068)', () => {
     expect(h1).toBe(h2);
     assertNoRandomFallback(h1, 'regression duplicate clicks');
     expect(signTx).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('governance contract read fallbacks (#1069)', () => {
+  beforeEach(() => {
+    signTx.mockClear();
+    clearGovernanceIdempotencyCache();
+    establishGovernanceTestSession(SIGNER);
+  });
+
+  it('fetchProposals succeeds when contract returns valid proposal list', async () => {
+    const proposals = await fetchProposals();
+    expect(Array.isArray(proposals)).toBe(true);
+    expect(proposals.length).toBeGreaterThan(0);
+    expect(proposals[0]).toHaveProperty('id');
+    expect(proposals[0]).toHaveProperty('title');
+    expect(proposals[0]).toHaveProperty('status');
+  });
+
+  it('fetchProposals fails closed with GovernanceReadError when RPC returns simulation error', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: 'Simulation failed: host error',
+      } as any);
+
+    await expect(fetchProposals()).rejects.toThrow(GovernanceReadError);
+    await expect(fetchProposals()).rejects.toThrow(/GOVERNANCE_READ_UNAVAILABLE/);
+    mockSimulate.mockRestore();
+  });
+
+  it('fetchProposals fails closed when network transport fails', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValueOnce(new Error('500 Internal Server Error: RPC node unreachable'));
+
+    await expect(fetchProposals()).rejects.toThrow(GovernanceReadError);
+    await expect(fetchProposals()).rejects.toThrow(/GOVERNANCE_READ_UNAVAILABLE/);
+    mockSimulate.mockRestore();
+  });
+
+  it('fetchProposal fails closed with GovernanceReadError when RPC fails', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockRejectedValueOnce(new Error('RPC connection refused'));
+
+    await expect(fetchProposal(1)).rejects.toThrow(GovernanceReadError);
+    mockSimulate.mockRestore();
+  });
+
+  it('regression guard: RPC failures produce unavailable error rather than fabricated mock values', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockResolvedValueOnce({
+        error: 'RPC simulation error',
+      } as any);
+
+    // Must NOT return MOCK_PROPOSALS
+    await expect(fetchProposals()).rejects.toThrow(GovernanceReadError);
+    mockSimulate.mockRestore();
+  });
+
+  it('blocks vote mutation when voting power read fails (#1069)', async () => {
+    const mockSimulate = vi
+      .spyOn(rpc.Server.prototype, 'simulateTransaction')
+      .mockImplementation(async (tx: any) => {
+        const op = tx?.operations?.[0];
+        if (op?.function === 'get_voting_power') {
+          return { error: 'Simulation failed' } as any;
+        }
+        return { error: 'offline' } as any;
+      });
+
+    await expect(castVote(1, 'For', SIGNER, signTx)).rejects.toThrow(
+      /VOTING_POWER_UNAVAILABLE/
+    );
+    expect(signTx).not.toHaveBeenCalled();
+    mockSimulate.mockRestore();
   });
 });

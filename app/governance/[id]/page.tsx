@@ -196,6 +196,7 @@ export default function ProposalDetailPage() {
 
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [loading, setLoading] = useState(true);
+  const [proposalError, setProposalError] = useState<string | null>(null);
   const [votingPower, setVotingPower] = useState<number>(0);
   const [votingPowerError, setVotingPowerError] = useState<string | null>(null);
   const [loadingVotingPower, setLoadingVotingPower] = useState(false);
@@ -208,13 +209,20 @@ export default function ProposalDetailPage() {
   useDocumentTitle({ pageTitle: proposal?.title ?? `Proposal #${proposalId}` });
 
   const load = useCallback(async () => {
-    const data = await fetchProposal(proposalId);
-    if (!data) {
-      router.replace('/governance');
-      return;
+    try {
+      const data = await fetchProposal(proposalId);
+      if (!data) {
+        router.replace('/governance');
+        return;
+      }
+      setProposal(data);
+      setProposalError(null);
+    } catch (err) {
+      setProposal(null);
+      setProposalError(err instanceof Error ? err.message : 'Governance proposal unavailable');
+    } finally {
+      setLoading(false);
     }
-    setProposal(data);
-    setLoading(false);
   }, [proposalId, router]);
 
   useEffect(() => {
@@ -386,6 +394,29 @@ export default function ProposalDetailPage() {
           <div className="h-10 w-2/3 bg-surface-container rounded-xl" />
           <div className="h-4 w-full bg-surface-container rounded" />
           <div className="h-4 w-3/4 bg-surface-container rounded" />
+        </div>
+      </main>
+    );
+  }
+
+  if (proposalError) {
+    return (
+      <main className="min-h-screen">
+        <Navbar />
+        <div className="pt-28 pb-20 px-8 max-w-7xl mx-auto">
+          <div className="rounded-2xl border border-error/30 bg-error/10 p-8 text-center" role="alert">
+            <span className="material-symbols-outlined text-4xl text-error block mb-2">cloud_off</span>
+            <h2 className="text-xl font-bold text-error">Proposal Unavailable</h2>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              The proposal details could not be retrieved from the governance contract.
+            </p>
+            <button
+              onClick={() => void load()}
+              className="mt-4 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+            >
+              Retry
+            </button>
+          </div>
         </div>
       </main>
     );
