@@ -573,3 +573,116 @@ describe('governance network mismatch protection (#1067)', () => {
     expect(signTx).not.toHaveBeenCalled();
   });
 });
+
+describe('governance duplicate-submit lock (#1068)', () => {
+  beforeEach(() => {
+    signTx.mockClear();
+    clearGovernanceIdempotencyCache();
+    establishGovernanceTestSession(SIGNER);
+  });
+
+  it('castVote: rapid repeated clicks produce one transaction request and one result', async () => {
+    const proposalBefore = await fetchProposal(6);
+    const votesBefore = proposalBefore?.votesFor ?? 0;
+
+    const [first, second, third] = await Promise.all([
+      castVote(6, 'For', SIGNER, signTx),
+      castVote(6, 'For', SIGNER, signTx),
+      castVote(6, 'For', SIGNER, signTx),
+    ]);
+
+    expect(signTx).toHaveBeenCalledTimes(1);
+    expect(first).toBe(second);
+    expect(second).toBe(third);
+    assertNoRandomFallback(first, 'castVote duplicate lock');
+
+    const proposalAfter = await fetchProposal(6);
+    expect(proposalAfter?.votesFor).toBe(votesBefore + 1250);
+  });
+
+  it('castVote: in-flight lock releases after error so user can retry successfully', async () => {
+    const failingSignTx = vi.fn().mockRejectedValueOnce(new Error('User declined in wallet'));
+    await expect(castVote(6, 'For', SIGNER, failingSignTx)).rejects.toThrow();
+
+    // After failure, lock is released: a subsequent click succeeds and calls signTx
+    const successResult = await castVote(6, 'For', SIGNER, signTx);
+    expect(signTx).toHaveBeenCalledTimes(1);
+    assertNoRandomFallback(successResult, 'castVote retry after failure');
+  });
+
+  it('createProposal: rapid repeated clicks produce one transaction request and one proposal', async () => {
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Rapid clicks proposal',
+      description: 'Deduplication across concurrent submissions',
+      newValueBps: 45,
+    };
+    establishGovernanceTestSession(PROPOSER);
+    const rpcStub = stubProposalRpc({ proposalId: 99 });
+    const proposalSign = vi.fn(passthroughSignTx);
+    try {
+      const [res1, res2, res3] = await Promise.all([
+        createProposal(payload, PROPOSER, proposalSign, { context: PROPOSAL_CONTEXT }),
+        createProposal(payload, PROPOSER, proposalSign, { context: PROPOSAL_CONTEXT }),
+        createProposal(payload, PROPOSER, proposalSign, { context: PROPOSAL_CONTEXT }),
+      ]);
+
+      expect(proposalSign).toHaveBeenCalledTimes(1);
+      expect(rpcStub.sendTransaction).toHaveBeenCalledTimes(1);
+      expect(res1.txHash).toBe(res2.txHash);
+      expect(res2.txHash).toBe(res3.txHash);
+      expect(res1.proposalId).toBe(99);
+      expect(res2.proposalId).toBe(99);
+      assertNoRandomFallback(res1.txHash, 'createProposal duplicate lock');
+    } finally {
+      rpcStub.restore();
+    }
+  });
+
+  it('vetoProposal: rapid repeated clicks produce one transaction request and one veto record', async () => {
+    const created = { proposalId: 5 };
+    const reason = '0xrapid_veto_reason';
+
+    const [tx1, tx2, tx3] = await Promise.all([
+      vetoProposal(created.proposalId, reason, SIGNER, signTx),
+      vetoProposal(created.proposalId, reason, SIGNER, signTx),
+      vetoProposal(created.proposalId, reason, SIGNER, signTx),
+    ]);
+
+    expect(signTx).toHaveBeenCalledTimes(1);
+    expect(tx1).toBe(tx2);
+    expect(tx2).toBe(tx3);
+    assertNoRandomFallback(tx1, 'vetoProposal duplicate lock');
+
+    const proposalAfter = await fetchProposal(created.proposalId);
+    expect(proposalAfter?.status).toBe('Vetoed');
+    const records = proposalAfter?.vetoHistory?.filter((r) => r.reasonHash === reason) ?? [];
+    expect(records.length).toBe(1);
+  });
+
+  it('executeProposal: rapid repeated clicks produce one transaction request and one result', async () => {
+    const proposalId = 6;
+
+    const [tx1, tx2] = await Promise.all([
+      executeProposal(proposalId, SIGNER, signTx),
+      executeProposal(proposalId, SIGNER, signTx),
+    ]);
+
+    expect(signTx).toHaveBeenCalledTimes(1);
+    expect(tx1).toBe(tx2);
+    assertNoRandomFallback(tx1, 'executeProposal duplicate lock');
+
+    const proposalAfter = await fetchProposal(proposalId);
+    expect(proposalAfter?.status).toBe('Executed');
+  });
+
+  it('regression guard: duplicate submissions never generate random fallbacks or multiple hashes', async () => {
+    const [h1, h2] = await Promise.all([
+      castVote(5, 'Against', SIGNER, signTx),
+      castVote(5, 'Against', SIGNER, signTx),
+    ]);
+    expect(h1).toBe(h2);
+    assertNoRandomFallback(h1, 'regression duplicate clicks');
+    expect(signTx).toHaveBeenCalledTimes(1);
+  });
+});

@@ -204,6 +204,7 @@ export default function ProposalDetailPage() {
   const [vetoReason, setVetoReason] = useState('');
   const [vetoReasonHash, setVetoReasonHash] = useState('');
   const [isVetoing, setIsVetoing] = useState(false);
+  const isVetoingRef = useRef(false);
   useDocumentTitle({ pageTitle: proposal?.title ?? `Proposal #${proposalId}` });
 
   const load = useCallback(async () => {
@@ -308,8 +309,10 @@ export default function ProposalDetailPage() {
   };
 
   const handleVeto = async () => {
+    if (isVetoingRef.current || isVetoing) return;
     if (!proposal || !address || !vetoReasonHash) return;
 
+    isVetoingRef.current = true;
     setIsVetoing(true);
     const toastId = addToast({ type: 'pending', title: 'Vetoing proposal...' });
     try {
@@ -350,6 +353,7 @@ export default function ProposalDetailPage() {
         message: err instanceof Error ? err.message : 'Transaction rejected',
       });
     } finally {
+      isVetoingRef.current = false;
       setIsVetoing(false);
     }
   };
