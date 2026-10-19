@@ -37,8 +37,19 @@ import {
   VotingPowerError,
   GovernanceNetworkMismatchError,
   GovernanceReadError,
-  MOCK_PROPOSALS,
   vetoProposal,
+  decodeProposalCreatedEvent,
+  decodeProposalExecutedEvent,
+  decodeVoteCastEvent,
+  decodeProposalVetoedEvent,
+  decodeParameterUpdatedEvent,
+  decodeGovernanceEvent,
+  createProposalCreatedFixture,
+  createProposalExecutedFixture,
+  createVoteCastFixture,
+  createProposalVetoedFixture,
+  createParameterUpdatedFixture,
+  EventDecodingError,
   type CreateProposalPayload,
 } from '../governance';
 import {
@@ -765,3 +776,107 @@ describe('governance contract read fallbacks (#1069)', () => {
     mockSimulate.mockRestore();
   });
 });
+
+describe('governance event decoding fixtures (#1066)', () => {
+  it('decodes proposal_created deterministic fixture correctly', () => {
+    const fixture = createProposalCreatedFixture(GOVERNANCE_CONTRACT_ID, 101, SIGNER, 'UpdateFeeRate');
+    const decoded = decodeProposalCreatedEvent(fixture);
+
+    expect(decoded).not.toBeNull();
+    expect(decoded?.kind).toBe('proposal_created');
+    expect(decoded?.proposalId).toBe(101);
+    expect(decoded?.proposer).toBe(SIGNER);
+    expect(decoded?.actionType).toBe('UpdateFeeRate');
+    expect(decoded?.title).toBe('Test Proposal Title');
+  });
+
+  it('decodes proposal_executed deterministic fixture correctly', () => {
+    const fixture = createProposalExecutedFixture(GOVERNANCE_CONTRACT_ID, 101, 'UpdateFeeRate', {
+      proposedValue: 30,
+      votesFor: 5000,
+      votesAgainst: 200,
+    });
+    const decoded = decodeProposalExecutedEvent(fixture);
+
+    expect(decoded).not.toBeNull();
+    expect(decoded?.kind).toBe('proposal_executed');
+    expect(decoded?.proposalId).toBe(101);
+    expect(decoded?.proposedValue).toBe(30n);
+    expect(decoded?.votesFor).toBe(5000n);
+    expect(decoded?.votesAgainst).toBe(200n);
+  });
+
+  it('decodes vote_cast deterministic fixture correctly across all choices', () => {
+    for (const choice of ['For', 'Against', 'Abstain'] as const) {
+      const fixture = createVoteCastFixture(GOVERNANCE_CONTRACT_ID, 101, SIGNER, choice, 1250);
+      const decoded = decodeVoteCastEvent(fixture);
+
+      expect(decoded).not.toBeNull();
+      expect(decoded?.kind).toBe('vote_cast');
+      expect(decoded?.proposalId).toBe(101);
+      expect(decoded?.choice).toBe(choice);
+      expect(decoded?.votingPower).toBe(1250n);
+      expect(decoded?.voter).toBe(SIGNER);
+    }
+  });
+
+  it('decodes proposal_vetoed deterministic fixture correctly', () => {
+    const fixture = createProposalVetoedFixture(
+      GOVERNANCE_CONTRACT_ID,
+      101,
+      SIGNER,
+      '0xdeadbeef00000000000000000000000000000000000000000000000000000000'
+    );
+    const decoded = decodeProposalVetoedEvent(fixture);
+
+    expect(decoded).not.toBeNull();
+    expect(decoded?.kind).toBe('proposal_vetoed');
+    expect(decoded?.proposalId).toBe(101);
+    expect(decoded?.admin).toBe(SIGNER);
+    expect(decoded?.reasonHash).toBe('0xdeadbeef00000000000000000000000000000000000000000000000000000000');
+  });
+
+  it('decodes parameter_updated deterministic fixture correctly', () => {
+    const fixture = createParameterUpdatedFixture(
+      GOVERNANCE_CONTRACT_ID,
+      'voting_period',
+      86400,
+      172800,
+      SIGNER
+    );
+    const decoded = decodeParameterUpdatedEvent(fixture);
+
+    expect(decoded).not.toBeNull();
+    expect(decoded?.kind).toBe('parameter_updated');
+    expect(decoded?.parameter).toBe('voting_period');
+    expect(decoded?.oldValue).toBe(86400n);
+    expect(decoded?.newValue).toBe(172800n);
+    expect(decoded?.updatedBy).toBe(SIGNER);
+  });
+
+  it('decodeGovernanceEvent universal router decodes all event types and rejects unknown events', () => {
+    const pCreated = createProposalCreatedFixture(GOVERNANCE_CONTRACT_ID, 1, SIGNER);
+    const pExec = createProposalExecutedFixture(GOVERNANCE_CONTRACT_ID, 1);
+    const vCast = createVoteCastFixture(GOVERNANCE_CONTRACT_ID, 1, SIGNER, 'For');
+    const pVeto = createProposalVetoedFixture(GOVERNANCE_CONTRACT_ID, 1, SIGNER, '0xreason');
+    const paramUp = createParameterUpdatedFixture(GOVERNANCE_CONTRACT_ID, 'p', 1, 2);
+
+    expect(decodeGovernanceEvent(pCreated)?.kind).toBe('proposal_created');
+    expect(decodeGovernanceEvent(pExec)?.kind).toBe('proposal_executed');
+    expect(decodeGovernanceEvent(vCast)?.kind).toBe('vote_cast');
+    expect(decodeGovernanceEvent(pVeto)?.kind).toBe('proposal_vetoed');
+    expect(decodeGovernanceEvent(paramUp)?.kind).toBe('parameter_updated');
+  });
+
+  it('rejects malformed payloads without unhandled exceptions or fabricated fallback data', () => {
+    const malformed = {
+      topic: [nativeToScVal('proposal_created', { type: 'symbol' })],
+      value: nativeToScVal(999),
+    } as any;
+
+    expect(decodeProposalCreatedEvent(malformed)).toBeNull();
+    expect(() => decodeProposalCreatedEvent(malformed, { strict: true })).toThrow(EventDecodingError);
+    expect(() => decodeProposalCreatedEvent(malformed, { strict: true })).toThrow(/MALFORMED_EVENT_PAYLOAD/);
+  });
+});
+

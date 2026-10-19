@@ -60,6 +60,27 @@ export {
   ChainParametersError,
 } from '@/lib/governance/chain-parameters';
 export { CreateProposalError } from '@/lib/governance/create-proposal';
+export {
+  decodeProposalCreatedEvent,
+  decodeProposalExecutedEvent,
+  decodeVoteCastEvent,
+  decodeProposalVetoedEvent,
+  decodeParameterUpdatedEvent,
+  decodeGovernanceEvent,
+  EventDecodingError,
+  createProposalCreatedFixture,
+  createProposalExecutedFixture,
+  createVoteCastFixture,
+  createProposalVetoedFixture,
+  createParameterUpdatedFixture,
+  createRawEventFixture,
+  type DecodedProposalCreatedEvent,
+  type DecodedProposalExecutedEvent,
+  type DecodedVoteCastEvent,
+  type DecodedProposalVetoedEvent,
+  type DecodedParameterUpdatedEvent,
+  type DecodedGovernanceEvent,
+} from '@/lib/governance/event-decoding';
 
 // ─── RPC & Contract helpers ───────────────────────────────────────────────────
 
