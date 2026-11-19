@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Live testnet deployment to smoke-test (defaults to TESTNET_SMOKE_URL repo variable)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -17,6 +22,12 @@ jobs:
   smoke:
     timeout-minutes: 30
     runs-on: ubuntu-latest
+    env:
+      # A stale Vercel build was the cause of earlier nightly failures. Point
+      # the repo variable at the current testnet deployment (or pass the input
+      # on a manual run) without editing the workflow.
+      PLAYWRIGHT_BASE_URL: ${{ inputs.target_url || vars.TESTNET_SMOKE_URL || 'https://invoice-liquidity-network.vercel.app' }}
+      NEXT_PUBLIC_API_MOCKING: disabled
     steps:
       - uses: actions/checkout@v4
 
@@ -36,15 +47,9 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run live testnet smoke tests
-        env:
-          PLAYWRIGHT_BASE_URL: https://invoice-liquidity-network.vercel.app
-          NEXT_PUBLIC_API_MOCKING: disabled
         run: pnpm exec playwright test e2e/testnet-smoke.spec.ts --project=mobile-375
 
       - name: Run live testnet governance vote journey
-        env:
-          PLAYWRIGHT_BASE_URL: https://invoice-liquidity-network.vercel.app
-          NEXT_PUBLIC_API_MOCKING: disabled
         run: pnpm exec playwright test e2e/governance-live.spec.ts --project=mobile-375
 
       - name: Upload Playwright report on failure

@@ -34,14 +34,13 @@ import {
 import {
   isContractAddress,
   MAX_TOKEN_DECIMALS,
-  validateProposalPayload,
-  ProposalValidationError,
   type CreateProposalFormType,
   type CreateProposalPayload,
   type ProposalValidationContext,
 } from '@/lib/governance/contract-schema';
 import {
   fetchChainParameters,
+  toValidationContext,
   type AcceptedToken,
   type ProtocolParameters,
 } from '@/lib/governance/chain-parameters';
@@ -51,7 +50,7 @@ import {
   parameterLabel,
   type ParameterUpdateEvent,
 } from '@/lib/governance/parameter-events';
-import { type CreateProposalStage } from '@/lib/governance/create-proposal';
+import { submitCreateProposal, type CreateProposalStage } from '@/lib/governance/create-proposal';
 import { getApprovedTokenIds, getTokenMetadata } from '@/utils/soroban';
 
 export type { CreateProposalFormType, CreateProposalPayload, AcceptedToken, ProtocolParameters };
@@ -764,6 +763,7 @@ const PROPOSAL_TYPE_CODE: Record<CreateProposalFormType, number> = {
 };
 
 /** Window in which an identical create_proposal submission is treated as a replay. */
+const PROPOSAL_IDEMPOTENCY_WINDOW_MS = 30_000;
 
 /**
  * Encodes the type-specific part of a proposal as the single `value` argument
@@ -1045,14 +1045,8 @@ export async function vetoProposal(
     ...options,
   });
 
-  // Confirmed on-chain: record the settled veto so the detail page can show
-  // it before the next contract read completes.
-  const record: VetoRecord = {
-    proposalId,
-    admin,
-    reasonHash,
-    createdAt: Math.floor(Date.now() / 1000),
-  });
+  // The veto record itself comes from the next contract read: `vetoHistory`
+  // caches network truth and is never fabricated from a submitted write.
   proposalTxHashes.set(cacheKey, txHash);
   await options.onConfirmed?.(txHash);
   return txHash;
@@ -1247,36 +1241,6 @@ export async function getDelegationInfo(address: string): Promise<DelegationInfo
 
   const native = scValToNative(callResult.result.retval);
   return parseDelegationInfoFromNative(native);
-}
-
-async function requireGovernanceSignature(
-  intent: string,
-  signerAddress: string,
-  signTx: (xdr: string) => Promise<string>
-): Promise<string> {
-  if (!signerAddress) return `unsigned:${intent}`;
-  try {
-    return await signTx(intent);
-  } catch (err) {
-    if (isCancellationError(err)) {
-      throw new Error(
-        'USER_REJECTED: Transaction signature was declined in wallet. No changes were applied.'
-      );
-    }
-    throw err;
-  }
-}
-
-function deriveGovernanceTxHash(...seeds: string[]): string {
-  const seed = seeds.join('|');
-  let h1 = 0x811c9dc5;
-  let h2 = 0x27d4eb2f;
-  for (let i = 0; i < seed.length; i++) {
-    const ch = seed.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 0x01000193) >>> 0;
-    h2 = Math.imul(h2 ^ ch, 0x5f356495) >>> 0;
-  }
-  return (h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0')).repeat(4);
 }
 
 /**

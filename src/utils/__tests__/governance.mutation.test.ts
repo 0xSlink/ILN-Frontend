@@ -94,6 +94,8 @@ import {
 } from './helpers/proposalRpc';
 
 const signTx = vi.fn(async (xdr: string) => `signed-${xdr}`);
+/** Valid test account used for every governance write in this suite. */
+const SIGNER = PROPOSER;
 
 /** Snapshot of every field a mock mutation used to touch. */
 function snapshotMockState() {

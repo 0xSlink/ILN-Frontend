@@ -139,9 +139,10 @@ This guide consolidates common local setup issues, symptoms, and resolution step
 
 ### Symptom: Nightly testnet smoke fails with `returned HTTP 404`
 
-- **Underlying Cause**: The live testnet deployment (`https://invoice-liquidity-network.vercel.app`) was built from a commit that predates the route, so it serves the default Next.js 404 page. The route's code is fine; the deployment is stale.
+- **Underlying Cause**: The live testnet deployment was built from a commit that predates the route, so it serves the default Next.js 404 page. The route's code is fine; the deployment is stale. Transient 5xx responses from the edge or an upstream RPC/indexer can produce the same nightly failure without a code change.
 - **Resolution**:
-  Confirm the route exists in `app/`, check what the live deployment returns, and redeploy the current branch from Vercel:
+  The nightly workflow reads its target from the `TESTNET_SMOKE_URL` repository variable (or the `target_url` input on a manual run), falling back to `https://invoice-liquidity-network.vercel.app`. Confirm the route exists in `app/`, check what the live deployment returns, then repoint the variable or redeploy:
   ```bash
-  curl -s -o /dev/null -w '%{http_code}\n' https://invoice-liquidity-network.vercel.app/leaderboard
+  curl -s -o /dev/null -w '%{http_code}\n' "${TESTNET_SMOKE_URL:-https://invoice-liquidity-network.vercel.app}/leaderboard"
   ```
+  The smoke spec retries only transport-level 5xx failures; a 404 is intentionally a hard failure because it means the deployment is stale.

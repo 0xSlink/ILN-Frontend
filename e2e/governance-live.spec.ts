@@ -48,8 +48,9 @@ test.describe('Live testnet governance vote journey', () => {
     await page.goto('/governance', { waitUntil: 'domcontentloaded' });
     await waitForHydration(page);
 
-    // Wait for proposals to load
-    await page.waitForTimeout(2000);
+    // Wait for the client-rendered proposal list instead of a fixed sleep:
+    // a slow RPC must not turn into a flaky nightly failure.
+    await expect(page.locator('main').first()).toBeVisible({ timeout: 20000 });
 
     // Find and click a proposal link
     const proposalLink = page
@@ -80,7 +81,7 @@ test.describe('Live testnet governance vote journey', () => {
   test('displays voting options on an active proposal', async ({ page }) => {
     await page.goto('/governance', { waitUntil: 'domcontentloaded' });
     await waitForHydration(page);
-    await page.waitForTimeout(2000);
+    await expect(page.locator('main').first()).toBeVisible({ timeout: 20000 });
 
     // Navigate to a proposal
     const proposalLink = page
@@ -128,7 +129,7 @@ test.describe('Live testnet governance vote journey', () => {
     // Go to governance page
     await page.goto('/governance', { waitUntil: 'domcontentloaded' });
     await waitForHydration(page);
-    await page.waitForTimeout(2000);
+    await expect(page.locator('main').first()).toBeVisible({ timeout: 20000 });
 
     // Try to find a vote button
     const voteButton = page
@@ -138,9 +139,11 @@ test.describe('Live testnet governance vote journey', () => {
     const isVoteButtonVisible = await voteButton.isVisible({ timeout: 5000 }).catch(() => false);
 
     if (isVoteButtonVisible) {
-      // Before wallet is connected, vote button should typically be disabled or show connection prompt
-      const isDisabled = await voteButton.isDisabled().catch(() => false);
-      expect([true, false]).toContain(isDisabled); // Button state varies by implementation
+      // The wallet-gated button may be disabled or open a connection prompt;
+      // what must be true is that it exposes an actionable accessible label.
+      // (The previous `expect([true, false])` could never fail.)
+      const label = await voteButton.textContent();
+      expect(label?.trim().length ?? 0).toBeGreaterThan(0);
     }
   });
 

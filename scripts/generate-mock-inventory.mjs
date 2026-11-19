@@ -251,7 +251,7 @@ export function scanMockInventory(_rootDir = ROOT_DIR) {
       name: 'castVote',
       status: 'Real',
       filePath: 'src/utils/governance.ts',
-      line: 640,
+      line: 915,
       description:
         'Signed Soroban cast_vote: simulated before signing, confirmed under a bounded poll; no local tally',
       patternType: 'on-chain-call',
@@ -262,7 +262,7 @@ export function scanMockInventory(_rootDir = ROOT_DIR) {
       name: 'executeProposal',
       status: 'Real',
       filePath: 'src/utils/governance.ts',
-      line: 700,
+      line: 969,
       description:
         'Signed Soroban execute_proposal; status is re-read from the contract rather than set locally',
       patternType: 'on-chain-call',
@@ -273,7 +273,7 @@ export function scanMockInventory(_rootDir = ROOT_DIR) {
       name: 'vetoProposal',
       status: 'Real',
       filePath: 'src/utils/governance.ts',
-      line: 740,
+      line: 1013,
       description:
         'Signed Soroban veto_proposal; admin authorization enforced by simulation before signing',
       patternType: 'on-chain-call',
@@ -284,9 +284,10 @@ export function scanMockInventory(_rootDir = ROOT_DIR) {
       name: 'delegateVotingPower',
       status: 'Mock',
       filePath: 'src/utils/governance.ts',
-      line: 286,
-      description: 'Mutates mockDelegations in-memory map and returns random tx hash',
-      patternType: 'in-memory-state-mock',
+      line: 1288,
+      description:
+        'Signs a wallet intent and derives a deterministic local hash; no on-chain delegation transaction is submitted',
+      patternType: 'derived-hash-mock',
       trackingIssue: '#842',
     },
     {

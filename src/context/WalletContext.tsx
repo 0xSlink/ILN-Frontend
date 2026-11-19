@@ -53,7 +53,6 @@ import {
   authenticatedFetch,
   authenticateWithSep10,
   Sep10Error,
-  type Sep10Diagnostics,
   type Sep10Session,
 } from '@/utils/sep10';
 
@@ -99,6 +98,7 @@ export interface WalletContextType {
   disconnect: () => void;
   signTx: (txXdr: string) => Promise<string>;
   switchNetwork: () => Promise<void>;
+  resetIdleTimer: () => void;
   authenticate: () => Promise<void>;
   authenticatedRequest: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }
@@ -901,34 +901,38 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
     assertNoCrossTabChange();
     assertGenerationUnchanged();
 
-  const signTx = useCallback(
-    async (txXdr: string) => {
-      const isCorrectNetwork = await checkNetwork();
-      if (!isCorrectNetwork) {
-        const msg = `Network mismatch. Please switch to ${NETWORK_NAME}`;
-        addToast({ type: 'error', title: 'Transaction Failed', message: msg });
-        throw new Error(msg);
-      }
-      const signed = await signTransaction(txXdr, {
+    if (selectedProvider === 'walletconnect') {
+      return await signTransactionWithWalletConnect(txXdr, {
         networkPassphrase: NETWORK_PASSPHRASE,
       });
+    }
 
-      if (typeof signed === 'string') {
-        return signed;
-      }
+    const signed = await signTransaction(txXdr, {
+      networkPassphrase: NETWORK_PASSPHRASE,
+    });
 
-      if (signed.error) {
-        throw new Error(String(signed.error));
-      }
+    if (typeof signed === 'string') {
+      return signed;
+    }
 
-      if (signed.signedTxXdr) {
-        return signed.signedTxXdr;
-      }
+    // Wallet closed / dismissed without returning a payload: treat as an
+    // explicit cancellation without touching local UI state (#1144).
+    if (!signed || typeof signed !== 'object') {
+      throw new Error(
+        'USER_REJECTED: Wallet closed before signing completed. No changes were made.'
+      );
+    }
 
-      throw new Error('Freighter did not return a signed transaction.');
-    },
-    [checkNetwork, addToast]
-  );
+    if (signed.error) {
+      throw new Error(String(signed.error));
+    }
+
+    if (signed.signedTxXdr) {
+      return signed.signedTxXdr;
+    }
+
+    throw new Error('Freighter did not return a signed transaction.');
+  };
 
   const authenticate = useCallback(async () => {
     if (!address) {
@@ -1143,6 +1147,8 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
         signTx,
         switchNetwork,
         resetIdleTimer,
+        authenticate,
+        authenticatedRequest,
       }}
     >
       {children}
