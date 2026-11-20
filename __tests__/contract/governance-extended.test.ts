@@ -55,13 +55,13 @@ import {
   governanceWriteOptions,
   passthroughSignTx,
 } from '@/test-utils/governance-rpc';
+import {
   clearGovernanceTestSession,
   establishGovernanceTestSession,
 } from '@/utils/__tests__/helpers/governanceSession';
 import {
   PROPOSAL_CONTEXT,
   USDC_CONTRACT,
-  passthroughSignTx,
   stubProposalRpc,
 } from '@/utils/__tests__/helpers/proposalRpc';
 
@@ -105,6 +105,8 @@ describe('governance – executeProposal', () => {
       executeProposal(9999, SIGNER, signTx, governanceWriteOptions(stub))
     ).rejects.toThrow(/PROPOSAL_NOT_FOUND/);
     expect(signTx).not.toHaveBeenCalled();
+  });
+
   it('handles non-existent proposal gracefully', async () => {
     vi.useFakeTimers();
     const promise = executeProposal(9999, SIGNER, mockSignTx);
@@ -124,6 +126,10 @@ describe('governance – vetoProposal', () => {
       passthroughSignTx(),
       governanceWriteOptions(stub)
     );
+
+    expect(hash).toBe(stub.issuedHashes[0]);
+  });
+
   it('sets proposal status to Vetoed and records veto history', async () => {
     vi.useFakeTimers();
     const proposalId = 1;
@@ -156,6 +162,8 @@ describe('governance – vetoProposal', () => {
       vetoProposal(2, '0xreason', SIGNER, signTx, governanceWriteOptions(stub))
     ).rejects.toThrow(/SIMULATION_UNAUTHORIZED/);
     expect(signTx).not.toHaveBeenCalled();
+  });
+
   it('throws for non-existent proposal', async () => {
     vi.useFakeTimers();
     establishGovernanceTestSession('GADMIN');
@@ -398,6 +406,9 @@ describe('governance – createProposal extended paths', () => {
         governanceWriteOptions(stub)
       )
     ).rejects.toThrow(/removeTokenAddress/);
+  });
+});
+
 describe('governance – createProposal schema rejections', () => {
   // Invalid payloads are rejected before any RPC call, signature or local
   // write: there is no mock proposal to fall back to (#1055, #1056).
@@ -731,6 +742,8 @@ describe('governance – castVote / executeProposal preflight guards', () => {
       castVote(1, 'For', '', passthroughSignTx(), governanceWriteOptions(stub))
     ).rejects.toThrow(/SOURCE_ACCOUNT_MISSING/);
     expect(stub.sendTransaction).not.toHaveBeenCalled();
+  });
+
   it('reads the governance getters and does not return the old 50 / 500 / 500 constants', async () => {
     const simulate = vi
       .spyOn(rpc.Server.prototype, 'simulateTransaction')

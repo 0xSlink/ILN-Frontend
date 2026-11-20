@@ -302,6 +302,70 @@ describe('validateInvoiceForm', () => {
     const errors = validateInvoiceForm(values({ amount: '100.1234567' }), true, 7, 'XLM');
     expect(errors.amount).toBeUndefined();
   });
+
+  describe('launch cap validation', () => {
+    it('accepts an amount when below the active cap', () => {
+      // 5,000 USDC cap in 6 decimals = 5_000_000_000n
+      const capUnits = 5_000_000_000n;
+      const errors = validateInvoiceForm(
+        values({ amount: '4500' }),
+        true,
+        6,
+        'USDC',
+        Math.floor(Date.now() / 1000),
+        capUnits
+      );
+      expect(errors.amount).toBeUndefined();
+    });
+
+    it('accepts an amount exactly at the active cap', () => {
+      const capUnits = 5_000_000_000n;
+      const errors = validateInvoiceForm(
+        values({ amount: '5000' }),
+        true,
+        6,
+        'USDC',
+        Math.floor(Date.now() / 1000),
+        capUnits
+      );
+      expect(errors.amount).toBeUndefined();
+    });
+
+    it('rejects an amount exceeding the active launch cap with a clear message', () => {
+      const capUnits = 5_000_000_000n;
+      const errors = validateInvoiceForm(
+        values({ amount: '5001' }),
+        true,
+        6,
+        'USDC',
+        Math.floor(Date.now() / 1000),
+        capUnits
+      );
+      expect(errors.amount).toBe('Invoice amount exceeds the maximum launch limit of 5,000 USDC.');
+    });
+
+    it('ignores cap validation if cap is 0n or null', () => {
+      const errorsZero = validateInvoiceForm(
+        values({ amount: '25000' }),
+        true,
+        6,
+        'USDC',
+        Math.floor(Date.now() / 1000),
+        0n
+      );
+      expect(errorsZero.amount).toBeUndefined();
+
+      const errorsNull = validateInvoiceForm(
+        values({ amount: '25000' }),
+        true,
+        6,
+        'USDC',
+        Math.floor(Date.now() / 1000),
+        null
+      );
+      expect(errorsNull.amount).toBeUndefined();
+    });
+  });
 });
 
 describe('parseAmountToStroops', () => {

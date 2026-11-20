@@ -59,6 +59,15 @@ export const protocolKeys = {
   status: ['protocol-status'] as const,
 };
 
+export const capKeys = {
+  all: ['protocol-caps'] as const,
+  maxInvoiceAmount: ['protocol-caps', 'max-invoice-amount'] as const,
+  tokenVolumeCap: (tokenId?: string | null) =>
+    ['protocol-caps', 'token-volume-cap', tokenId ?? ''] as const,
+  summary: (tokenId?: string | null) =>
+    ['protocol-caps', 'summary', tokenId ?? ''] as const,
+};
+
 export const adminKeys = {
   /** Admin action audit log history. */
   actionHistory: ['admin-action-history'] as const,
@@ -94,6 +103,8 @@ export const QUERY_TIMINGS = {
   reputation: { staleTime: 30_000, gcTime: 5 * 60_000 },
   /** Protocol status — critical for maintenance banner, poll frequently. */
   protocolStatus: { staleTime: 15_000, gcTime: 5 * 60_000 },
+  /** Staged-rollout protocol caps (TVL and invoice size limits). */
+  protocolCaps: { staleTime: 30_000, gcTime: 5 * 60_000 },
   /** Admin action history — moderate frequency. */
   adminActions: { staleTime: 30_000, gcTime: 5 * 60_000 },
   /** Single payer score. */

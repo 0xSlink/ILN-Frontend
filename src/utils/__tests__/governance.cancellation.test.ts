@@ -42,11 +42,15 @@ import {
   passthroughSignTx,
 } from '@/test-utils/governance-rpc';
 
-const SIGNER = 'GD2HBFZSXTH4UCKZUVME665WBIPLRBPDTOTYWFRBCKZSFTP7PK46JYSK';
+import {
   clearGovernanceTestSession,
   establishGovernanceTestSession,
 } from './helpers/governanceSession';
+
 import { PROPOSAL_CONTEXT, PROPOSER, stubProposalRpc } from './helpers/proposalRpc';
+
+const SIGNER = 'GD2HBFZSXTH4UCKZUVME665WBIPLRBPDTOTYWFRBCKZSFTP7PK46JYSK';
+const rejectSignTx = decliningSignTx();
 
 beforeEach(async () => {
   clearGovernanceIdempotencyCache();
@@ -104,13 +108,17 @@ describe('governance cancellation leaves state unchanged', () => {
 
     expect(getVetoHistory(3)).toEqual(historyBefore);
     expect((await fetchProposal(3))?.status).not.toBe('Vetoed');
+  });
+
+  it('vetoProposal adds no record for another proposal when signing is declined', async () => {
+    const stub = createGovernanceRpcStub();
     // Proposal creation is on-chain now, so veto an existing active proposal.
     const target = 6;
     expect((await fetchProposal(target))?.status).toBe('Active');
     const historyBefore = getVetoHistory(target);
-    await expect(vetoProposal(target, '0xreason', SIGNER, rejectSignTx)).rejects.toThrow(
-      /USER_REJECTED/i
-    );
+    await expect(
+      vetoProposal(target, '0xreason', SIGNER, decliningSignTx(), governanceWriteOptions(stub))
+    ).rejects.toThrow(/USER_REJECTED/i);
     expect(getVetoHistory(target)).toEqual(historyBefore);
     expect((await fetchProposal(target))?.status).toBe('Active');
   });

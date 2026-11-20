@@ -78,10 +78,17 @@ describe('DelegationPanel', () => {
     (resolveFederatedAddress as any).mockResolvedValue('GRESOLVED456');
   });
 
-  it('renders weight and balance correctly', () => {
+  it('renders on-chain weight and balance after loading (no mock seed)', async () => {
     render(<DelegationPanel />);
-    expect(screen.getByText('1700 ILN')).toBeDefined(); // 1250 + 450
+    // Initial render must not show fabricated seeded numbers.
+    expect(screen.queryByText('1700 ILN')).toBeNull();
+    expect(screen.queryByText('1250 ILN')).toBeNull();
+
+    await waitFor(() => {
+      expect(screen.getByText('1700 ILN')).toBeDefined(); // 1250 own + 450 incoming
+    });
     expect(screen.getByText('1250 ILN')).toBeDefined();
+    expect(screen.getByText('+450 ILN')).toBeDefined();
     expect(screen.getByText('Self-voting')).toBeDefined();
   });
 

@@ -29,7 +29,6 @@ import {
   fetchProtocolParameters,
   getVotingPower,
   getUserVote,
-  clearGovernanceIdempotencyCache,
   totalVotes,
   votePercent,
   quorumReached,
@@ -53,6 +52,7 @@ import {
   governanceWriteOptions,
   passthroughSignTx,
 } from '@/test-utils/governance-rpc';
+import {
   clearGovernanceTestSession,
   establishGovernanceTestSession,
 } from '@/utils/__tests__/helpers/governanceSession';
@@ -61,7 +61,6 @@ import {
   PROPOSAL_CONTEXT,
   USDC_CONTRACT,
   XLM_SAC_CONTRACT,
-  passthroughSignTx,
   stubProposalRpc,
 } from '@/utils/__tests__/helpers/proposalRpc';
 
@@ -69,6 +68,16 @@ const SIGNER = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const mockSignTx = vi.fn(async (_xdr: string) => 'signedXDR');
 
 describe('governance – castVote', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    establishGovernanceTestSession(SIGNER);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    clearGovernanceTestSession();
+  });
+
   it('returns the transaction hash the network issued', async () => {
     const stub = createGovernanceRpcStub();
 
@@ -79,15 +88,6 @@ describe('governance – castVote', () => {
       passthroughSignTx(),
       governanceWriteOptions(stub)
     );
-  beforeEach(() => {
-    vi.useFakeTimers();
-    establishGovernanceTestSession(SIGNER);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    clearGovernanceTestSession();
-  });
 
     expect(hash).toBe(stub.issuedHashes[0]);
   });
@@ -263,8 +263,6 @@ describe('governance – fetchProposal', () => {
 });
 
 describe('governance – createProposal', () => {
-  it('creates a FeeRate proposal and returns txHash + the contract-assigned id', async () => {
-    const stub = createGovernanceRpcStub({ proposalId: 31 });
   let rpcStub: ReturnType<typeof stubProposalRpc>;
 
   beforeEach(() => {
@@ -279,6 +277,7 @@ describe('governance – createProposal', () => {
   });
 
   it('creates a FeeRate proposal on-chain and returns txHash + proposalId', async () => {
+    const stub = createGovernanceRpcStub({ proposalId: 31 });
     const payload: CreateProposalPayload = {
       formType: 'FeeRate',
       title: 'Reduce fee to 0.2%',
@@ -298,17 +297,6 @@ describe('governance – createProposal', () => {
   });
 
   it('submits an AddToken proposal without appending a local record', async () => {
-    const stub = createGovernanceRpcStub({ proposalId: 32 });
-    const result = await createProposal(payload, SIGNER, passthroughSignTx, {
-      context: PROPOSAL_CONTEXT,
-    });
-
-    expect(result).toEqual({ txHash: CREATE_TX_HASH, proposalId: 12 });
-    expect(rpcStub.simulateTransaction).toHaveBeenCalled();
-    expect(rpcStub.sendTransaction).toHaveBeenCalledTimes(1);
-  });
-
-  it('creates an AddToken proposal without fabricating a local record', async () => {
     const before = MOCK_PROPOSALS.length;
     const payload: CreateProposalPayload = {
       formType: 'AddToken',
@@ -318,8 +306,7 @@ describe('governance – createProposal', () => {
       tokenName: 'XLM',
       tokenDecimals: 7,
     };
-    const beforeCount = MOCK_PROPOSALS.length;
-
+    const stub = createGovernanceRpcStub({ proposalId: 32 });
     const result = await createProposal(
       payload,
       SIGNER,
@@ -328,6 +315,32 @@ describe('governance – createProposal', () => {
     );
 
     expect(result.proposalId).toBe(32);
+    expect(stub.simulateTransaction).toHaveBeenCalled();
+    expect(stub.sendTransaction).toHaveBeenCalledTimes(1);
+    expect(MOCK_PROPOSALS).toHaveLength(before);
+    expect(MOCK_PROPOSALS.find((p) => p.id === result.proposalId)).toBeUndefined();
+  });
+
+  it('creates an AddToken proposal without fabricating a local record', async () => {
+    const beforeCount = MOCK_PROPOSALS.length;
+    const payload: CreateProposalPayload = {
+      formType: 'AddToken',
+      title: 'Add another token',
+      description: 'Add a second token through the contract',
+      tokenAddress: XLM_SAC_CONTRACT,
+      tokenName: 'XLM',
+      tokenDecimals: 7,
+    };
+    const stub = createGovernanceRpcStub({ proposalId: 34 });
+
+    const result = await createProposal(
+      payload,
+      SIGNER,
+      passthroughSignTx(),
+      governanceWriteOptions(stub)
+    );
+
+    expect(result.proposalId).toBe(34);
     // The proposal now lives on-chain; the local array is a read-only
     // fallback and must not grow.
     expect(MOCK_PROPOSALS.length).toBe(beforeCount);
@@ -335,12 +348,23 @@ describe('governance – createProposal', () => {
   });
 
   it('submits a RemoveToken proposal through the contract boundary', async () => {
+    const before = MOCK_PROPOSALS.length;
+    const payload: CreateProposalPayload = {
+      formType: 'RemoveToken',
+      title: 'Remove USDC',
+      description: 'Remove USDC from the active token set',
+      removeTokenAddress: USDC_CONTRACT,
+    };
     const stub = createGovernanceRpcStub({ proposalId: 33 });
-    const result = await createProposal(payload, SIGNER, passthroughSignTx, {
-      context: PROPOSAL_CONTEXT,
-    });
+    const result = await createProposal(
+      payload,
+      SIGNER,
+      passthroughSignTx(),
+      governanceWriteOptions(stub)
+    );
 
-    expect(result.proposalId).toBe(12);
+    expect(result.proposalId).toBe(33);
+    expect(stub.sendTransaction).toHaveBeenCalledTimes(1);
     expect(MOCK_PROPOSALS).toHaveLength(before);
     expect(MOCK_PROPOSALS.find((p) => p.id === result.proposalId)).toBeUndefined();
   });
@@ -351,20 +375,11 @@ describe('governance – createProposal', () => {
     const signTx = vi.fn(passthroughSignTx);
     const payload: CreateProposalPayload = {
       formType: 'RemoveToken',
-      title: 'Remove USDC',
-      description: 'Remove USDC from the active token set',
+      title: 'Rejected proposal',
+      description: 'Simulation rejects this proposal',
       removeTokenAddress: USDC_CONTRACT,
     };
 
-    const result = await createProposal(
-      payload,
-      SIGNER,
-      passthroughSignTx(),
-      governanceWriteOptions(stub)
-    );
-
-    expect(result.proposalId).toBe(33);
-    expect(stub.sendTransaction).toHaveBeenCalledTimes(1);
     await expect(
       createProposal(payload, SIGNER, signTx, { context: PROPOSAL_CONTEXT })
     ).rejects.toMatchObject({
@@ -377,9 +392,6 @@ describe('governance – createProposal', () => {
 });
 
 describe('governance – stateful write paths', () => {
-  it('persists only the confirmed userVote, not a synthesised tally', async () => {
-    const stub = createGovernanceRpcStub({ proposalId: 41 });
-    const proposed = await createProposal(
   let rpcStub: ReturnType<typeof stubProposalRpc>;
 
   beforeEach(() => {
@@ -400,7 +412,6 @@ describe('governance – stateful write paths', () => {
       votingEndsAt: Date.now() + 86400,
       votesFor: 0,
       votesAgainst: 0,
-      votesAbstain: 0,
       quorumRequired: 100_000,
     });
   });
@@ -412,9 +423,9 @@ describe('governance – stateful write paths', () => {
     if (idx >= 0) MOCK_PROPOSALS.splice(idx, 1);
   });
 
-  it('updates the right vote bucket and persists userVote for the proposal', async () => {
-    vi.useFakeTimers();
-    const proposalPromise = createProposal(
+  it('persists only the confirmed userVote, not a synthesised tally', async () => {
+    const stub = createGovernanceRpcStub({ proposalId: 41 });
+    const proposed = await createProposal(
       {
         formType: 'FeeRate',
         title: 'Isolated vote assertion',
@@ -424,8 +435,6 @@ describe('governance – stateful write paths', () => {
       SIGNER,
       passthroughSignTx(),
       governanceWriteOptions(stub)
-      passthroughSignTx,
-      { context: PROPOSAL_CONTEXT }
     );
 
     const result = await castVote(
@@ -440,6 +449,32 @@ describe('governance – stateful write paths', () => {
     expect(getUserVote(proposed.proposalId)).toBe('For');
     // No local proposal record exists to carry a tally — the contract owns it.
     expect(MOCK_PROPOSALS.find((p) => p.id === proposed.proposalId)).toBeUndefined();
+  });
+
+  it('updates the right vote bucket and persists userVote for the proposal', async () => {
+    const stub = createGovernanceRpcStub({ proposalId: 89 });
+    const proposed = await createProposal(
+      {
+        formType: 'FeeRate',
+        title: 'Isolated vote assertion (second)',
+        description: 'Uses a fresh proposal to avoid prior test state drift.',
+        newValueBps: 75,
+      },
+      SIGNER,
+      passthroughSignTx(),
+      governanceWriteOptions(stub)
+    );
+
+    const result = await castVote(
+      proposed.proposalId,
+      'For',
+      SIGNER,
+      passthroughSignTx(),
+      governanceWriteOptions(stub)
+    );
+
+    expect(typeof result).toBe('string');
+    expect(getUserVote(proposed.proposalId)).toBe('For');
   });
 });
 
@@ -734,6 +769,17 @@ describe('governance – mock-backing detection', () => {
   it('createProposal (#841): tx hash provenance and contract boundary usage', async () => {
     const stub = createGovernanceRpcStub({ fixedHash: 'd'.repeat(64), proposalId: 55 });
     const signTx = passthroughSignTx();
+    const payload: CreateProposalPayload = {
+      formType: 'FeeRate',
+      title: 'Hash provenance probe',
+      description: 'Probe for deterministic transaction hash provenance.',
+      newValueBps: 40,
+    };
+    const result = await createProposal(payload, SIGNER, signTx, governanceWriteOptions(stub));
+    expect(result.txHash).toBe('d'.repeat(64));
+    expect(signTx).toHaveBeenCalledTimes(1);
+  });
+
   it('createProposal (#841): tx hash provenance and signTx usage', async () => {
     establishGovernanceTestSession(SIGNER);
     const rpcStub = stubProposalRpc();

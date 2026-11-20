@@ -17,11 +17,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import {
-  executeReadyProposals,
-  isAdminAddress,
-  setProtocolPaused,
-} from '../admin-health';
+import { executeReadyProposals, isAdminAddress, setProtocolPaused } from '../admin-health';
 import { requireAdmin } from '@/lib/admin-gate';
 import { GOVERNANCE_ADMIN_ADDRESS } from '@/constants';
 
@@ -48,10 +44,7 @@ const NON_ADMIN = 'GBNONADMINWALLETAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBB';
  * Authorization"). `/admin/actions` is public by design; the other two
  * admin routes require the admin wallet.
  */
-const ROUTE_ACCESS: Record<
-  '/admin' | '/admin/actions' | '/admin/flags',
-  'admin' | 'public'
-> = {
+const ROUTE_ACCESS: Record<'/admin' | '/admin/actions' | '/admin/flags', 'admin' | 'public'> = {
   '/admin': 'admin',
   '/admin/actions': 'public',
   '/admin/flags': 'admin',
@@ -87,6 +80,14 @@ describe('admin route-access matrix', () => {
     for (const address of [GOVERNANCE_ADMIN_ADDRESS, NON_ADMIN, null, undefined] as const) {
       expect(canViewRoute('/admin/actions', address)).toBe(true);
     }
+  });
+
+  it('treats direct URL access as a fresh address evaluation (no cached grant)', () => {
+    // Simulates navigating directly to a gated route: authorization depends
+    // only on the currently connected wallet address, never on prior page state.
+    expect(canViewRoute('/admin', null)).toBe(false);
+    expect(canViewRoute('/admin/flags', NON_ADMIN)).toBe(false);
+    expect(canViewRoute('/admin', GOVERNANCE_ADMIN_ADDRESS)).toBe(true);
   });
 });
 

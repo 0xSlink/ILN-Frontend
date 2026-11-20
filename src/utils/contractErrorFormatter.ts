@@ -38,6 +38,20 @@ export function formatContractError(error: unknown): ContractErrorResult {
     };
   }
 
+  if (
+    /CapExceeded|MaxInvoiceAmountExceeded|GlobalVolumeCapExceeded|cap\s*exceeded|Error\(Contract,\s*#(?:44|45)\)/i.test(
+      message
+    )
+  ) {
+    return {
+      code: 'CAP_EXCEEDED',
+      message,
+      userFriendlyMessage:
+        'The invoice amount or protocol TVL exceeds the active launch cap set by governance.',
+      originalError: error,
+    };
+  }
+
   if (/HostError|Simulation|TransactionSimulationFailed/i.test(message)) {
     return {
       code: 'SIMULATION_FAILED',

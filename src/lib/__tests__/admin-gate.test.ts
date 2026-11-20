@@ -48,6 +48,16 @@ describe('isAdminAddressFromValue', () => {
   it('rejects every non-admin address, not just one fixture', () => {
     expect(isAdminAddressFromValue(OTHER_NON_ADMIN, ADMIN)).toBe(false);
   });
+
+  it('re-evaluates on wallet change with no sticky grant (admin -> non-admin denied)', () => {
+    expect(isAdminAddressFromValue(ADMIN, ADMIN)).toBe(true);
+    expect(isAdminAddressFromValue(NON_ADMIN, ADMIN)).toBe(false);
+  });
+
+  it('re-evaluates on wallet change (non-admin -> admin granted only for exact admin)', () => {
+    expect(isAdminAddressFromValue(NON_ADMIN, ADMIN)).toBe(false);
+    expect(isAdminAddressFromValue(ADMIN, ADMIN)).toBe(true);
+  });
 });
 
 describe('requireAdmin', () => {
@@ -79,6 +89,15 @@ describe('requireAdmin', () => {
   it('defaults to the configured governance admin address', () => {
     expect(requireAdmin(ADMIN).authorized).toBe(true);
     expect(requireAdmin(NON_ADMIN).authorized).toBe(false);
+  });
+
+  it('is pure and session/network independent: same address yields same decision', () => {
+    // The gate compares wallet addresses only. SEP-10 session freshness and
+    // wallet network selection are enforced by separate client boundaries
+    // (sep10Session / useTransaction) and by on-chain signer checks.
+    expect(requireAdmin(ADMIN, ADMIN)).toEqual(requireAdmin(ADMIN, ADMIN));
+    expect(requireAdmin(NON_ADMIN, ADMIN)).toEqual(requireAdmin(NON_ADMIN, ADMIN));
+    expect(requireAdmin(null, ADMIN)).toEqual(requireAdmin(undefined, ADMIN));
   });
 });
 

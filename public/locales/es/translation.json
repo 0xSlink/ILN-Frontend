@@ -279,5 +279,40 @@
     "errors": {
       "storageUnavailable": "El almacenamiento del navegador no está disponible, así que no se pueden guardar los cambios de la libreta de direcciones."
     }
+  },
+  "financial": {
+    "provenance": {
+      "onChain": "Datos en cadena",
+      "indexer": "Datos del indexador",
+      "referenceRate": "Estimaci?n de tasa de referencia",
+      "fallback": "Valor de respaldo"
+    },
+    "freshness": {
+      "fresh": "Datos de tasa actualizados",
+      "stale": "Datos de tasa desactualizados",
+      "unknown": "Actualizaci?n de tasa desconocida"
+    },
+    "warnings": {
+      "unavailable": "No disponible",
+      "overflow": "Desbordamiento",
+      "staleRate": "La tasa de referencia puede estar desactualizada",
+      "fallbackData": "Mostrando datos financieros de respaldo"
+    },
+    "statuses": {
+      "pending": "Pendiente",
+      "funded": "Financiada",
+      "paid": "Pagada",
+      "defaulted": "En incumplimiento",
+      "disputed": "En disputa",
+      "cancelled": "Cancelada"
+    },
+    "amounts": {
+      "totalVolume": "Volumen total",
+      "protocolFeesCollected": "Comisiones del protocolo cobradas",
+      "usdEquivalentFunded": "Equivalente en USD financiado",
+      "feesCollectedByProtocol": "Comisiones cobradas por el protocolo",
+      "zeroFeeBadge": "0% COMISI?N",
+      "feeTooltip": "Esta comisi?n financia el desarrollo del protocolo ILN y la tesorer?a"
+    }
   }
 }

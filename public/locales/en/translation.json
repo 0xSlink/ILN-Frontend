@@ -279,5 +279,40 @@
     "errors": {
       "storageUnavailable": "Browser storage is unavailable, so address book changes cannot be saved."
     }
+  },
+  "financial": {
+    "provenance": {
+      "onChain": "On-chain data",
+      "indexer": "Indexer data",
+      "referenceRate": "Reference-rate estimate",
+      "fallback": "Fallback value"
+    },
+    "freshness": {
+      "fresh": "Rate data fresh",
+      "stale": "Rate data stale",
+      "unknown": "Rate freshness unknown"
+    },
+    "warnings": {
+      "unavailable": "Unavailable",
+      "overflow": "Overflow",
+      "staleRate": "Reference rate may be outdated",
+      "fallbackData": "Displaying fallback financial data"
+    },
+    "statuses": {
+      "pending": "Pending",
+      "funded": "Funded",
+      "paid": "Paid",
+      "defaulted": "Defaulted",
+      "disputed": "Disputed",
+      "cancelled": "Cancelled"
+    },
+    "amounts": {
+      "totalVolume": "Total Volume",
+      "protocolFeesCollected": "Protocol Fees Collected",
+      "usdEquivalentFunded": "USD-equivalent funded",
+      "feesCollectedByProtocol": "Fees collected by protocol",
+      "zeroFeeBadge": "0% FEE",
+      "feeTooltip": "This fee funds ILN protocol development and the treasury"
+    }
   }
 }

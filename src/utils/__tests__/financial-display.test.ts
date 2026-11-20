@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ALL_FINANCIAL_COPY_KEYS,
+  auditFinancialCopyCompleteness,
   createFinancialProvenance,
+  FINANCIAL_COPY_KEYS,
   formatExactFinancialUsd,
   formatFinancialUsd,
+  getFinancialCopy,
+  getFinancialProvenanceLabel,
+  getFinancialStatusLabel,
+  getFinancialWarningLabel,
   getRateFreshness,
+  getRateFreshnessLabel,
+  normalizeFinancialLocale,
+  SUPPORTED_FINANCIAL_LOCALES,
 } from '@/utils/financial-display';
 
 describe('financial display helpers', () => {
@@ -85,5 +95,110 @@ describe('financial display helpers', () => {
   it('labels fallback and reference-rate provenance explicitly', () => {
     expect(createFinancialProvenance('fallback').label).toBe('Fallback value');
     expect(createFinancialProvenance('reference-rate').label).toBe('Reference-rate estimate');
+  });
+
+  describe('financial copy localization completeness', () => {
+    it('verifies all financial labels exist in every locale without untranslated fallbacks', () => {
+      const audit = auditFinancialCopyCompleteness();
+      expect(audit.complete).toBe(true);
+      expect(audit.missingByLocale.en).toEqual([]);
+      expect(audit.missingByLocale.es).toEqual([]);
+      expect(audit.untranslatedByLocale.en).toEqual([]);
+      expect(audit.untranslatedByLocale.es).toEqual([]);
+
+      for (const locale of SUPPORTED_FINANCIAL_LOCALES) {
+        for (const key of ALL_FINANCIAL_COPY_KEYS) {
+          const resolved = getFinancialCopy(key, locale);
+          expect(resolved.trim().length).toBeGreaterThan(0);
+          expect(resolved).not.toBe(key);
+        }
+      }
+    });
+
+    it('detects missing or untranslated fallback entries in a broken locale catalog', () => {
+      const audit = auditFinancialCopyCompleteness({
+        en: {
+          financial: {
+            provenance: {
+              onChain: 'On-chain data',
+              indexer: 'Indexer data',
+              referenceRate: 'Reference-rate estimate',
+              fallback: 'Fallback value',
+            },
+            freshness: {
+              fresh: 'Rate data fresh',
+              stale: 'Rate data stale',
+              unknown: 'Rate freshness unknown',
+            },
+            warnings: {
+              unavailable: 'Unavailable',
+              overflow: 'Overflow',
+              staleRate: 'Reference rate may be outdated',
+              fallbackData: 'Displaying fallback financial data',
+            },
+            statuses: {
+              pending: 'Pending',
+              funded: 'Funded',
+              paid: 'Paid',
+              defaulted: 'Defaulted',
+              disputed: 'Disputed',
+              cancelled: 'Cancelled',
+            },
+            amounts: {
+              totalVolume: 'Total Volume',
+              protocolFeesCollected: 'Protocol Fees Collected',
+              usdEquivalentFunded: 'USD-equivalent funded',
+              feesCollectedByProtocol: 'Fees collected by protocol',
+              zeroFeeBadge: '0% FEE',
+              feeTooltip: 'This fee funds ILN protocol development and the treasury',
+            },
+          },
+        },
+        es: {
+          financial: {
+            provenance: {
+              onChain: 'On-chain data',
+            },
+          },
+        },
+      });
+
+      expect(audit.complete).toBe(false);
+      expect(audit.untranslatedByLocale.es).toContain(FINANCIAL_COPY_KEYS.provenance['on-chain']);
+      expect(audit.missingByLocale.es).toContain(FINANCIAL_COPY_KEYS.warnings.unavailable);
+    });
+
+    it('localizes warning, status, provenance, and freshness labels by locale tag', () => {
+      expect(normalizeFinancialLocale('es-MX')).toBe('es');
+      expect(normalizeFinancialLocale('en-GB')).toBe('en');
+      expect(normalizeFinancialLocale('fr-FR')).toBe('en');
+
+      expect(formatFinancialUsd(undefined, { locale: 'es-ES' })).toBe('No disponible');
+      expect(formatFinancialUsd(Number.MAX_SAFE_INTEGER + 1000, { locale: 'es-ES' })).toBe(
+        'Desbordamiento'
+      );
+      expect(createFinancialProvenance('fallback', undefined, undefined, 'es').label).toBe(
+        'Valor de respaldo'
+      );
+      expect(getFinancialProvenanceLabel('on-chain', 'es-AR')).toBe('Datos en cadena');
+      expect(getRateFreshnessLabel('stale', 'es')).toBe('Datos de tasa desactualizados');
+      expect(getFinancialStatusLabel('disputed', 'es')).toBe('En disputa');
+      expect(getFinancialWarningLabel('staleRate', 'es')).toBe(
+        'La tasa de referencia puede estar desactualizada'
+      );
+    });
+
+    it('guards against broken translators that echo raw keys or empty strings', () => {
+      const echoingTranslator = (key: string) => key;
+      const emptyTranslator = () => '   ';
+
+      expect(
+        getFinancialCopy(FINANCIAL_COPY_KEYS.warnings.unavailable, 'es', echoingTranslator)
+      ).toBe('No disponible');
+      expect(
+        getFinancialCopy(FINANCIAL_COPY_KEYS.statuses.defaulted, 'es', emptyTranslator)
+      ).toBe('En incumplimiento');
+      expect(getFinancialStatusLabel('paid', 'en', echoingTranslator)).toBe('Paid');
+    });
   });
 });

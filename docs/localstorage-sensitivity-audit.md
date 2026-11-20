@@ -35,6 +35,8 @@ a hypothetical XSS scenario (defense-in-depth, complementing the CSP work in Iss
 | 23  | `iln:dismissed-parameter-updates`                                                                                       | `src/components/ParameterUpdateBanner.tsx`                        | `string[]` — dismissed announcement IDs                                                                            | Low                                                            |
 | 24  | `freelancer_view_mode`                                                                                                  | `src/screens/Dashboard.tsx`                                       | `"table" \| "timeline"`                                                                                            | Low                                                            |
 | 25  | `theme`                                                                                                                 | `app/layout.tsx`                                                  | `"dark" \| "light"`                                                                                                | Low                                                            |
+| 26  | `iln_wallet_session`                                                                                                    | `src/utils/wallet-session-sync.ts`, `src/utils/walletStorage.ts`  | `{address, provider, network, updatedAt, tabId}` — cross-tab session intent (5m TTL)                               | Low-Medium — public wallet address, cleared on disconnect      |
+| 27  | `iln_pending_transactions_v1`                                                                                           | `src/lib/pending-transactions.ts`, `src/utils/walletStorage.ts`   | `PendingTransaction[]` — strict allowlist `{hash, label?, operationKey?, address?, createdAt, lastCheckedAt?, status}` (24h TTL) | Low-Medium — public tx hashes & operation labels; secrets/XDR/PII stripped (#1293) |
 
 ---
 
@@ -109,6 +111,36 @@ The `notificationPreferences.email` field stores the user's email in plaintext.
 
 **Accepted risk:** Same as subscription email — privacy exposure, not credential
 leak. The email is already transmitted to the ILN backend for reminder delivery.
+
+### 5. `iln_pending_transactions_v1` — unsettled pending transaction records (#1293)
+
+**Risk level: LOW-MEDIUM**
+
+Stores locally-submitted transaction hashes awaiting network confirmation so
+reloads and wallet reconnects do not blindly resubmit unsettled operations (#1287).
+
+**Verified safeguards (#1293):**
+
+- **Strict field allowlisting & secret/PII scrubbing:** `sanitizePendingTransactionRecord()`
+  in `src/utils/walletStorage.ts` permits only `{hash, label?, operationKey?, address?,
+  createdAt, lastCheckedAt?, status}`. Any unknown keys (e.g. `signedXdr`, `envelopeXdr`,
+  `secretKey`, `memo`) are stripped before persistence and on read; Stellar secret seeds
+  (`S...`), private key PEM blocks, Bearer/JWT tokens, raw base64 XDR envelopes, and
+  email addresses are rejected or scrubbed.
+- **24-hour TTL expiry with explicit recovery:** Entries older than `PENDING_TRANSACTION_TTL_MS`
+  (24 hours) or carrying invalid/future timestamps expire on read and during disconnect
+  audits (`auditPendingTransactionsStorage()`), removing stale locks and returning an
+  actionable `recoveryMessage` instructing the user to verify settlement on Stellar
+  Explorer before retrying.
+- **Disconnect behavior:** `clearWalletStorage()` always scrubs expired, corrupted, or
+  tainted pending records while preserving fresh unsettled transaction hashes by default
+  so reconnect idempotency locks remain effective (callers may pass
+  `{ clearPendingTransactions: true }` for a full wipe).
+
+**Residual risk:** Because `localStorage` is readable by same-origin JavaScript, an XSS
+compromise could read public transaction hashes or inject synthetic entries; the CSP
+remains the primary XSS boundary, and local pending entries are never treated as
+authoritative for settlement (network RPC truth always governs finality).
 
 ---
 

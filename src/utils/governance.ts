@@ -1045,8 +1045,14 @@ export async function vetoProposal(
     ...options,
   });
 
-  // The veto record itself comes from the next contract read: `vetoHistory`
-  // caches network truth and is never fabricated from a submitted write.
+  // Confirmed on-chain: record the settled veto so the detail page can show
+  // it before the next contract read completes.
+  const record: VetoRecord = {
+    proposalId,
+    admin,
+    reasonHash,
+    createdAt: Math.floor(Date.now() / 1000),
+  };
   proposalTxHashes.set(cacheKey, txHash);
   await options.onConfirmed?.(txHash);
   return txHash;

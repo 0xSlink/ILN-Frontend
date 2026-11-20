@@ -137,12 +137,13 @@ This guide consolidates common local setup issues, symptoms, and resolution step
   pnpm test -- --update-snapshots
   ```
 
-### Symptom: Nightly testnet smoke fails with `returned HTTP 404`
+### Symptom: Nightly testnet smoke reports a stale deployment / `returned HTTP 404`
 
-- **Underlying Cause**: The live testnet deployment was built from a commit that predates the route, so it serves the default Next.js 404 page. The route's code is fine; the deployment is stale. Transient 5xx responses from the edge or an upstream RPC/indexer can produce the same nightly failure without a code change.
+- **Underlying Cause**: The live testnet deployment (`https://invoice-liquidity-network.vercel.app`) was built from a commit that predates the route, so it serves the default Next.js 404 page. The route's code is fine; the deployment is stale. No workflow in this repository updates that URL: `deploy-staging.yml` only triggers on a `develop` branch that does not exist.
+- **How the nightly run handles it**: The `Nightly Testnet E2E Smoke` workflow first probes every route and lists stale ones in the run summary. `e2e/testnet-smoke.spec.ts` skips only the routes that return 404 **and** still exist in `app/` (or the legacy `src/app/` tree); every deployed route is still fully checked. If a route was deliberately removed, the 404 fails the run so the route list can be corrected. Failures are reported by commenting on the existing tracking issue instead of opening a duplicate issue each night.
 - **Resolution**:
-  The nightly workflow reads its target from the `TESTNET_SMOKE_URL` repository variable (or the `target_url` input on a manual run), falling back to `https://invoice-liquidity-network.vercel.app`. Confirm the route exists in `app/`, check what the live deployment returns, then repoint the variable or redeploy:
+  Confirm the route exists in `app/`, check what the live deployment returns, and redeploy the current branch from Vercel (this requires Vercel project access):
   ```bash
   curl -s -o /dev/null -w '%{http_code}\n' "${TESTNET_SMOKE_URL:-https://invoice-liquidity-network.vercel.app}/leaderboard"
   ```
-  The smoke spec retries only transport-level 5xx failures; a 404 is intentionally a hard failure because it means the deployment is stale.
+  If the testnet deployment has moved, set the repository variable `TESTNET_SMOKE_URL` so the workflow and smoke spec target the new URL. Once the deployment is current, the skipped routes are exercised again automatically.

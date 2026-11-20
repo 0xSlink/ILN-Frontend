@@ -1,8 +1,12 @@
 import * as Sentry from '@sentry/nextjs';
+import { scrubSentryBreadcrumb, scrubSentryEvent } from './src/lib/sentry-scrubbing';
 
-Sentry.init({
+export const sentryClientConfig: NonNullable<Parameters<typeof Sentry.init>[0]> = {
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   environment: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ?? 'development',
+
+  // Never auto-collect default PII (IP addresses, cookies, auth headers).
+  sendDefaultPii: false,
 
   // Capture 100% of transactions in production for the signing path;
   // lower for general pages to control volume.
@@ -18,6 +22,18 @@ Sentry.init({
     Sentry.browserApiErrorsIntegration(),
   ],
 
+  // Scrub wallet addresses, invoice identifiers, transaction payloads, secrets,
+  // and PII before any event or breadcrumb leaves the browser (Issue #1355).
+  beforeSend(event) {
+    return scrubSentryEvent(event as unknown as Record<string, unknown>) as unknown as typeof event;
+  },
+
+  beforeBreadcrumb(breadcrumb) {
+    return scrubSentryBreadcrumb(
+      breadcrumb as unknown as Record<string, unknown>
+    ) as unknown as typeof breadcrumb;
+  },
+
   // Tag every event with the Vercel deployment URL for correlation with rollback logs.
   initialScope: {
     tags: {
@@ -26,8 +42,7 @@ Sentry.init({
   },
 
   // Suppress noisy third-party errors that don't affect ILN functionality.
-  ignoreErrors: [
-    'ResizeObserver loop limit exceeded',
-    'Non-Error promise rejection captured',
-  ],
-});
+  ignoreErrors: ['ResizeObserver loop limit exceeded', 'Non-Error promise rejection captured'],
+};
+
+Sentry.init(sentryClientConfig);

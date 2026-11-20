@@ -50,6 +50,21 @@ beforeEach(async () => {
   vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockRejectedValue(new Error('offline'));
 });
 
+import {
+  clearGovernanceTestSession,
+  establishGovernanceTestSession,
+} from './helpers/governanceSession';
+import { PROPOSAL_CONTEXT, PROPOSER, stubProposalRpc } from './helpers/proposalRpc';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+// Governance writes require a valid SEP-10 session (#1076).
+beforeEach(() => {
+  establishGovernanceTestSession(SIGNER);
+});
+
 afterEach(() => {
   clearGovernanceTestSession();
   vi.restoreAllMocks();
@@ -78,6 +93,18 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
 
       const firstHash = await castVote(1, 'For', SIGNER, signTx, governanceWriteOptions(stub));
       const secondHash = await castVote(1, 'For', SIGNER, signTx, governanceWriteOptions(stub));
+
+      expect(secondHash).toBe(firstHash);
+      expect(stub.sendTransaction).toHaveBeenCalledTimes(1);
+      expect(signTx).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns the same txHash and does not double-count votes on retry with identical choice', async () => {
+      // Proposal creation is on-chain now; vote on an existing active proposal.
+      const stub = createGovernanceRpcStub();
+      const signTx = passthroughSignTx();
+      const firstHash = await castVote(6, 'For', SIGNER, signTx, governanceWriteOptions(stub));
+      const secondHash = await castVote(6, 'For', SIGNER, signTx, governanceWriteOptions(stub));
 
       expect(secondHash).toBe(firstHash);
       // The decisive assertion: one submission, not two.
@@ -118,6 +145,28 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
       await expect(
         castVote(4, 'For', SIGNER, passthroughSignTx(), governanceWriteOptions(timingOut))
       ).rejects.toThrow(/TX_TIMEOUT/);
+    });
+
+    it('deduplicates concurrent duplicate vote submissions with identical choice (#1046)', async () => {
+      const stub = createGovernanceRpcStub();
+      const signTx = passthroughSignTx();
+      const proposalId = 6;
+
+      const [firstHash, concurrentHash] = await Promise.all([
+        castVote(proposalId, 'For', SIGNER, signTx, governanceWriteOptions(stub)),
+        castVote(proposalId, 'For', SIGNER, signTx, governanceWriteOptions(stub)),
+      ]);
+
+      expect(firstHash).toBe(concurrentHash);
+      expect(signTx).toHaveBeenCalledTimes(1);
+      expect(stub.sendTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('adjusts tally cleanly if voter switches choice', async () => {
+      await castVote(2, 'For', SIGNER, signTx);
+      const forProposal = await fetchProposal(2);
+      const votesFor = forProposal?.votesFor ?? 0;
+      const votesAgainst = forProposal?.votesAgainst ?? 0;
 
       const settling = createGovernanceRpcStub();
       const hash = await castVote(
@@ -143,6 +192,12 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
         passthroughSignTx(),
         governanceWriteOptions(stub)
       );
+    });
+
+    it('returns a valid 64-char hash and preserves confirmation on duplicate execution', async () => {
+      const created = { proposalId: 1 };
+
+      const firstHash = await executeProposal(created.proposalId, SIGNER, signTx);
       expect(isValidTxHash(firstHash)).toBe(true);
 
       const secondHash = await executeProposal(
@@ -160,6 +215,11 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
   describe('vetoProposal idempotency', () => {
     it('returns the existing confirmation on a duplicate identical veto', async () => {
       const stub = createGovernanceRpcStub();
+    });
+
+    it('returns a valid 64-char hash and returns existing confirmation on duplicate veto', async () => {
+      const created = { proposalId: 2 };
+
       const reasonHash = '0xidempotent_reason_hash';
 
       const firstHash = await vetoProposal(
@@ -255,6 +315,37 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
 
       expect(second.txHash).not.toBe(first.txHash);
       expect(stub.sendTransaction).toHaveBeenCalledTimes(2);
+      it('deduplicates rapid duplicate proposal submissions with identical payload', async () => {
+        const payload: CreateProposalPayload = {
+          formType: 'MaxDiscountRate',
+          title: 'Deduplicated discount proposal',
+          description: 'Testing deduplication of identical submissions',
+          newValueBps: 500,
+        };
+        establishGovernanceTestSession(PROPOSER);
+        const rpcStub = stubProposalRpc();
+        const proposalSignTx = vi.fn(passthroughSignTx);
+        const options = { context: PROPOSAL_CONTEXT };
+
+        try {
+          // Concurrent double-submit shares one in-flight transaction.
+          const [firstRes, concurrentRes] = await Promise.all([
+            createProposal(payload, PROPOSER, proposalSignTx, options),
+            createProposal(payload, PROPOSER, proposalSignTx, options),
+          ]);
+          expect(isValidTxHash(firstRes.txHash)).toBe(true);
+          expect(concurrentRes).toEqual(firstRes);
+
+          // Immediate second submission
+          const secondRes = await createProposal(payload, PROPOSER, proposalSignTx, options);
+          expect(secondRes.proposalId).toBe(firstRes.proposalId);
+          expect(secondRes.txHash).toBe(firstRes.txHash);
+          expect(proposalSignTx).toHaveBeenCalledTimes(1);
+          expect(rpcStub.sendTransaction).toHaveBeenCalledTimes(1);
+        } finally {
+          rpcStub.restore();
+        }
+      });
     });
   });
 });

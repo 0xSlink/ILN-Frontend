@@ -901,182 +901,86 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
     assertNoCrossTabChange();
     assertGenerationUnchanged();
 
-    if (selectedProvider === 'walletconnect') {
-      return await signTransactionWithWalletConnect(txXdr, {
-        networkPassphrase: NETWORK_PASSPHRASE,
-      });
-    }
+    const signTx = useCallback(
+      async (txXdr: string) => {
+        const isCorrectNetwork = await checkNetwork();
+        if (!isCorrectNetwork) {
+          const msg = `Network mismatch. Please switch to ${NETWORK_NAME}`;
+          addToast({ type: 'error', title: 'Transaction Failed', message: msg });
+          throw new Error(msg);
+        }
+        const signed = await signTransaction(txXdr, {
+          networkPassphrase: NETWORK_PASSPHRASE,
+        });
 
-    const signed = await signTransaction(txXdr, {
-      networkPassphrase: NETWORK_PASSPHRASE,
-    });
+        if (typeof signed === 'string') {
+          return signed;
+        }
 
-    if (typeof signed === 'string') {
-      return signed;
-    }
+        if (signed.error) {
+          throw new Error(String(signed.error));
+        }
 
-    // Wallet closed / dismissed without returning a payload: treat as an
-    // explicit cancellation without touching local UI state (#1144).
-    if (!signed || typeof signed !== 'object') {
-      throw new Error(
-        'USER_REJECTED: Wallet closed before signing completed. No changes were made.'
-      );
-    }
+        if (signed.signedTxXdr) {
+          return signed.signedTxXdr;
+        }
 
-    if (signed.error) {
-      throw new Error(String(signed.error));
-    }
+        throw new Error('Freighter did not return a signed transaction.');
+      },
+      [checkNetwork, addToast]
+    );
 
-    if (signed.signedTxXdr) {
-      return signed.signedTxXdr;
-    }
-
-    throw new Error('Freighter did not return a signed transaction.');
-  };
-
-  const authenticate = useCallback(async () => {
-    if (!address) {
-      const error = new Sep10Error('AUTH_REQUIRED', 'Connect a wallet before authenticating.');
-      setAuthError(error);
-      setAuthStatus('error');
-      throw error;
-    }
-    if (selectedProvider !== 'freighter') {
-      const error = new Sep10Error(
-        'CONFIGURATION',
-        'SEP-10 signing is currently available with Freighter only.'
-      );
-      setAuthError(error);
-      setAuthStatus('error');
-      throw error;
-    }
-
-    const expectedAddress = address;
-    const sessionVersion = authSessionVersion.current;
-    const assertWalletIdentity = async () => {
-      if (
-        authSessionVersion.current !== sessionVersion ||
-        activeAddress.current !== expectedAddress
-      ) {
-        throw new Sep10Error(
-          'IDENTITY_CHANGED',
-          'The connected wallet changed during authentication. Retry with the active wallet.'
-        );
-      }
-
-      let currentAddress: string | null;
-      try {
-        const result = await getAddress();
-        currentAddress = result.address;
-        if (result.error) currentAddress = null;
-      } catch (cause) {
-        throw new Sep10Error(
-          'IDENTITY_CHANGED',
-          'The active wallet identity could not be verified.',
-          {
-            cause,
-          }
-        );
-      }
-      if (currentAddress !== expectedAddress) {
-        throw new Sep10Error(
-          'IDENTITY_CHANGED',
-          'The active wallet account changed. Reconnect the intended wallet and retry.'
-        );
-      }
-
-      let currentNetwork: string | null;
-      try {
-        currentNetwork = extractNetworkName(await getNetwork());
-      } catch (cause) {
-        throw new Sep10Error(
-          'NETWORK_MISMATCH',
-          'The active wallet network could not be verified.',
-          {
-            cause,
-          }
-        );
-      }
-      if (!currentNetwork || getMismatchDetails(currentNetwork).walletMismatch) {
-        throw new Sep10Error(
-          'NETWORK_MISMATCH',
-          `Switch the wallet to ${NETWORK_NAME} before authenticating.`
-        );
-      }
-    };
-
-    setAuthStatus('authenticating');
-    setAuthError(null);
-    setAuthSession(null);
-    try {
-      const session = await authenticateWithSep10({
-        address: expectedAddress,
-        homeDomain: SEP10_HOME_DOMAIN || window.location.hostname,
-        network: NETWORK_NAME,
-        networkPassphrase: NETWORK_PASSPHRASE,
-        signTransaction: signTx,
-        assertWalletIdentity,
-        onDiagnostics: setAuthDiagnostics,
-      });
-      await assertWalletIdentity();
-      setAuthSession(session);
-      setAuthStatus('authenticated');
-    } catch (cause) {
-      const error =
-        cause instanceof Sep10Error
-          ? cause
-          : new Sep10Error(
-              'SERVER_UNAVAILABLE',
-              'SEP-10 authentication failed. Retry to continue.',
-              {
-                cause,
-              }
-            );
-      if (authSessionVersion.current === sessionVersion) {
+    const authenticate = useCallback(async () => {
+      if (!address) {
+        const error = new Sep10Error('AUTH_REQUIRED', 'Connect a wallet before authenticating.');
         setAuthError(error);
-        setAuthStatus(error.code === 'AUTH_REQUIRED' ? 'expired' : 'error');
+        setAuthStatus('error');
+        throw error;
       }
-      throw error;
-    }
-  }, [address, selectedProvider, signTx]);
-
-  const authenticatedRequest = useCallback(
-    async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (
-        !address ||
-        selectedProvider !== 'freighter' ||
-        !authSession ||
-        authSession.address !== address ||
-        activeAddress.current !== address ||
-        authSession.expiresAt <= Date.now()
-      ) {
+      if (selectedProvider !== 'freighter') {
         const error = new Sep10Error(
-          'AUTH_REQUIRED',
-          'Authenticate the connected wallet before accessing this resource.'
+          'CONFIGURATION',
+          'SEP-10 signing is currently available with Freighter only.'
         );
-        setAuthSession(null);
-        setAuthStatus('expired');
         setAuthError(error);
+        setAuthStatus('error');
         throw error;
       }
 
-      try {
-        let currentWallet: Awaited<ReturnType<typeof getAddress>>;
+      const expectedAddress = address;
+      const sessionVersion = authSessionVersion.current;
+      const assertWalletIdentity = async () => {
+        if (
+          authSessionVersion.current !== sessionVersion ||
+          activeAddress.current !== expectedAddress
+        ) {
+          throw new Sep10Error(
+            'IDENTITY_CHANGED',
+            'The connected wallet changed during authentication. Retry with the active wallet.'
+          );
+        }
+
+        let currentAddress: string | null;
         try {
-          currentWallet = await getAddress();
+          const result = await getAddress();
+          currentAddress = result.address;
+          if (result.error) currentAddress = null;
         } catch (cause) {
           throw new Sep10Error(
             'IDENTITY_CHANGED',
             'The active wallet identity could not be verified.',
-            { cause }
+            {
+              cause,
+            }
           );
         }
-        if (currentWallet.error || currentWallet.address !== authSession.address) {
+        if (currentAddress !== expectedAddress) {
           throw new Sep10Error(
             'IDENTITY_CHANGED',
-            'The active wallet changed. Authenticate again before making this request.'
+            'The active wallet account changed. Reconnect the intended wallet and retry.'
           );
         }
+
         let currentNetwork: string | null;
         try {
           currentNetwork = extractNetworkName(await getNetwork());
@@ -1092,79 +996,170 @@ export const WalletProvider: React.FC<WalletProviderProps> = ({
         if (!currentNetwork || getMismatchDetails(currentNetwork).walletMismatch) {
           throw new Sep10Error(
             'NETWORK_MISMATCH',
-            `Switch the wallet to ${NETWORK_NAME} before making this request.`
+            `Switch the wallet to ${NETWORK_NAME} before authenticating.`
           );
         }
-        return await authenticatedFetch(input, authSession, init);
+      };
+
+      setAuthStatus('authenticating');
+      setAuthError(null);
+      setAuthSession(null);
+      try {
+        const session = await authenticateWithSep10({
+          address: expectedAddress,
+          homeDomain: SEP10_HOME_DOMAIN || window.location.hostname,
+          network: NETWORK_NAME,
+          networkPassphrase: NETWORK_PASSPHRASE,
+          signTransaction: signTx,
+          assertWalletIdentity,
+          onDiagnostics: setAuthDiagnostics,
+        });
+        await assertWalletIdentity();
+        setAuthSession(session);
+        setAuthStatus('authenticated');
       } catch (cause) {
-        if (cause instanceof Sep10Error) {
-          if (
-            cause.code === 'HTTP_UNAUTHORIZED' ||
-            cause.code === 'IDENTITY_CHANGED' ||
-            cause.code === 'NETWORK_MISMATCH'
-          ) {
-            setAuthSession(null);
-            setAuthStatus(cause.code === 'NETWORK_MISMATCH' ? 'error' : 'expired');
-          }
-          setAuthError(cause);
+        const error =
+          cause instanceof Sep10Error
+            ? cause
+            : new Sep10Error(
+                'SERVER_UNAVAILABLE',
+                'SEP-10 authentication failed. Retry to continue.',
+                {
+                  cause,
+                }
+              );
+        if (authSessionVersion.current === sessionVersion) {
+          setAuthError(error);
+          setAuthStatus(error.code === 'AUTH_REQUIRED' ? 'expired' : 'error');
         }
-        throw cause;
+        throw error;
       }
-    },
-    [address, authSession, selectedProvider]
-  );
+    }, [address, selectedProvider, signTx]);
 
-  const handleSelectWalletConnect = () => {
-    setAuthSession(null);
-    setAuthStatus('idle');
-    setAuthError(null);
-    setSelectedProvider('walletconnect');
-    setStoredWalletProvider('walletconnect');
-    void connectWalletConnectProvider();
+    const authenticatedRequest = useCallback(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (
+          !address ||
+          selectedProvider !== 'freighter' ||
+          !authSession ||
+          authSession.address !== address ||
+          activeAddress.current !== address ||
+          authSession.expiresAt <= Date.now()
+        ) {
+          const error = new Sep10Error(
+            'AUTH_REQUIRED',
+            'Authenticate the connected wallet before accessing this resource.'
+          );
+          setAuthSession(null);
+          setAuthStatus('expired');
+          setAuthError(error);
+          throw error;
+        }
+
+        try {
+          let currentWallet: Awaited<ReturnType<typeof getAddress>>;
+          try {
+            currentWallet = await getAddress();
+          } catch (cause) {
+            throw new Sep10Error(
+              'IDENTITY_CHANGED',
+              'The active wallet identity could not be verified.',
+              { cause }
+            );
+          }
+          if (currentWallet.error || currentWallet.address !== authSession.address) {
+            throw new Sep10Error(
+              'IDENTITY_CHANGED',
+              'The active wallet changed. Authenticate again before making this request.'
+            );
+          }
+          let currentNetwork: string | null;
+          try {
+            currentNetwork = extractNetworkName(await getNetwork());
+          } catch (cause) {
+            throw new Sep10Error(
+              'NETWORK_MISMATCH',
+              'The active wallet network could not be verified.',
+              {
+                cause,
+              }
+            );
+          }
+          if (!currentNetwork || getMismatchDetails(currentNetwork).walletMismatch) {
+            throw new Sep10Error(
+              'NETWORK_MISMATCH',
+              `Switch the wallet to ${NETWORK_NAME} before making this request.`
+            );
+          }
+          return await authenticatedFetch(input, authSession, init);
+        } catch (cause) {
+          if (cause instanceof Sep10Error) {
+            if (
+              cause.code === 'HTTP_UNAUTHORIZED' ||
+              cause.code === 'IDENTITY_CHANGED' ||
+              cause.code === 'NETWORK_MISMATCH'
+            ) {
+              setAuthSession(null);
+              setAuthStatus(cause.code === 'NETWORK_MISMATCH' ? 'error' : 'expired');
+            }
+            setAuthError(cause);
+          }
+          throw cause;
+        }
+      },
+      [address, authSession, selectedProvider]
+    );
+
+    const handleSelectWalletConnect = () => {
+      setAuthSession(null);
+      setAuthStatus('idle');
+      setAuthError(null);
+      setSelectedProvider('walletconnect');
+      setStoredWalletProvider('walletconnect');
+      void connectWalletConnectProvider();
+    };
+
+    return (
+      <WalletContext.Provider
+        value={{
+          address,
+          isConnected: !!address,
+          isInstalled,
+          isReconnecting,
+          preferredWalletProvider: selectedProvider,
+          error,
+          errorCode,
+          networkMismatch,
+          rpcMismatch,
+          mismatchDetails,
+          switchingNetwork,
+          walletNetwork: walletNetwork ? normalizeWalletNetwork(walletNetwork) : null,
+          roles,
+          rolesLoading,
+          sessionConflict,
+          connect,
+          connectWalletConnect: connectWalletConnectProvider,
+          disconnect,
+          signTx,
+          switchNetwork,
+          resetIdleTimer,
+        }}
+      >
+        {children}
+        {isSelectingProvider ? (
+          <WalletSelectionModal
+            onClose={() => {
+              setIsSelectingProvider(false);
+              setOpenWalletConnectByDefault(false);
+            }}
+            onSelectFreighter={() => void connectFreighter()}
+            onSelectWalletConnect={handleSelectWalletConnect}
+            initialWalletConnectView={openWalletConnectByDefault}
+          />
+        ) : null}
+      </WalletContext.Provider>
+    );
   };
-
-  return (
-    <WalletContext.Provider
-      value={{
-        address,
-        isConnected: !!address,
-        isInstalled,
-        isReconnecting,
-        preferredWalletProvider: selectedProvider,
-        error,
-        errorCode,
-        networkMismatch,
-        rpcMismatch,
-        mismatchDetails,
-        switchingNetwork,
-        walletNetwork: walletNetwork ? normalizeWalletNetwork(walletNetwork) : null,
-        roles,
-        rolesLoading,
-        sessionConflict,
-        connect,
-        connectWalletConnect: connectWalletConnectProvider,
-        disconnect,
-        signTx,
-        switchNetwork,
-        resetIdleTimer,
-        authenticate,
-        authenticatedRequest,
-      }}
-    >
-      {children}
-      {isSelectingProvider ? (
-        <WalletSelectionModal
-          onClose={() => {
-            setIsSelectingProvider(false);
-            setOpenWalletConnectByDefault(false);
-          }}
-          onSelectFreighter={() => void connectFreighter()}
-          onSelectWalletConnect={handleSelectWalletConnect}
-          initialWalletConnectView={openWalletConnectByDefault}
-        />
-      ) : null}
-    </WalletContext.Provider>
-  );
 };
 
 export const useWallet = () => {

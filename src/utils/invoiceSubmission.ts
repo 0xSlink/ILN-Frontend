@@ -121,7 +121,8 @@ export function validateInvoiceForm(
   walletConnected: boolean,
   _decimals = 7,
   tokenSymbol = 'USDC',
-  nowInSeconds = Math.floor(Date.now() / 1000)
+  nowInSeconds = Math.floor(Date.now() / 1000),
+  maxInvoiceAmountUnits?: bigint | null
 ): Partial<Record<keyof InvoiceFormValues | 'wallet', string>> {
   const errors: Partial<Record<keyof InvoiceFormValues | 'wallet', string>> = {};
 
@@ -144,6 +145,14 @@ export function validateInvoiceForm(
     errors.amount = 'Amount must be provided.';
   } else if (amountUnits === null || amountUnits <= 0n) {
     errors.amount = `Amount must be between 0 and 10,000,000`;
+  } else if (
+    maxInvoiceAmountUnits !== undefined &&
+    maxInvoiceAmountUnits !== null &&
+    maxInvoiceAmountUnits > 0n &&
+    amountUnits > maxInvoiceAmountUnits
+  ) {
+    const formattedCap = formatAmountFromUnits(maxInvoiceAmountUnits, inputDecimals);
+    errors.amount = `Invoice amount exceeds the maximum launch limit of ${formattedCap} ${tokenSymbol}.`;
   } else if (amountUnits > maxUnits) {
     errors.amount = `Amount must be between 0 and 10,000,000`;
   }
