@@ -96,7 +96,10 @@ Status as of this document's publication. Update the table as items land. An ite
 
 ## Residual risk
 
-- Until #839–#841 land, governance writes stay mock-backed and reachable in the UI. #850's indicator is the interim mitigation.
+- #839–#841 have landed: the four governance writes build, sign, submit and
+  confirm real Soroban transactions. `delegateVotingPower` is still a local
+  deterministic-hash mock (#842), so the "Not yet live" indicator remains for
+  that action until a delegation entry point is deployed and wired.
 - Until the workflow triggers include `dev`, none of the new detection tests (#847, #848, #857) run on the PRs they are meant to gate. They only run locally, via `pnpm run verify` and the pre-push hook, or on the promotion PR to `main`.
 - Closing via keyword stays enabled. The PR template item (#854) is a human check and can be skipped under time pressure, as #987 showed.
 

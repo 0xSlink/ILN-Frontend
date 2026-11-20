@@ -53,7 +53,6 @@ import {
   authenticatedFetch,
   authenticateWithSep10,
   Sep10Error,
-  type Sep10Diagnostics,
   type Sep10Session,
 } from '@/utils/sep10';
 
@@ -99,6 +98,7 @@ export interface WalletContextType {
   disconnect: () => void;
   signTx: (txXdr: string) => Promise<string>;
   switchNetwork: () => Promise<void>;
+  resetIdleTimer: () => void;
   authenticate: () => Promise<void>;
   authenticatedRequest: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 }

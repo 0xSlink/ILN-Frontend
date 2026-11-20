@@ -52,10 +52,10 @@
 | **Reputation** | `getReputationEvents / getTopFreelancers` | **Derived** | [`src/utils/soroban.ts:790`](../src/utils/soroban.ts#L790) | Derived via tolerant alias chains with graceful empty fallbacks | — |
 | **Governance** | `getProposals` | **Real** | [`src/utils/governance.ts:180`](../src/utils/governance.ts#L180) | Calls list_proposals() on the configured governance contract; falls back to MOCK_PROPOSALS when NEXT_PUBLIC_GOVERNANCE_CONTRACT_ID is unset | #650 |
 | **Governance** | `lookupToken` | **Real** | [`src/utils/governance.ts:697`](../src/utils/governance.ts#L697) | Calls simulateTransaction for token symbol/decimals verification on-chain | #845 |
-| **Governance** | `castVote` | **Real** | [`src/utils/governance.ts:640`](../src/utils/governance.ts#L640) | Signed Soroban cast_vote: simulated before signing, confirmed under a bounded poll; no local tally | #1044 |
-| **Governance** | `executeProposal` | **Real** | [`src/utils/governance.ts:700`](../src/utils/governance.ts#L700) | Signed Soroban execute_proposal; status is re-read from the contract rather than set locally | #1045 |
-| **Governance** | `vetoProposal` | **Real** | [`src/utils/governance.ts:740`](../src/utils/governance.ts#L740) | Signed Soroban veto_proposal; admin authorization enforced by simulation before signing | #1044 |
-| **Governance** | `delegateVotingPower` | **Mock** | [`src/utils/governance.ts:286`](../src/utils/governance.ts#L286) | Mutates mockDelegations in-memory map and returns random tx hash | #842 |
+| **Governance** | `castVote` | **Real** | [`src/utils/governance.ts:915`](../src/utils/governance.ts#L915) | Signed Soroban cast_vote: simulated before signing, confirmed under a bounded poll; no local tally | #1044 |
+| **Governance** | `executeProposal` | **Real** | [`src/utils/governance.ts:969`](../src/utils/governance.ts#L969) | Signed Soroban execute_proposal; status is re-read from the contract rather than set locally | #1045 |
+| **Governance** | `vetoProposal` | **Real** | [`src/utils/governance.ts:1013`](../src/utils/governance.ts#L1013) | Signed Soroban veto_proposal; admin authorization enforced by simulation before signing | #1044 |
+| **Governance** | `delegateVotingPower` | **Mock** | [`src/utils/governance.ts:1288`](../src/utils/governance.ts#L1288) | Signs a wallet intent and derives a deterministic local hash; no on-chain delegation transaction is submitted | #842 |
 | **Governance** | `getGovTokenBalance` | **Mock** | [`src/utils/governance.ts:326`](../src/utils/governance.ts#L326) | Returns hardcoded 1,000,000 GOV constant | #654 |
 | **Governance** | `getQuorumThreshold` | **Mock** | [`src/utils/governance.ts:427`](../src/utils/governance.ts#L427) | Returns hardcoded 100,000 GOV constant | #654 |
 | **Governance** | `getProposalHistory` | **Mock** | [`src/utils/governance.ts:444`](../src/utils/governance.ts#L444) | Generates synthetic history events with offset day timestamps | #655 |

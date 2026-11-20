@@ -144,6 +144,6 @@ This guide consolidates common local setup issues, symptoms, and resolution step
 - **Resolution**:
   Confirm the route exists in `app/`, check what the live deployment returns, and redeploy the current branch from Vercel (this requires Vercel project access):
   ```bash
-  curl -s -o /dev/null -w '%{http_code}\n' https://invoice-liquidity-network.vercel.app/leaderboard
+  curl -s -o /dev/null -w '%{http_code}\n' "${TESTNET_SMOKE_URL:-https://invoice-liquidity-network.vercel.app}/leaderboard"
   ```
   If the testnet deployment has moved, set the repository variable `TESTNET_SMOKE_URL` so the workflow and smoke spec target the new URL. Once the deployment is current, the skipped routes are exercised again automatically.

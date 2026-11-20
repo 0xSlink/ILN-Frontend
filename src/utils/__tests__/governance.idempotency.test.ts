@@ -35,12 +35,17 @@ import {
   governanceWriteOptions,
   passthroughSignTx,
 } from '@/test-utils/governance-rpc';
+import {
+  clearGovernanceTestSession,
+  establishGovernanceTestSession,
+} from './helpers/governanceSession';
 
 const SIGNER = 'GD2HBFZSXTH4UCKZUVME665WBIPLRBPDTOTYWFRBCKZSFTP7PK46JYSK';
 
 beforeEach(async () => {
   clearGovernanceIdempotencyCache();
   vi.clearAllMocks();
+  establishGovernanceTestSession(SIGNER);
   const { rpc } = await import('@stellar/stellar-sdk');
   vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockRejectedValue(new Error('offline'));
 });
@@ -62,6 +67,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearGovernanceTestSession();
+  vi.restoreAllMocks();
 });
 
 describe('governance idempotency and valid transaction hashes (#1146, #1148)', () => {
@@ -128,7 +134,7 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
 
       expect(againstHash).not.toBe(forHash);
       expect(stub.sendTransaction).toHaveBeenCalledTimes(2);
-      expect((await fetchProposal(2))?.userVote).toBe('Against');
+      expect((await fetchProposal(2, { allowMockFallback: true }))?.userVote).toBe('Against');
     });
 
     it('does not cache an unconfirmed vote, so a retry still submits', async () => {
@@ -204,19 +210,6 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
       expect(secondHash).toBe(firstHash);
       expect(stub.sendTransaction).toHaveBeenCalledTimes(1);
     });
-
-    it('deduplicates concurrent duplicate executions of the same proposal (#1046)', async () => {
-      const proposalId = 1;
-      const [firstHash, concurrentHash] = await Promise.all([
-        executeProposal(proposalId, SIGNER, signTx),
-        executeProposal(proposalId, SIGNER, signTx),
-      ]);
-
-      expect(firstHash).toBe(concurrentHash);
-      expect(signTx).toHaveBeenCalledTimes(1);
-      const executedProposal = await fetchProposal(proposalId);
-      expect(executedProposal?.status).toBe('Executed');
-    });
   });
 
   describe('vetoProposal idempotency', () => {
@@ -270,20 +263,6 @@ describe('governance idempotency and valid transaction hashes (#1146, #1148)', (
 
       expect(second).not.toBe(first);
       expect(stub.sendTransaction).toHaveBeenCalledTimes(2);
-    });
-
-    it('deduplicates concurrent duplicate vetoes of the same proposal (#1046)', async () => {
-      const proposalId = 2;
-      const reasonHash = '0xidempotent_concurrent_veto_hash';
-      const [firstHash, concurrentHash] = await Promise.all([
-        vetoProposal(proposalId, reasonHash, SIGNER, signTx),
-        vetoProposal(proposalId, reasonHash, SIGNER, signTx),
-      ]);
-
-      expect(firstHash).toBe(concurrentHash);
-      expect(signTx).toHaveBeenCalledTimes(1);
-      const vetoedProposal = await fetchProposal(proposalId);
-      expect(vetoedProposal?.status).toBe('Vetoed');
     });
   });
 

@@ -34,14 +34,13 @@ import {
 import {
   isContractAddress,
   MAX_TOKEN_DECIMALS,
-  validateProposalPayload,
-  ProposalValidationError,
   type CreateProposalFormType,
   type CreateProposalPayload,
   type ProposalValidationContext,
 } from '@/lib/governance/contract-schema';
 import {
   fetchChainParameters,
+  toValidationContext,
   type AcceptedToken,
   type ProtocolParameters,
 } from '@/lib/governance/chain-parameters';
@@ -51,7 +50,7 @@ import {
   parameterLabel,
   type ParameterUpdateEvent,
 } from '@/lib/governance/parameter-events';
-import { type CreateProposalStage } from '@/lib/governance/create-proposal';
+import { submitCreateProposal, type CreateProposalStage } from '@/lib/governance/create-proposal';
 import { getApprovedTokenIds, getTokenMetadata } from '@/utils/soroban';
 
 export type { CreateProposalFormType, CreateProposalPayload, AcceptedToken, ProtocolParameters };
@@ -764,6 +763,7 @@ const PROPOSAL_TYPE_CODE: Record<CreateProposalFormType, number> = {
 };
 
 /** Window in which an identical create_proposal submission is treated as a replay. */
+const PROPOSAL_IDEMPOTENCY_WINDOW_MS = 30_000;
 
 /**
  * Encodes the type-specific part of a proposal as the single `value` argument
