@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    # The nightly testnet smoke workflow runs against `dev`. Gate that branch
+    # with the same frozen-install / lockfile checks as main and develop so a
+    # corrupted or outdated lockfile can never break the scheduled run again.
+    branches: [main, develop, dev]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, dev]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
