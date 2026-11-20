@@ -192,6 +192,25 @@ const pwaWrapped = withPWA({
       },
     },
     {
+      // Financial API endpoints (indexer, invoices, transactions, wallet,
+      // settlement, payer, escrow, rpc) must never be persisted by Workbox
+      // so SW updates or network recovery cannot replay stale financial state (#1354).
+      urlPattern:
+        /\/api\/(?:indexer|invoices|transactions|wallet|settlement|payer|escrow|rpc|submit|fund|repay)(?:\/|\?|$)/i,
+      handler: 'NetworkOnly',
+    },
+    {
+      // Financial application document routes bypass the 24h `pages` cache so
+      // stale invoice/transaction shells are never restored after reconnect (#1354).
+      // Regex is inlined so Workbox function serialization remains self-contained.
+      urlPattern: ({ request, url }: { request: Request; url: URL }) =>
+        request.destination === 'document' &&
+        /^\/(?:dashboard|invoices|i|payer|portfolio|submit|transactions|marketplace|stats)(?:\/|$)/i.test(
+          url.pathname
+        ),
+      handler: 'NetworkOnly',
+    },
+    {
       urlPattern: /\/api\/.*$/i,
       handler: 'NetworkFirst',
       options: {
