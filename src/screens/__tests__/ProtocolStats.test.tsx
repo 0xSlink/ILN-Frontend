@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ContractStats } from '@/utils/contract-stats';
+import { deriveStatsIndexerFreshness, type ContractStats } from '@/utils/contract-stats';
 import ProtocolStatsScreen from '../ProtocolStats';
 
 const mockUseContractStats = vi.fn();
@@ -133,5 +133,87 @@ describe('ProtocolStatsScreen', () => {
     const { container } = render(<ProtocolStatsScreen />);
 
     expect(container.querySelector('.animate-pulse')).not.toBeInTheDocument();
+  });
+
+  it('displays last indexed ledger and age alongside stats when freshness is fresh', () => {
+    const freshStats: ContractStats = {
+      ...stats,
+      indexerFreshness: {
+        lastIndexedLedger: 512_345,
+        lastIndexedAt: new Date(Date.now() - 15_000).toISOString(),
+        staleAfterMs: 5 * 60_000,
+      },
+    };
+    mockUseContractStats.mockReturnValue({
+      data: freshStats,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<ProtocolStatsScreen />);
+
+    expect(screen.getByTestId('protocol-stats-freshness')).toHaveTextContent(/ledger #512,345/i);
+    expect(screen.getByTestId('protocol-stats-freshness')).toHaveTextContent(/just now/i);
+    expect(screen.getByText(/Live overview of the Invoice Liquidity Network/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('protocol-stats-stale-banner')).not.toBeInTheDocument();
+  });
+
+  it('blocks live success messaging and shows a stale alert with retry when indexer data is stale', () => {
+    const refetch = vi.fn();
+    const staleStats: ContractStats = {
+      ...stats,
+      indexerFreshness: {
+        lastIndexedLedger: 510_000,
+        lastIndexedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+        staleAfterMs: 5 * 60_000,
+      },
+    };
+    mockUseContractStats.mockReturnValue({
+      data: staleStats,
+      isLoading: false,
+      error: null,
+      refetch,
+    });
+    render(<ProtocolStatsScreen />);
+
+    expect(screen.queryByText(/Live overview of the Invoice Liquidity Network/i)).not.toBeInTheDocument();
+    const staleBanner = screen.getByTestId('protocol-stats-stale-banner');
+    expect(staleBanner).toHaveTextContent(/ledger #510,000/i);
+    expect(staleBanner).toHaveTextContent(/20 minutes ago/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /refresh stats/i }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('suppresses live success messaging when freshness metadata is unknown', () => {
+    mockUseContractStats.mockReturnValue({
+      data: stats,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    });
+    render(<ProtocolStatsScreen />);
+
+    expect(screen.queryByText(/Live overview of the Invoice Liquidity Network/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/indexer freshness could not be verified/i)).toBeInTheDocument();
+    expect(screen.getByTestId('protocol-stats-freshness')).toHaveTextContent(/freshness unknown/i);
+  });
+});
+
+describe('deriveStatsIndexerFreshness', () => {
+  it('picks the highest valid ledger and latest timestamp across events', () => {
+    const freshness = deriveStatsIndexerFreshness([
+      { type: 'InvoiceSubmitted', ledger: 100, createdAt: '2026-07-01T10:00:00.000Z' },
+      { type: 'InvoiceFunded', ledger: 125, createdAt: '2026-07-01T10:05:00.000Z' },
+      { type: 'InvoicePaid', ledger: 120, createdAt: 'invalid-date' },
+    ]);
+    expect(freshness.lastIndexedLedger).toBe(125);
+    expect(freshness.lastIndexedAt).toBe('2026-07-01T10:05:00.000Z');
+  });
+
+  it('keeps ledger and timestamp null when events omit metadata', () => {
+    const freshness = deriveStatsIndexerFreshness([]);
+    expect(freshness.lastIndexedLedger).toBeNull();
+    expect(freshness.lastIndexedAt).toBeNull();
   });
 });

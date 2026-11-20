@@ -2,9 +2,14 @@ import { getAllInvoices, type Invoice } from './soroban';
 import { fetchProtocolParameters } from '@/utils/governance';
 import { TESTNET_USDC_TOKEN_ID, TESTNET_EURC_TOKEN_ID, TESTNET_XLM_TOKEN_ID } from '@/constants';
 import { fetchProtocolContractEvents } from '@/lib/fetch-protocol-contract-events';
+import type { ParsedContractEvent } from '@/lib/contract-events';
 import { computeDisputeRateMetrics, type DisputeRateMetrics } from '@/utils/dispute-rate';
 import type { MetricProvenance } from '@/utils/financial-metrics';
 import { toWholeUnits } from '@/utils/financial-metrics';
+import {
+  DEFAULT_INDEXER_STALE_AFTER_MS,
+  type IndexerFreshness,
+} from '@/lib/indexer/freshness';
 
 const FUNDED_STATUSES = new Set(['Funded', 'PartiallyFunded', 'Paid', 'Defaulted']);
 
@@ -42,6 +47,45 @@ export interface ContractStats {
   daily_volume: DailyVolumeBucket[];
   dispute_rate: DisputeRateMetrics;
   provenance?: MetricProvenance;
+  /** Indexer ledger and timestamp freshness metadata (#1279). */
+  indexerFreshness?: IndexerFreshness;
+}
+
+/**
+ * Derive honest indexer freshness metadata from observed protocol events.
+ * Missing or malformed ledger/timestamp values stay `null` ("unknown") and
+ * are never fabricated.
+ */
+export function deriveStatsIndexerFreshness(
+  events: ParsedContractEvent[],
+  staleAfterMs: number = DEFAULT_INDEXER_STALE_AFTER_MS
+): IndexerFreshness {
+  let maxLedger: number | null = null;
+  let latestTimestampMs: number | null = null;
+
+  for (const event of events) {
+    if (
+      typeof event.ledger === 'number' &&
+      Number.isSafeInteger(event.ledger) &&
+      event.ledger > 0 &&
+      (maxLedger === null || event.ledger > maxLedger)
+    ) {
+      maxLedger = event.ledger;
+    }
+
+    if (typeof event.createdAt === 'string') {
+      const parsed = Date.parse(event.createdAt);
+      if (Number.isFinite(parsed) && (latestTimestampMs === null || parsed > latestTimestampMs)) {
+        latestTimestampMs = parsed;
+      }
+    }
+  }
+
+  return {
+    lastIndexedLedger: maxLedger,
+    lastIndexedAt: latestTimestampMs !== null ? new Date(latestTimestampMs).toISOString() : null,
+    staleAfterMs,
+  };
 }
 
 interface TokenInfo {
@@ -150,6 +194,9 @@ export async function get_contract_stats(): Promise<ContractStats> {
     color: TOKEN_COLORS[symbol] ?? '#888888',
   }));
 
+  const staleAfterMs = DEFAULT_INDEXER_STALE_AFTER_MS;
+  const indexerFreshness = deriveStatsIndexerFreshness(contractEvents, staleAfterMs);
+
   return {
     total_invoices: invoices.length,
     total_funded,
@@ -164,7 +211,8 @@ export async function get_contract_stats(): Promise<ContractStats> {
       source: 'derived',
       asOf: new Date().toISOString(),
       unit: 'USD-equivalent; token amounts normalized before aggregation',
-      staleAfterMs: 5 * 60 * 1000,
+      staleAfterMs,
     },
+    indexerFreshness,
   };
 }
