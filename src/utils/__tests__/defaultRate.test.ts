@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { calculateMovingAverage, MonthlyDefaultBucket } from '@/utils/defaultRate';
+import {
+  assessDefaultRateHistory,
+  calculateMovingAverage,
+  MonthlyDefaultBucket,
+  parseBucketMonthsLag,
+} from '@/utils/defaultRate';
 
 const mockData: MonthlyDefaultBucket[] = [
   { date: '2025-01', label: 'Jan 2025', defaulted: 1, funded: 10, defaultRate: 10 },
@@ -49,6 +54,68 @@ describe('defaultRate utilities', () => {
       ];
       const result = calculateMovingAverage(data, 1);
       expect(result[0].movingAverage).toBe(33.33);
+    });
+  });
+
+  describe('parseBucketMonthsLag', () => {
+    it('computes UTC month lag accurately', () => {
+      const now = new Date('2026-07-15T00:00:00Z');
+      expect(parseBucketMonthsLag('2026-07', now)).toBe(0);
+      expect(parseBucketMonthsLag('2026-06', now)).toBe(1);
+      expect(parseBucketMonthsLag('2026-05', now)).toBe(2);
+      expect(parseBucketMonthsLag('2025-07', now)).toBe(12);
+    });
+
+    it('returns null for malformed dates', () => {
+      const now = new Date('2026-07-15T00:00:00Z');
+      expect(parseBucketMonthsLag('invalid', now)).toBeNull();
+      expect(parseBucketMonthsLag('2026-13', now)).toBeNull();
+      expect(parseBucketMonthsLag('2026-00', now)).toBeNull();
+    });
+  });
+
+  describe('assessDefaultRateHistory', () => {
+    it('flags empty data as insufficient with null rates', () => {
+      const res = assessDefaultRateHistory([], new Date('2026-07-15T00:00:00Z'));
+      expect(res.insufficientHistory).toBe(true);
+      expect(res.currentDefaultRate).toBeNull();
+      expect(res.windowDefaultRate).toBeNull();
+      expect(res.staleHistory).toBe(false);
+    });
+
+    it('returns null rates when denominator is zero instead of fabricating 0%', () => {
+      const zeroDenom: MonthlyDefaultBucket[] = [
+        { date: '2026-06', label: 'Jun 2026', defaulted: 0, funded: 0, defaultRate: 0 },
+        { date: '2026-07', label: 'Jul 2026', defaulted: 0, funded: 0, defaultRate: 0 },
+      ];
+      const res = assessDefaultRateHistory(zeroDenom, new Date('2026-07-15T00:00:00Z'));
+      expect(res.currentDefaultRate).toBeNull();
+      expect(res.windowDefaultRate).toBeNull();
+      expect(res.zeroDenominatorBuckets).toBe(2);
+      expect(res.insufficientHistory).toBe(true);
+    });
+
+    it('flags low sample sizes below minimum funded threshold', () => {
+      const lowSample: MonthlyDefaultBucket[] = [
+        { date: '2026-06', label: 'Jun 2026', defaulted: 0, funded: 2, defaultRate: 0 },
+        { date: '2026-07', label: 'Jul 2026', defaulted: 1, funded: 2, defaultRate: 50 },
+      ];
+      const res = assessDefaultRateHistory(lowSample, new Date('2026-07-15T00:00:00Z'));
+      expect(res.totalFunded).toBe(4);
+      expect(res.insufficientHistory).toBe(true);
+      expect(res.windowDefaultRate).toBe(25);
+      expect(res.currentDefaultRate).toBe(50);
+    });
+
+    it('flags stale payer history when latest bucket lags by 2+ months', () => {
+      const stale: MonthlyDefaultBucket[] = [
+        { date: '2026-03', label: 'Mar 2026', defaulted: 1, funded: 10, defaultRate: 10 },
+        { date: '2026-04', label: 'Apr 2026', defaulted: 1, funded: 10, defaultRate: 10 },
+      ];
+      const res = assessDefaultRateHistory(stale, new Date('2026-07-15T00:00:00Z'));
+      expect(res.staleHistory).toBe(true);
+      expect(res.staleMonthsLag).toBe(3);
+      expect(res.insufficientHistory).toBe(false);
     });
   });
 });
