@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { WifiOff, X, ShieldCheck } from 'lucide-react';
 import { useToast } from '@/context/ToastContext';
+import { purgeStaleFinancialCaches } from '@/lib/pwa-financial-policy';
 
 const DISMISS_ANIMATION_MS = 250;
 
@@ -33,7 +34,8 @@ export default function OfflineBanner() {
   const [swStatus, setSwStatus] = useState<SwStatus>('unknown');
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Detect service worker registration status
+  // Detect service worker registration status and purge stale financial cache
+  // entries whenever a new service worker takes control (#1354).
   useEffect(() => {
     if (!('serviceWorker' in navigator)) {
       setSwStatus('inactive');
@@ -49,12 +51,15 @@ export default function OfflineBanner() {
       if (navigator.serviceWorker.controller) {
         setSwStatus('active');
       }
+      void purgeStaleFinancialCaches().then(() => {
+        void queryClient.invalidateQueries();
+      });
     };
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
     };
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     const updateConnectionState = () => {
@@ -65,6 +70,11 @@ export default function OfflineBanner() {
 
     const handleOnline = async () => {
       setIsExiting(true);
+
+      // Purge any stale cached financial API/document entries BEFORE
+      // resuming mutations or refetching active queries so network recovery
+      // cannot replay stale transaction or invoice state (#1354).
+      await purgeStaleFinancialCaches();
 
       // Resume React Query paused mutations and refetch active queries
       queryClient.resumePausedMutations();
