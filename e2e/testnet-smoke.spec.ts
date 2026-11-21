@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page, type Response } from '@playwright/test';
 import {
   classifyRouteStatus,
   routeExistsInSource,
@@ -32,7 +32,7 @@ async function gotoWithRetry(page: Page, path: string): Promise<Response | null>
 test.describe('Live testnet smoke checks', () => {
   for (const route of smokeRoutes) {
     test(`renders ${route.name} without crashing`, async ({ page }) => {
-      const response = await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+      const response = await gotoWithRetry(page, route.path);
       const status = response?.status();
 
       // A 404 for a route that still exists in this repo means the live deployment
