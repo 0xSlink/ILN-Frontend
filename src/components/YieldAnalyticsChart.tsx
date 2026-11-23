@@ -12,7 +12,8 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { Invoice } from '@/utils/soroban';
-import { buildYieldTimeSeries, calcAvgWeeklyYieldPct, YieldRange } from '@/utils/yield-timeseries';
+import { deriveYieldAnalytics, YieldRange } from '@/utils/yield-timeseries';
+import DataSourceCaption from '@/components/DataSourceCaption';
 
 interface YieldAnalyticsChartProps {
   invoices: Invoice[];
@@ -20,7 +21,7 @@ interface YieldAnalyticsChartProps {
   isLoading?: boolean;
 }
 
-const RANGES: YieldRange[] = [30, 60, 90] as unknown as YieldRange[];
+const RANGES: YieldRange[] = [30, 60, 90];
 
 const TOKEN_COLORS: Record<string, string> = {
   USDC: '#6366f1',
@@ -46,8 +47,11 @@ export default function YieldAnalyticsChart({
 
   if (isLoading) return <Skeleton />;
 
-  const data = buildYieldTimeSeries(invoices, lpAddress, range);
-  const avgWeeklyPct = calcAvgWeeklyYieldPct(invoices, lpAddress, range);
+  const {
+    series: data,
+    verifiedInvoices,
+    avgWeeklyPct,
+  } = deriveYieldAnalytics(invoices, lpAddress, range);
 
   return (
     <div className="rounded-2xl border border-outline-variant/10 bg-surface-container-lowest p-6">
@@ -58,6 +62,11 @@ export default function YieldAnalyticsChart({
             Avg weekly yield:{' '}
             <span className="font-bold text-green-600">{avgWeeklyPct.toFixed(3)}%</span>
           </p>
+          <p data-testid="yield-verified-inputs" className="text-xs text-on-surface-variant/80">
+            {verifiedInvoices} verified settled invoice
+            {verifiedInvoices === 1 ? '' : 's'} with on-chain funding time
+          </p>
+          <DataSourceCaption metric="lp-yield-analytics" />
         </div>
         <div className="flex gap-1 rounded-xl bg-surface-container-low p-1">
           {RANGES.map((r) => (
@@ -77,8 +86,13 @@ export default function YieldAnalyticsChart({
       </div>
 
       {data.length === 0 ? (
-        <p className="py-12 text-center text-sm text-on-surface-variant">
-          No paid invoices in the last {range} days.
+        <p
+          role="status"
+          data-testid="yield-insufficient-history"
+          className="py-12 text-center text-sm text-on-surface-variant"
+        >
+          Insufficient verified history: no settled invoices funded by this LP in the last {range}{' '}
+          days. No estimated series is rendered.
         </p>
       ) : (
         <div className="h-64 w-full">

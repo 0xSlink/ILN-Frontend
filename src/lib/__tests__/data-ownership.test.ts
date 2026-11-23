@@ -31,6 +31,8 @@ const EXPECTED_METRICS: DataMetricKey[] = [
   'wallet-referral-stats',
   'lp-risk-summary',
   'lp-capital-breakdown',
+  'lp-yield-analytics',
+  'invoice-volume-history',
   'lp-maturity-exposure',
 ];
 

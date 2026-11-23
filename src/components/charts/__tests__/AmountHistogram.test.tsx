@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { getBucketIndex, aggregateHistogramData, calculateMedian } from '../AmountHistogram';
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import AmountHistogram, {
+  getBucketIndex,
+  aggregateHistogramData,
+  calculateMedian,
+} from '../AmountHistogram';
 import { Invoice } from '../../../utils/soroban';
 
 // Amounts use the 6-decimal USDC scale that tokenAmountToNumber() assumes.
@@ -59,6 +65,58 @@ const mockInvoices: Invoice[] = [
     discount_rate: 0,
   }, // $15000 (Bucket 5)
 ];
+
+describe('AmountHistogram rendering', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+  });
+
+  it('shows the invoice source, provenance, ledger, and time for indexed history', () => {
+    const { container } = render(
+      <AmountHistogram
+        invoices={mockInvoices}
+        sourceLedger={51234567}
+        sourceTime="2026-11-23T00:00:00Z"
+      />
+    );
+
+    expect(screen.getByTestId('data-source-caption')).toHaveTextContent('Provenance: RPC');
+    expect(screen.getByTestId('invoice-volume-source-ledger')).toHaveTextContent(
+      'ledger 51234567 • as of 2026-11-23T00:00:00.000Z'
+    );
+    expect(container.querySelector('.recharts-responsive-container')).toBeInTheDocument();
+  });
+
+  it('shows an explicit no-history state instead of zeroed buckets and a $0 median', () => {
+    const { container } = render(<AmountHistogram invoices={[]} />);
+
+    expect(screen.getByTestId('invoice-volume-no-history')).toBeInTheDocument();
+    expect(screen.getByTestId('invoice-volume-source-ledger')).toHaveTextContent(
+      'ledger not reported • as of not reported'
+    );
+    expect(screen.queryByText('Median Invoice Amount')).not.toBeInTheDocument();
+    expect(container.querySelector('.recharts-responsive-container')).not.toBeInTheDocument();
+  });
+
+  it('distinguishes an unavailable history source from an empty result', () => {
+    render(<AmountHistogram invoices={mockInvoices} historyUnavailable />);
+
+    expect(screen.getByTestId('invoice-volume-no-history')).toHaveTextContent(
+      'Historical invoice volume data is unavailable'
+    );
+    expect(screen.getByTestId('invoice-volume-source-ledger')).toHaveTextContent(
+      'unavailable (no historical indexer data)'
+    );
+    expect(screen.queryByText('Median Invoice Amount')).not.toBeInTheDocument();
+  });
+});
 
 describe('AmountHistogram Utilities', () => {
   describe('getBucketIndex', () => {

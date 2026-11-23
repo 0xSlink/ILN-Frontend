@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useMemo, useState } from 'react';
 import {
   BarChart,
@@ -12,6 +14,7 @@ import {
 } from 'recharts';
 import { Invoice } from '@/utils/soroban';
 import { tokenAmountToNumber } from '@/utils/format';
+import DataSourceCaption from '@/components/DataSourceCaption';
 
 /** Buckets: $0–$100, $101–$500, $501–$1k, $1k–$5k, $5k–$10k, $10k+ */
 export const BUCKET_LABELS = ['$0–$100', '$101–$500', '$501–$1k', '$1k–$5k', '$5k–$10k', '$10k+'];
@@ -100,9 +103,27 @@ export function calculateMedian(invoices: Invoice[]): number {
 
 interface AmountHistogramProps {
   invoices: Invoice[];
+  sourceLedger?: number | string;
+  sourceTime?: number | string;
+  historyUnavailable?: boolean;
 }
 
-export default function AmountHistogram({ invoices }: AmountHistogramProps) {
+function formatSourceTime(value: number | string | undefined): string {
+  if (value === undefined || value === '') return 'not reported';
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? value : new Date(parsed).toISOString();
+  }
+  const ms = value < 1e12 ? value * 1000 : value;
+  return Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : 'not reported';
+}
+
+export default function AmountHistogram({
+  invoices,
+  sourceLedger,
+  sourceTime,
+  historyUnavailable = false,
+}: AmountHistogramProps) {
   const [yScale, setYScale] = useState<'count' | 'volume'>('count');
 
   const data = useMemo(() => aggregateHistogramData(invoices), [invoices]);
@@ -122,6 +143,8 @@ export default function AmountHistogram({ invoices }: AmountHistogramProps) {
     pending: 'var(--color-outline, #9e9e9e)', // Gray
   };
 
+  const noHistory = historyUnavailable || invoices.length === 0;
+
   const formatValue = (val: number) => {
     if (yScale === 'volume')
       return `$${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
@@ -136,177 +159,210 @@ export default function AmountHistogram({ invoices }: AmountHistogramProps) {
             Invoice Size Distribution
           </h3>
           <p className="text-sm text-on-surface-variant">Breakdown of invoice amounts by status</p>
+          <DataSourceCaption metric="invoice-volume-history" />
+          <p
+            data-testid="invoice-volume-source-ledger"
+            className="mt-1 text-[11px] text-on-surface-variant/80"
+          >
+            {historyUnavailable
+              ? 'Source ledger/time: unavailable (no historical indexer data)'
+              : `Source ledger/time: ledger ${sourceLedger ?? 'not reported'} • as of ${formatSourceTime(sourceTime)}`}
+          </p>
         </div>
 
-        {/* Toggle Switch */}
-        <div className="flex items-center gap-1 p-1 bg-surface-container rounded-xl self-start">
-          <button
-            onClick={() => setYScale('count')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              yScale === 'count'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            Invoice Count
-          </button>
-          <button
-            onClick={() => setYScale('volume')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              yScale === 'volume'
-                ? 'bg-primary text-white shadow-sm'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            USDC Volume
-          </button>
-        </div>
+        {noHistory ? null : (
+          <div className="flex items-center gap-1 p-1 bg-surface-container rounded-xl self-start">
+            <button
+              onClick={() => setYScale('count')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                yScale === 'count'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              Invoice Count
+            </button>
+            <button
+              onClick={() => setYScale('volume')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                yScale === 'volume'
+                  ? 'bg-primary text-white shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              USDC Volume
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Summary Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/10">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
-            Most Common Size
+      {noHistory && (
+        <div
+          role="status"
+          data-testid="invoice-volume-no-history"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-outline-variant/20 p-8 text-center"
+        >
+          <p className="text-sm font-medium text-on-surface-variant">
+            {historyUnavailable
+              ? 'Historical invoice volume data is unavailable'
+              : 'No historical invoice volume data for this view'}
           </p>
-          <p className="text-2xl font-bold text-primary">{mostCommonBucket}</p>
+          <p className="text-xs text-on-surface-variant/80">
+            No buckets, counts, or median are estimated when history is missing.
+          </p>
         </div>
-        <div className="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/10">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
-            Median Invoice Amount
-          </p>
-          <p className="text-2xl font-bold text-on-surface">
-            ${median.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </p>
-        </div>
-      </div>
+      )}
 
-      <div className="h-[300px] w-full mt-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="var(--color-outline-variant, #334155)"
-              strokeOpacity={0.2}
-            />
-            <XAxis
-              dataKey="bucket"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: 'var(--color-on-surface-variant)', fontSize: 12, fontWeight: 500 }}
-              dy={10}
-            />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: 'var(--color-on-surface-variant)', fontSize: 12 }}
-              tickFormatter={(v: number) =>
-                yScale === 'volume' && v >= 1000 ? `${v / 1000}k` : v.toString()
-              }
-            />
-            <Tooltip
-              cursor={{ fill: 'var(--color-surface-container-high)', opacity: 0.4 }}
-              content={(props: TooltipProps<number, string>) => {
-                const { active, payload, label } = props;
-                if (active && payload && payload.length) {
-                  const total = payload.reduce(
-                    (acc: number, entry) => acc + ((entry.value as number) ?? 0),
-                    0
-                  );
-                  return (
-                    <div className="bg-surface-container-lowest border border-outline-variant/20 p-4 rounded-2xl shadow-xl">
-                      <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">
-                        {label}
-                      </p>
-                      <div className="flex flex-col gap-2">
-                        {payload.map((entry) => (
-                          <div key={entry.name} className="flex items-center justify-between gap-6">
-                            <div className="flex items-center gap-2">
+      {noHistory ? null : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/10">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
+                Most Common Size
+              </p>
+              <p className="text-2xl font-bold text-primary">{mostCommonBucket}</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-surface-container-low border border-outline-variant/10">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
+                Median Invoice Amount
+              </p>
+              <p className="text-2xl font-bold text-on-surface">
+                ${median.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </p>
+            </div>
+          </div>
+
+          <div className="h-[300px] w-full mt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ top: 20, right: 30, left: 10, bottom: 20 }}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={false}
+                  stroke="var(--color-outline-variant, #334155)"
+                  strokeOpacity={0.2}
+                />
+                <XAxis
+                  dataKey="bucket"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: 'var(--color-on-surface-variant)', fontSize: 12, fontWeight: 500 }}
+                  dy={10}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: 'var(--color-on-surface-variant)', fontSize: 12 }}
+                  tickFormatter={(v: number) =>
+                    yScale === 'volume' && v >= 1000 ? `${v / 1000}k` : v.toString()
+                  }
+                />
+                <Tooltip
+                  cursor={{ fill: 'var(--color-surface-container-high)', opacity: 0.4 }}
+                  content={(props: TooltipProps<number, string>) => {
+                    const { active, payload, label } = props;
+                    if (active && payload && payload.length) {
+                      const total = payload.reduce(
+                        (acc: number, entry) => acc + ((entry.value as number) ?? 0),
+                        0
+                      );
+                      return (
+                        <div className="bg-surface-container-lowest border border-outline-variant/20 p-4 rounded-2xl shadow-xl">
+                          <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">
+                            {label}
+                          </p>
+                          <div className="flex flex-col gap-2">
+                            {payload.map((entry) => (
                               <div
-                                className="w-2 h-2 rounded-full"
-                                style={{ backgroundColor: entry.color }}
-                              />
-                              <span className="text-xs font-medium text-on-surface capitalize">
-                                {entry.name}
+                                key={entry.name}
+                                className="flex items-center justify-between gap-6"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="w-2 h-2 rounded-full"
+                                    style={{ backgroundColor: entry.color }}
+                                  />
+                                  <span className="text-xs font-medium text-on-surface capitalize">
+                                    {entry.name}
+                                  </span>
+                                </div>
+                                <span className="text-xs font-bold text-on-surface">
+                                  {yScale === 'volume'
+                                    ? `$${Number(entry.value).toLocaleString()}`
+                                    : entry.value}
+                                </span>
+                              </div>
+                            ))}
+                            <div className="h-px bg-outline-variant/10 my-1" />
+                            <div className="flex items-center justify-between gap-6">
+                              <span className="text-xs font-bold text-on-surface">Total</span>
+                              <span className="text-xs font-extrabold text-primary">
+                                {formatValue(total)}
                               </span>
                             </div>
-                            <span className="text-xs font-bold text-on-surface">
-                              {yScale === 'volume'
-                                ? `$${Number(entry.value).toLocaleString()}`
-                                : entry.value}
-                            </span>
                           </div>
-                        ))}
-                        <div className="h-px bg-outline-variant/10 my-1" />
-                        <div className="flex items-center justify-between gap-6">
-                          <span className="text-xs font-bold text-on-surface">Total</span>
-                          <span className="text-xs font-extrabold text-primary">
-                            {formatValue(total)}
-                          </span>
                         </div>
-                      </div>
-                    </div>
-                  );
-                }
-                return null;
-              }}
-            />
-            <Legend
-              verticalAlign="bottom"
-              align="center"
-              iconType="circle"
-              wrapperStyle={{ paddingTop: 20, fontSize: 12, fontWeight: 500 }}
-              formatter={(value: string) => (
-                <span className="text-on-surface-variant capitalize">{value}</span>
-              )}
-            />
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Legend
+                  verticalAlign="bottom"
+                  align="center"
+                  iconType="circle"
+                  wrapperStyle={{ paddingTop: 20, fontSize: 12, fontWeight: 500 }}
+                  formatter={(value: string) => (
+                    <span className="text-on-surface-variant capitalize">{value}</span>
+                  )}
+                />
 
-            {/* Stacked Bars */}
-            {yScale === 'count' ? (
-              <>
-                <Bar
-                  dataKey="funded"
-                  name="Funded"
-                  stackId="a"
-                  fill={COLORS.funded}
-                  radius={[0, 0, 0, 0]}
-                />
-                <Bar dataKey="paid" name="Paid" stackId="a" fill={COLORS.paid} />
-                <Bar dataKey="defaulted" name="Defaulted" stackId="a" fill={COLORS.defaulted} />
-                <Bar
-                  dataKey="pending"
-                  name="Pending"
-                  stackId="a"
-                  fill={COLORS.pending}
-                  radius={[4, 4, 0, 0]}
-                />
-              </>
-            ) : (
-              // For Volume, we just show a single bar for now or we need to calculate volume per status
-              // The requirement says "Stacked bars showing invoice distribution... Include status breakdown"
-              // So I should calculate volume per status too in the aggregator.
-              <>
-                <Bar dataKey="volume_funded" name="Funded" stackId="a" fill={COLORS.funded} />
-                <Bar dataKey="volume_paid" name="Paid" stackId="a" fill={COLORS.paid} />
-                <Bar
-                  dataKey="volume_defaulted"
-                  name="Defaulted"
-                  stackId="a"
-                  fill={COLORS.defaulted}
-                />
-                <Bar
-                  dataKey="volume_pending"
-                  name="Pending"
-                  stackId="a"
-                  fill={COLORS.pending}
-                  radius={[4, 4, 0, 0]}
-                />
-              </>
-            )}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+                {/* Stacked Bars */}
+                {yScale === 'count' ? (
+                  <>
+                    <Bar
+                      dataKey="funded"
+                      name="Funded"
+                      stackId="a"
+                      fill={COLORS.funded}
+                      radius={[0, 0, 0, 0]}
+                    />
+                    <Bar dataKey="paid" name="Paid" stackId="a" fill={COLORS.paid} />
+                    <Bar dataKey="defaulted" name="Defaulted" stackId="a" fill={COLORS.defaulted} />
+                    <Bar
+                      dataKey="pending"
+                      name="Pending"
+                      stackId="a"
+                      fill={COLORS.pending}
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </>
+                ) : (
+                  // For Volume, we just show a single bar for now or we need to calculate volume per status
+                  // The requirement says "Stacked bars showing invoice distribution... Include status breakdown"
+                  // So I should calculate volume per status too in the aggregator.
+                  <>
+                    <Bar dataKey="volume_funded" name="Funded" stackId="a" fill={COLORS.funded} />
+                    <Bar dataKey="volume_paid" name="Paid" stackId="a" fill={COLORS.paid} />
+                    <Bar
+                      dataKey="volume_defaulted"
+                      name="Defaulted"
+                      stackId="a"
+                      fill={COLORS.defaulted}
+                    />
+                    <Bar
+                      dataKey="volume_pending"
+                      name="Pending"
+                      stackId="a"
+                      fill={COLORS.pending}
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </>
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
+      )}
     </div>
   );
 }

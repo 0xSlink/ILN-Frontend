@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { buildYieldTimeSeries, calcAvgWeeklyYieldPct } from '@/utils/yield-timeseries';
+import {
+  buildYieldTimeSeries,
+  calcAvgWeeklyYieldPct,
+  deriveYieldAnalytics,
+  selectVerifiedYieldInvoices,
+} from '@/utils/yield-timeseries';
 import type { Invoice } from '@/utils/soroban';
 
 const LP = 'GLP0000000000000000000000000000000000000000000000000000';
@@ -91,6 +96,47 @@ describe('buildYieldTimeSeries', () => {
     const inv2 = makeInvoice({ id: 2n, funded_at: BigInt(NOW_S - 7 * 86400) });
     const result = buildYieldTimeSeries([inv2, inv1], LP, 30);
     expect(result[0].isoDate <= result[1].isoDate).toBe(true);
+  });
+});
+
+describe('verified yield inputs', () => {
+  it('rejects future funding times, missing funding times, and malformed amounts', () => {
+    const valid = makeInvoice({ id: 1n });
+    const future = makeInvoice({ id: 2n, funded_at: BigInt(NOW_S + 86_400) });
+    const unfunded = makeInvoice({ id: 3n, funded_at: undefined });
+    const zeroAmount = makeInvoice({ id: 4n, amount: 0n });
+    const negativeDiscount = makeInvoice({ id: 5n, discount_rate: -1 });
+
+    expect(
+      selectVerifiedYieldInvoices(
+        [valid, future, unfunded, zeroAmount, negativeDiscount],
+        LP,
+        30,
+        NOW_S
+      )
+    ).toEqual([valid]);
+  });
+
+  it('rejects every invoice when the LP address is empty', () => {
+    const inv = makeInvoice({});
+    expect(selectVerifiedYieldInvoices([inv], '', 30, NOW_S)).toEqual([]);
+    expect(deriveYieldAnalytics([inv], '', 30, NOW_S).series).toEqual([]);
+  });
+
+  it('counts only verified settled invoices and derives both outputs from that set', () => {
+    const valid = makeInvoice({ id: 1n });
+    const fundedOnly = makeInvoice({ id: 2n, status: 'Funded' });
+    const analytics = deriveYieldAnalytics([valid, fundedOnly], LP, 30, NOW_S);
+
+    expect(analytics.verifiedInvoices).toBe(1);
+    expect(analytics.series).toHaveLength(1);
+    expect(analytics.avgWeeklyPct).toBeCloseTo(calcAvgWeeklyYieldPct([valid], LP, 30), 10);
+    expect(analytics.series).toEqual(buildYieldTimeSeries([valid], LP, 30));
+  });
+
+  it('supports the 60-day range exposed by the yield chart', () => {
+    const within60 = makeInvoice({ id: 1n, funded_at: BigInt(NOW_S - 45 * 86_400) });
+    expect(deriveYieldAnalytics([within60], LP, 60, NOW_S).verifiedInvoices).toBe(1);
   });
 });
 
