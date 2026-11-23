@@ -105,4 +105,129 @@ describe('LPRiskSummaryPanel', () => {
       screen.getByText('• Consider diversifying portfolio to reduce concentration risk')
     ).toBeInTheDocument();
   });
+
+  it('documents the 10/20 and 15/25 triage thresholds in the panel', () => {
+    render(
+      <LPRiskSummaryPanel invoices={[invoice({ id: 1n })]} onFilterByRisk={vi.fn()} now={NOW} />
+    );
+
+    expect(screen.getByTestId('lp-risk-methodology')).toHaveTextContent('10%');
+    expect(screen.getByTestId('lp-risk-methodology')).toHaveTextContent('20%');
+    expect(screen.getByTestId('lp-risk-methodology')).toHaveTextContent('15%');
+    expect(screen.getByTestId('lp-risk-methodology')).toHaveTextContent('25%');
+    expect(screen.getByTestId('lp-risk-methodology')).toHaveTextContent('not protocol policy');
+  });
+
+  it('uses the documented position-count boundaries', () => {
+    const atRisk = invoice({ id: 1n, due_date: BigInt(Math.floor((NOW - 1_000) / 1000)) });
+    const healthy = Array.from({ length: 9 }, (_, index) => invoice({ id: BigInt(index + 2) }));
+
+    const { rerender } = render(
+      <LPRiskSummaryPanel invoices={[atRisk, ...healthy]} onFilterByRisk={vi.fn()} now={NOW} />
+    );
+    // 1 of 10 = 10% -> medium.
+    expect(screen.getByText('Positions at Risk').closest('button')).toHaveTextContent(
+      'medium risk'
+    );
+
+    rerender(
+      <LPRiskSummaryPanel
+        invoices={[atRisk, ...healthy.slice(0, 4)]}
+        onFilterByRisk={vi.fn()}
+        now={NOW}
+      />
+    );
+    // 1 of 5 = 20% -> high.
+    expect(screen.getByText('Positions at Risk').closest('button')).toHaveTextContent('high risk');
+  });
+
+  it('uses the documented capital boundaries', () => {
+    const atRisk = (id: bigint, amount: bigint) =>
+      invoice({ id, amount, due_date: BigInt(Math.floor((NOW - 1_000) / 1000)) });
+
+    const { rerender } = render(
+      <LPRiskSummaryPanel
+        invoices={[atRisk(1n, 14n), invoice({ id: 2n, amount: 86n })]}
+        onFilterByRisk={vi.fn()}
+        now={NOW}
+      />
+    );
+    expect(screen.getByText('Capital at Risk').closest('button')).toHaveTextContent('low risk');
+
+    rerender(
+      <LPRiskSummaryPanel
+        invoices={[atRisk(1n, 15n), invoice({ id: 2n, amount: 85n })]}
+        onFilterByRisk={vi.fn()}
+        now={NOW}
+      />
+    );
+    expect(screen.getByText('Capital at Risk').closest('button')).toHaveTextContent('medium risk');
+
+    rerender(
+      <LPRiskSummaryPanel
+        invoices={[atRisk(1n, 25n), invoice({ id: 2n, amount: 75n })]}
+        onFilterByRisk={vi.fn()}
+        now={NOW}
+      />
+    );
+    expect(screen.getByText('Capital at Risk').closest('button')).toHaveTextContent('high risk');
+  });
+
+  it('distinguishes verified and stale data using the query timestamp', () => {
+    const { rerender } = render(
+      <LPRiskSummaryPanel
+        invoices={[invoice({ id: 1n })]}
+        onFilterByRisk={vi.fn()}
+        dataUpdatedAt={NOW - 1_000}
+        now={NOW}
+      />
+    );
+    expect(screen.getByTestId('lp-risk-data-status')).toHaveAttribute('data-status', 'verified');
+    expect(screen.getByText('Verified as of', { exact: false })).toBeInTheDocument();
+
+    rerender(
+      <LPRiskSummaryPanel
+        invoices={[invoice({ id: 1n })]}
+        onFilterByRisk={vi.fn()}
+        dataUpdatedAt={NOW - 61_000}
+        now={NOW}
+      />
+    );
+    expect(screen.getByTestId('lp-risk-data-status')).toHaveAttribute('data-status', 'stale');
+    expect(screen.getByText(/not live/i)).toBeInTheDocument();
+  });
+
+  it('shows an indexer-unavailable state and keeps last-known values labelled', () => {
+    const onRetry = vi.fn();
+    const { rerender } = render(
+      <LPRiskSummaryPanel
+        invoices={[]}
+        onFilterByRisk={vi.fn()}
+        isError
+        dataUpdatedAt={NOW - 1_000}
+        onRetry={onRetry}
+        now={NOW}
+      />
+    );
+    expect(screen.getByTestId('lp-risk-summary')).toHaveAttribute('data-status', 'unavailable');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(onRetry).toHaveBeenCalledOnce();
+
+    rerender(
+      <LPRiskSummaryPanel
+        invoices={[invoice({ id: 1n })]}
+        onFilterByRisk={vi.fn()}
+        isError
+        dataUpdatedAt={NOW - 1_000}
+        now={NOW}
+      />
+    );
+    expect(screen.getByTestId('lp-risk-data-status')).toHaveAttribute('data-status', 'unavailable');
+    expect(screen.getByText('Positions at Risk')).toBeInTheDocument();
+  });
+
+  it('shows a loading state without implying live figures', () => {
+    render(<LPRiskSummaryPanel invoices={[]} onFilterByRisk={vi.fn()} isLoading now={NOW} />);
+    expect(screen.getByTestId('lp-risk-data-status')).toHaveAttribute('data-status', 'loading');
+  });
 });

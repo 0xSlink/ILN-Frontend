@@ -84,6 +84,8 @@ export const WithRisk: Story = {
   args: {
     invoices: mockInvoices,
     onFilterByRisk: fn((filter) => `Filter: ${filter}`),
+    // Story fixtures demonstrate the verified-data state; no live query runs here.
+    dataUpdatedAt: Date.now(),
   },
 };
 

@@ -10,10 +10,12 @@ import { useToast } from '@/context/ToastContext';
 import { TokenAmount } from './TokenSelector';
 import InvoiceFilterBar from './InvoiceFilterBar';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
+import { useBalances } from '@/hooks/useBalances';
 import { applyInvoiceFilters, useInvoiceFilters } from '@/hooks/useInvoiceFilters';
 import { useInvoices } from '@/hooks/queries';
 import SkeletonRow, { LP_DISCOVERY_COLUMNS } from './SkeletonRow';
 import LPRiskSummaryPanel from './LPRiskSummaryPanel';
+import LPMaturityExposure from './LPMaturityExposure';
 
 import { claimDefault, getTokenAllowance, Invoice, submitSignedTransaction } from '@/utils/soroban';
 import { formatAddress, formatDate, formatTokenAmount, calculateYield } from '@/utils/format';
@@ -50,11 +52,32 @@ export default function LPDashboard() {
   const { address, connect } = useWallet();
   const { addToast } = useToast();
   const { execute, signingModal } = useTransaction();
-  const { tokenMap, defaultToken } = useApprovedTokens();
+  const { tokens = [], tokenMap, defaultToken } = useApprovedTokens();
   const { t } = useTranslation();
   const { isEnrolled: isEnrolledInInsurance } = useInsurance();
 
-  const { data: invoices = [], isLoading: loading, dataUpdatedAt, refetch } = useInvoices();
+  const {
+    data: invoices = [],
+    isLoading: loading,
+    isError: invoicesError,
+    dataUpdatedAt,
+    refetch,
+  } = useInvoices();
+
+  // Wallet balances are a separate RPC read from invoice state. The LP capital
+  // breakdown must never treat an unread balance as zero committed capital.
+  const {
+    balances: walletBalances,
+    unavailable: unavailableBalanceIds,
+    isLoading: balancesLoading,
+  } = useBalances(tokens, Boolean(address));
+  const walletBalanceStatus = !address
+    ? 'not-connected'
+    : unavailableBalanceIds.size > 0 && walletBalances.size === 0
+      ? 'unavailable'
+      : balancesLoading && walletBalances.size === 0
+        ? 'loading'
+        : 'verified';
 
   const [activeTab, setActiveTab] = useState<Tab>('discovery');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -691,6 +714,19 @@ export default function LPDashboard() {
                   <LPRiskSummaryPanel
                     invoices={myFundedInvoicesBase}
                     onFilterByRisk={handleRiskFilter}
+                    dataUpdatedAt={dataUpdatedAt}
+                    isLoading={loading}
+                    isError={invoicesError}
+                    onRetry={() => void refetch()}
+                  />
+                )}
+                {visibleWidgets.some((w) => w.id === 'risk-summary') && (
+                  <LPMaturityExposure
+                    invoices={myFundedInvoicesBase}
+                    isLoading={loading}
+                    isError={invoicesError}
+                    dataUpdatedAt={dataUpdatedAt}
+                    onRetry={() => void refetch()}
                   />
                 )}
                 {riskFilter !== 'all' && (
@@ -729,6 +765,8 @@ export default function LPDashboard() {
                     defaultToken={defaultToken}
                     onTransfer={(inv) => setTransferInvoice(inv)}
                     isEnrolledInInsurance={isEnrolledInInsurance}
+                    walletBalances={walletBalances}
+                    walletBalanceStatus={walletBalanceStatus}
                   />
                 </ErrorBoundary>
               )}

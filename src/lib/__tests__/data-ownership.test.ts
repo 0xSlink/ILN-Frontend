@@ -29,6 +29,9 @@ const EXPECTED_METRICS: DataMetricKey[] = [
   'invoice-state-distribution',
   'recent-protocol-activity',
   'wallet-referral-stats',
+  'lp-risk-summary',
+  'lp-capital-breakdown',
+  'lp-maturity-exposure',
 ];
 
 describe('data ownership registry', () => {
