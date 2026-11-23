@@ -50,10 +50,6 @@ beforeEach(async () => {
   vi.spyOn(rpc.Server.prototype, 'simulateTransaction').mockRejectedValue(new Error('offline'));
 });
 
-import {
-  clearGovernanceTestSession,
-  establishGovernanceTestSession,
-} from './helpers/governanceSession';
 import { PROPOSAL_CONTEXT, PROPOSER, stubProposalRpc } from './helpers/proposalRpc';
 
 afterEach(() => {

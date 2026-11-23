@@ -1,5 +1,6 @@
 'use client';
 
+import { governanceMocksAllowed } from '@/lib/governance/mock-guard';
 import { GovernanceAction, GOVERNANCE_INTEGRATION_STATUS } from '@/utils/governance';
 
 /**
@@ -12,6 +13,10 @@ import { GovernanceAction, GOVERNANCE_INTEGRATION_STATUS } from '@/utils/governa
  *   governance contract is configured, so the action fails up front instead of
  *   silently pretending to succeed. Saying so plainly matters more than
  *   hiding the banner once the code became real.
+ *
+ * In production builds a `Stubbed` action is disabled at its write boundary, so
+ * the banner says it is unavailable rather than describing a usable mock (#1320).
+ * The banner is informational: enforcement lives in `src/utils/governance.ts`.
  */
 const BANNER_COPY: Record<'Stubbed' | 'Unconfigured', { heading: string; detail: string }> = {
   Stubbed: {
@@ -26,6 +31,11 @@ const BANNER_COPY: Record<'Stubbed' | 'Unconfigured', { heading: string; detail:
   },
 };
 
+const PRODUCTION_STUB_COPY = {
+  heading: 'Unavailable',
+  detail: 'is not available on-chain in this deployment and has been disabled.',
+};
+
 export default function GovernanceMockStatusBanner({ action }: { action: GovernanceAction }) {
   const status = GOVERNANCE_INTEGRATION_STATUS[action];
 
@@ -33,7 +43,10 @@ export default function GovernanceMockStatusBanner({ action }: { action: Governa
     return null;
   }
 
-  const copy = BANNER_COPY[status.status];
+  const copy =
+    status.status === 'Stubbed' && !governanceMocksAllowed()
+      ? PRODUCTION_STUB_COPY
+      : BANNER_COPY[status.status];
 
   return (
     <div

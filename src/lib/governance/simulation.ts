@@ -6,6 +6,19 @@
  * rendered to the user and the wallet prompt must never open. Running the
  * simulation first also guarantees that a rejected simulation cannot mutate
  * local governance state or invalidate query caches.
+ *
+ * ## Preview provenance (#1322)
+ *
+ * The proposal form's effect preview is separate from the transaction gate:
+ *
+ * - `contract-rpc`: an RPC simulation bound to this exact payload. It expires
+ *   after {@link GOVERNANCE_PREVIEW_MAX_AGE_MS}.
+ * - `client-estimate`: text computed in the browser. It proves nothing about
+ *   contract acceptance and is never labeled as verified.
+ *
+ * A preview is shown only for the payload that produced it. Edited, expired,
+ * failed, or unproven results are withheld. Submission does not trust previews:
+ * `create_proposal` is always simulated again before the wallet opens.
  */
 
 /** Stable error code consumed by callers / telemetry. */
@@ -62,4 +75,51 @@ export async function assertGovernanceSimulationPassed(
   if (outcome?.success !== true) {
     throw new GovernanceSimulationError(outcome?.error);
   }
+}
+
+// ─── Preview provenance (#1322) ───────────────────────────────────────────────
+
+export type GovernancePreviewProvenance = 'contract-rpc' | 'client-estimate';
+
+export const GOVERNANCE_PREVIEW_MAX_AGE_MS = 30_000;
+
+export interface GovernancePreviewResult {
+  isContractVerified: boolean;
+  provenance?: GovernancePreviewProvenance;
+}
+
+export interface StampedGovernancePreview<T extends GovernancePreviewResult> {
+  result: T;
+  fingerprint: string;
+  observedAt: number;
+}
+
+/** Stable identity for a payload; object key order does not affect it. */
+export function governancePreviewFingerprint(payload: object): string {
+  const entries = Object.entries(payload)
+    .filter(([, value]) => value !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right));
+  return JSON.stringify(entries);
+}
+
+export function stampGovernancePreview<T extends GovernancePreviewResult>(
+  result: T,
+  fingerprint: string,
+  observedAt = Date.now()
+): StampedGovernancePreview<T> {
+  return { result, fingerprint, observedAt };
+}
+
+/** Returns the preview only while it is valid for the current payload. */
+export function currentGovernancePreview<T extends GovernancePreviewResult>(
+  preview: StampedGovernancePreview<T> | null,
+  fingerprint: string | null,
+  now = Date.now()
+): T | null {
+  if (!preview || preview.fingerprint !== fingerprint) return null;
+  if (preview.result.isContractVerified) {
+    if (preview.result.provenance !== 'contract-rpc') return null;
+    if (now - preview.observedAt > GOVERNANCE_PREVIEW_MAX_AGE_MS) return null;
+  }
+  return preview.result;
 }

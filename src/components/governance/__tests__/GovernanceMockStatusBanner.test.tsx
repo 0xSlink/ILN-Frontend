@@ -32,4 +32,14 @@ describe('GovernanceMockStatusBanner', () => {
 
     expect(screen.queryByText('Not yet live')).not.toBeInTheDocument();
   });
+
+  it('reports a stubbed action as disabled in production (#1320)', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    render(<GovernanceMockStatusBanner action="castVote" />);
+
+    expect(screen.getByText('Unavailable')).toBeInTheDocument();
+    expect(screen.getByText(/Vote casting is not available on-chain/)).toBeInTheDocument();
+    expect(screen.queryByText(/backed by a mock/)).not.toBeInTheDocument();
+    vi.unstubAllEnvs();
+  });
 });
