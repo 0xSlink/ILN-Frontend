@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useState, useEffect, useMemo } from 'react';
+import React, { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import {
   AreaChart,
   Area,
@@ -12,7 +12,11 @@ import {
   type TooltipProps,
 } from 'recharts';
 import { transformFundingData } from '@/utils/funding';
-import { fetchFunding } from '@/lib/indexer';
+import {
+  evaluateIndexerFreshness,
+  formatIndexerAge,
+  type IndexerFreshnessStatus,
+} from '@/lib/indexer/freshness';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
   type IndexerNoticeStatus,
@@ -21,6 +25,7 @@ import DataSourceCaption from '@/components/DataSourceCaption';
 import {
   fetchFundingAnalytics,
   classifyIndexerClientError,
+  indexerErrorDetail,
   isAbortError,
 } from '@/lib/indexer-client';
 
@@ -141,40 +146,57 @@ export default function FundingChart() {
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
   const [errorStatus, setErrorStatus] = useState<IndexerNoticeStatus>('unavailable');
+  const [errorDetail, setErrorDetail] = useState<string | undefined>();
   const [requestId, setRequestId] = useState(0);
+  const [usingSampleData, setUsingSampleData] = useState(false);
+  const [freshness, setFreshness] = useState<IndexerFreshnessStatus | null>(null);
+  const activeRequest = useRef(0);
 
-  const fetchData = useCallback(async (selectedRange: TimeRange, signal?: AbortSignal) => {
-    setLoading(true);
-    setUnavailable(false);
-    try {
-      const dailyData = await fetchFundingAnalytics(selectedRange.toLowerCase(), { signal });
-      setData(dailyData);
-    } catch (err) {
-      if (isAbortError(err)) {
-        return;
+  const fetchData = useCallback(
+    async (selectedRange: TimeRange, signal: AbortSignal, generation: number) => {
+      setLoading(true);
+      setUnavailable(false);
+      setErrorDetail(undefined);
+      setUsingSampleData(false);
+      setFreshness(null);
+      try {
+        const dailyData = await fetchFundingAnalytics(selectedRange.toLowerCase(), {
+          signal,
+          onMeta: (meta) => {
+            if (generation === activeRequest.current) {
+              setFreshness(evaluateIndexerFreshness(meta.freshness));
+            }
+          },
+        });
+        if (generation !== activeRequest.current) return;
+        setData(dailyData);
+      } catch (err) {
+        if (isAbortError(err) || generation !== activeRequest.current) return;
+        if (shouldUseDevMockFallback()) {
+          setData(generateMockFunding(selectedRange));
+          setUsingSampleData(true);
+        } else {
+          const boundary = classifyIndexerClientError(err);
+          setErrorDetail(indexerErrorDetail(err));
+          setErrorStatus(
+            boundary === 'rate-limited' || boundary === 'unauthorized' || boundary === 'malformed'
+              ? boundary
+              : 'unavailable'
+          );
+          setData([]);
+          setUnavailable(true);
+        }
+      } finally {
+        if (generation === activeRequest.current) setLoading(false);
       }
-      // Only substitute demo data in development; otherwise show an honest
-      // "temporarily unavailable" state instead of fabricating volume.
-      if (shouldUseDevMockFallback()) {
-        setData(generateMockFunding(selectedRange));
-      } else {
-        const boundary = classifyIndexerClientError(err);
-        setErrorStatus(
-          boundary === 'rate-limited' || boundary === 'unauthorized' || boundary === 'malformed'
-            ? boundary
-            : 'unavailable'
-        );
-        setData([]);
-        setUnavailable(true);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetchData(range, controller.signal);
+    const generation = ++activeRequest.current;
+    void fetchData(range, controller.signal, generation);
     return () => {
       controller.abort();
     };
@@ -190,7 +212,18 @@ export default function FundingChart() {
         <div>
           <h3 className="font-headline text-xl font-bold text-on-surface">LP Funding History</h3>
           <p className="text-sm text-on-surface-variant">Daily volume across supported tokens</p>
-          <DataSourceCaption metric="funding-history" />
+          <DataSourceCaption
+            metric="funding-history"
+            provenance={usingSampleData ? 'estimate' : undefined}
+          />
+          {usingSampleData && (
+            <p
+              data-testid="funding-sample-data"
+              className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-300"
+            >
+              Sample data (development only) — not protocol funding history
+            </p>
+          )}
         </div>
 
         {/* Time Range Selector */}
@@ -211,6 +244,21 @@ export default function FundingChart() {
         </div>
       </div>
 
+      {!loading && !unavailable && !usingSampleData && freshness?.state === 'stale' && (
+        <div
+          role="status"
+          data-testid="funding-stale-history"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-300"
+        >
+          Stale indexer data: last indexed ledger {freshness.lastIndexedLedger ?? 'unknown'} at{' '}
+          {freshness.lastIndexedAt
+            ? new Date(freshness.lastIndexedAt).toISOString()
+            : 'an unknown time'}{' '}
+          ({freshness.ageMs === null ? 'age unknown' : formatIndexerAge(freshness.ageMs)}). Values
+          may not reflect the latest ledger.
+        </div>
+      )}
+
       <div className="relative h-[180px] w-full md:h-[240px]">
         {loading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-surface-container-lowest/50 backdrop-blur-[1px]">
@@ -223,6 +271,7 @@ export default function FundingChart() {
             <IndexerUnavailableNotice
               dataSource="Funding history"
               status={errorStatus}
+              detail={errorDetail}
               onRetry={() => setRequestId((id) => id + 1)}
             />
           </div>

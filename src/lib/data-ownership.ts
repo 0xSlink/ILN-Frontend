@@ -33,6 +33,8 @@ export type DataMetricKey =
   | 'wallet-referral-stats'
   | 'lp-risk-summary'
   | 'lp-capital-breakdown'
+  | 'lp-yield-analytics'
+  | 'invoice-volume-history'
   | 'lp-maturity-exposure';
 
 export type DataSourceKind = 'rpc' | 'horizon' | 'indexer' | 'estimate' | 'unavailable';
@@ -185,6 +187,26 @@ export const DATA_OWNERSHIP: Record<DataMetricKey, DataOwnership> = {
       'none — unavailable wallet/withdrawal read is labelled; no fabricated withdrawable capital',
     freshness:
       'wallet balances refresh every 30s and on TX_SUCCESS_EVENT; invoices per useInvoices',
+    owner: 'Smart-contract team',
+  },
+  'lp-yield-analytics': {
+    metric: 'lp-yield-analytics',
+    source:
+      'Direct RPC reads: `getAllInvoices` through `useInvoices`; only `Paid` invoices with an on-chain `funded_at` funded by the connected LP are used',
+    provenance: 'rpc',
+    fallback:
+      'none — insufficient verified history renders an honest notice; no estimated or hardcoded series',
+    freshness: 'per useInvoices read (60s stale / 15s poll while positions are active)',
+    owner: 'Smart-contract team',
+  },
+  'invoice-volume-history': {
+    metric: 'invoice-volume-history',
+    source:
+      'Direct RPC reads: `getAllInvoices` through `useInvoices`; no historical indexer volume endpoint is consumed by this chart',
+    provenance: 'rpc',
+    fallback:
+      'none — missing or empty history renders an unavailable notice instead of zeroed buckets or a $0 median',
+    freshness: 'per useInvoices read; caller-supplied source ledger/time shown when available',
     owner: 'Smart-contract team',
   },
   'lp-maturity-exposure': {

@@ -13,6 +13,8 @@ const meta: Meta<typeof YieldBarChart> = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const SAMPLE_LABEL = 'Sample data — Storybook only, not protocol history';
+
 const mockYieldData = [
   { name: 'Week 1', yield: 120 },
   { name: 'Week 2', yield: 85 },
@@ -33,15 +35,15 @@ const mockPieData = [
 ];
 
 export const YieldBar: Story = {
-  render: () => <YieldBarChart data={mockYieldData} />,
+  render: () => <YieldBarChart data={mockYieldData} sampleLabel={SAMPLE_LABEL} />,
 };
 
 export const CapitalLine: Story = {
-  render: () => <CapitalLineChart data={mockTimeData} />,
+  render: () => <CapitalLineChart data={mockTimeData} sampleLabel={SAMPLE_LABEL} />,
 };
 
 export const OutcomePie: Story = {
-  render: () => <OutcomePieChart data={mockPieData} />,
+  render: () => <OutcomePieChart data={mockPieData} sampleLabel={SAMPLE_LABEL} />,
 };
 
 export const Empty: Story = {

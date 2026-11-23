@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import FundingChart from '../FundingChart';
 import DefaultRateChart from '../DefaultRateChart';
+import { proxySuccessEnvelope } from '@/mocks/fixtures/indexer';
 
 const originalFetch = global.fetch;
 
@@ -24,6 +25,14 @@ function envelope(resource: string, data: unknown[]) {
 function errorEnvelope(code: string, message: string, status = 502) {
   return { ok: false, status, json: async () => ({ ok: false, error: { code, message } }) };
 }
+
+const fundingBucket = {
+  date: '2026-11-01',
+  label: 'Nov 1',
+  total_usdc_equiv: 1000,
+  invoices_funded: 1,
+  tokens: [{ symbol: 'USDC', amount: 1000, color: '#008080' }],
+};
 
 const fetchMock = () => global.fetch as unknown as ReturnType<typeof vi.fn>;
 
@@ -63,6 +72,68 @@ describe('FundingChart', () => {
     expect(fetchMock()).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('No funding activity in this period')).not.toBeInTheDocument();
     expect(screen.queryByText(/Total Funding/)).not.toBeInTheDocument();
+  });
+
+  it('ignores an aborted funding request instead of showing an outage', async () => {
+    const aborted = new Error('The operation was aborted');
+    aborted.name = 'AbortError';
+    fetchMock().mockRejectedValue(aborted);
+    const { container } = render(<FundingChart />);
+
+    await waitFor(() => expect(container.querySelector('.animate-spin')).not.toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('No funding activity in this period')).toBeInTheDocument();
+  });
+
+  it('rejects a malformed funding bucket instead of rendering estimated volume', async () => {
+    fetchMock().mockResolvedValue(
+      envelope('analytics.funding', [{ date: 42, label: 'Bad bucket', tokens: 'USDC' }])
+    );
+    render(<FundingChart />);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveAttribute('data-testid', 'indexer-notice-malformed');
+    expect(screen.queryByText(/Total Funding/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('funding-sample-data')).not.toBeInTheDocument();
+    expect(fetchMock().mock.calls[0][0]).toBe('/api/indexer/analytics/funding?period=30d');
+  });
+
+  it('labels stale indexer history with the last indexed ledger and time', async () => {
+    fetchMock().mockResolvedValue({
+      ok: true,
+      json: async () =>
+        proxySuccessEnvelope('analytics.funding', [fundingBucket], {
+          freshness: {
+            lastIndexedLedger: 51200000,
+            lastIndexedAt: '2025-01-01T00:00:00.000Z',
+            staleAfterMs: 300_000,
+          },
+        }),
+    });
+    render(<FundingChart />);
+
+    const notice = await screen.findByTestId('funding-stale-history');
+    expect(notice).toHaveTextContent('last indexed ledger 51200000');
+    expect(notice).toHaveTextContent('2025-01-01T00:00:00.000Z');
+    expect(screen.getByTestId('data-source-caption')).toHaveTextContent('Provenance: Indexer');
+  });
+
+  it('does not flag fresh indexer history as stale', async () => {
+    fetchMock().mockResolvedValue({
+      ok: true,
+      json: async () =>
+        proxySuccessEnvelope('analytics.funding', [fundingBucket], {
+          freshness: {
+            lastIndexedLedger: 51234567,
+            lastIndexedAt: new Date().toISOString(),
+            staleAfterMs: 300_000,
+          },
+        }),
+    });
+    const { container } = render(<FundingChart />);
+
+    await waitFor(() => expect(container.querySelector('.animate-spin')).not.toBeInTheDocument());
+    expect(screen.queryByTestId('funding-stale-history')).not.toBeInTheDocument();
   });
 
   it('explains an indexer API version mismatch without retrying it', async () => {
@@ -107,6 +178,7 @@ describe('DefaultRateChart', () => {
     expect(alert).toHaveAttribute('data-testid', 'indexer-notice-unavailable');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(screen.queryByText('0.00%')).not.toBeInTheDocument();
-    expect(screen.getAllByText('—')).toHaveLength(3);
+    expect(screen.getAllByText('N/A')).toHaveLength(2);
+    expect(screen.getByText('—')).toBeInTheDocument();
   });
 });
