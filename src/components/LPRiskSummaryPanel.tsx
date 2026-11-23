@@ -35,8 +35,13 @@ export default function LPRiskSummaryPanel({ invoices, onFilterByRisk }: LPRiskS
       const isFunded = invoice.status === 'Funded' || isDisputed;
 
       if (isFunded) {
+        // Count funded amount as total capital (using funded position value, not face value)
         totalCapital += invoice.amount;
 
+        // Capital at risk includes:
+        // 1. Disputed positions: invoices under dispute resolution
+        // 2. Near-expiry positions: invoices due within 24 hours
+        // 3. Overdue positions: invoices past due date
         if (isDisputed) {
           disputedPositions++;
           capitalAtRisk += invoice.amount;

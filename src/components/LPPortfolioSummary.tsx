@@ -23,7 +23,7 @@ function MetricCard({
   value: React.ReactNode;
   trend: string;
   trendDirection: 'up' | 'down' | 'neutral';
-  sparklineData: number[];
+  sparklineData: number[] | null;
 }) {
   const trendColor =
     trendDirection === 'up'
@@ -38,6 +38,21 @@ function MetricCard({
       : trendDirection === 'down'
         ? 'trending_down'
         : 'trending_flat';
+
+  // Handle unavailable sparkline data
+  if (!sparklineData || sparklineData.length === 0) {
+    return (
+      <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-lowest p-5 flex flex-col gap-2 shadow-sm">
+        <h4 className="text-sm font-medium text-on-surface-variant">{title}</h4>
+        <div className="text-2xl font-bold">{value}</div>
+        <div className="flex items-center justify-between mt-2">
+          <div className="text-xs text-on-surface-variant opacity-60">
+            Historical data unavailable
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Simple sparkline path generator
   const max = Math.max(...sparklineData, 1);
@@ -113,11 +128,8 @@ export default function LPPortfolioSummary({
     };
   }, [invoices, payerRisks]);
 
-  // Mock sparkline data since historical data isn't fully available yet
-  const investedSparkline = [30, 40, 35, 50, 49, 60, 70];
-  const yieldSparkline = [10, 15, 13, 20, 25, 22, 30];
-  const positionsSparkline = [2, 3, 3, 4, 4, 5, metrics.activePositions];
-  const riskSparkline = [50, 50, 45, 45, 40, 40, 40]; // Neutral/decreasing risk
+  // Historical sparkline data requires verified data sources
+  // Currently unavailable - will be populated from indexer or contract data
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -127,9 +139,9 @@ export default function LPPortfolioSummary({
           symbol: defaultToken?.symbol ?? 'USDC',
           decimals: defaultToken?.decimals ?? 7,
         })}
-        trend="+12%"
-        trendDirection="up"
-        sparklineData={investedSparkline}
+        trend="Calculating"
+        trendDirection="neutral"
+        sparklineData={null}
       />
       <MetricCard
         title="Current Yield"
@@ -137,23 +149,23 @@ export default function LPPortfolioSummary({
           symbol: defaultToken?.symbol ?? 'USDC',
           decimals: defaultToken?.decimals ?? 7,
         })}
-        trend="+8%"
-        trendDirection="up"
-        sparklineData={yieldSparkline}
+        trend="Calculating"
+        trendDirection="neutral"
+        sparklineData={null}
       />
       <MetricCard
         title="Active Positions"
         value={metrics.activePositions.toString()}
-        trend={metrics.activePositions > 0 ? '+1' : '0'}
-        trendDirection={metrics.activePositions > 0 ? 'up' : 'neutral'}
-        sparklineData={positionsSparkline}
+        trend={metrics.activePositions.toString()}
+        trendDirection="neutral"
+        sparklineData={null}
       />
       <MetricCard
         title="Risk Score"
         value={metrics.riskLabel}
         trend="Stable"
         trendDirection="neutral"
-        sparklineData={riskSparkline}
+        sparklineData={null}
       />
     </div>
   );

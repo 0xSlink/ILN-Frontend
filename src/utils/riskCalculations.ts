@@ -125,37 +125,18 @@ export function calculatePortfolioRiskMetrics(invoiceRisks: InvoiceRiskDetail[])
 }
 
 /**
- * Generate historical risk trend data (mock implementation for now)
- * In production, this would fetch from a real time-series database
+ * Generate historical risk trend data
+ * Note: This requires verified data from indexer or on-chain contracts.
+ * Currently returns empty array as synthetic trend data has been removed.
+ * Historical data should be fetched from verified time-series database in production.
  */
 export function generateRiskTrendData(
   invoiceRisks: InvoiceRiskDetail[],
   days: number = 30
 ): RiskTrendData[] {
-  const now = Date.now();
-  const trends: RiskTrendData[] = [];
-
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(now - i * 24 * 60 * 60 * 1000);
-    const dateStr = date.toISOString().split('T')[0];
-
-    // Simulate historical data with slight variations
-    const variation = Math.sin((i / days) * Math.PI) * 5;
-    const metrics = calculatePortfolioRiskMetrics(invoiceRisks);
-
-    trends.push({
-      date: dateStr,
-      averageRisk: Math.max(0, Math.min(100, metrics.averageRiskScore + variation)),
-      lowRiskCount: metrics.lowRiskCount,
-      mediumRiskCount: metrics.mediumRiskCount,
-      highRiskCount: metrics.highRiskCount,
-      totalPortfolioRisk:
-        (metrics.highRiskCount * 3 + metrics.mediumRiskCount * 2 + metrics.lowRiskCount) /
-        Math.max(1, invoiceRisks.length),
-    });
-  }
-
-  return trends;
+  // TODO: Integrate with verified indexer or contract-derived time-series data
+  // Currently returning empty to prevent misleading synthetic trends
+  return [];
 }
 
 /**
