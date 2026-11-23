@@ -202,3 +202,21 @@ describe('financial display helpers', () => {
     });
   });
 });
+
+describe('financial USD display unit consistency', () => {
+  it('formats bigint and equivalent number amounts identically in exact mode', () => {
+    expect(formatExactFinancialUsd(1_500_000n)).toBe('$1,500,000');
+    expect(formatExactFinancialUsd(1_500_000)).toBe('$1,500,000');
+  });
+
+  it('places the minus sign before the currency symbol for negative exact amounts', () => {
+    expect(formatExactFinancialUsd(-2_500n)).toBe('-$2,500');
+    expect(formatExactFinancialUsd(-2_500)).toBe('-$2,500');
+  });
+
+  it('returns the unavailable label for missing amounts instead of zero', () => {
+    const unavailable = getFinancialWarningLabel('unavailable', 'en-US');
+    expect(formatFinancialUsd(null)).toBe(unavailable);
+    expect(formatFinancialUsd(undefined)).toBe(unavailable);
+  });
+});
