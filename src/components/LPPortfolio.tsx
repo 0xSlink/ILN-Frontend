@@ -1,15 +1,24 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { formatAddress, formatDate, formatUSDC, calculateYield } from '@/utils/format';
+import {
+  formatAddress,
+  formatDate,
+  formatTokenAmount,
+  formatUSDC,
+  calculateYield,
+} from '@/utils/format';
 import type { Invoice } from '@/utils/soroban';
 import type { ApprovedToken } from '@/hooks/useApprovedTokens';
+import type { TokenBalanceMap } from '@/hooks/useBalances';
+import { calculateCapitalBreakdown } from '@/utils/lp-capital-accounting';
+import { calculatePerTokenMetrics } from '@/utils/per-token-yield';
 import InvoiceTable, { ColumnDefinition } from './InvoiceTable';
+import DataSourceCaption from './DataSourceCaption';
 
 import LPTokenMetricsCards from './LPTokenMetricsCards';
 import LPPortfolioAllocationChart from './LPPortfolioAllocationChart';
 import WeeklyYieldChart from './WeeklyYieldChart';
-import { calculatePerTokenMetrics } from '@/utils/per-token-yield';
 
 interface PayerExposure {
   payer: string;
@@ -29,6 +38,10 @@ interface LPPortfolioProps {
   defaultToken?: ApprovedToken | null;
   onTransfer?: (invoice: Invoice) => void;
   isEnrolledInInsurance?: boolean;
+  /** Wallet balances from `useBalances`; omitted means the read is unavailable. */
+  walletBalances?: TokenBalanceMap;
+  /** Explicit wallet-balance read state; defaults to `not-connected`. */
+  walletBalanceStatus?: 'not-connected' | 'loading' | 'unavailable' | 'verified';
 }
 
 export default function LPPortfolio({
@@ -42,6 +55,8 @@ export default function LPPortfolio({
   defaultToken = null,
   onTransfer,
   isEnrolledInInsurance,
+  walletBalances,
+  walletBalanceStatus = 'not-connected',
 }: LPPortfolioProps) {
   const [showUSDEquivalent, setShowUSDEquivalent] = useState(false);
   const now = Date.now();

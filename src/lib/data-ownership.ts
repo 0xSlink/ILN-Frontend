@@ -30,7 +30,10 @@ export type DataMetricKey =
   | 'homepage-protocol-metrics'
   | 'invoice-state-distribution'
   | 'recent-protocol-activity'
-  | 'wallet-referral-stats';
+  | 'wallet-referral-stats'
+  | 'lp-risk-summary'
+  | 'lp-capital-breakdown'
+  | 'lp-maturity-exposure';
 
 export type DataSourceKind = 'rpc' | 'horizon' | 'indexer' | 'estimate' | 'unavailable';
 
@@ -163,6 +166,34 @@ export const DATA_OWNERSHIP: Record<DataMetricKey, DataOwnership> = {
     provenance: 'rpc',
     fallback: 'none — unavailable labels replace zero counts, zero volume, and reward totals',
     freshness: 'stale 60s / gc 10m (QUERY_TIMINGS.stats); poll 60s',
+    owner: 'Smart-contract team',
+  },
+  'lp-risk-summary': {
+    metric: 'lp-risk-summary',
+    source: 'Direct RPC reads: `getAllInvoices` through `useInvoices`',
+    provenance: 'rpc',
+    fallback:
+      'none in production — loading/unavailable/stale states are labelled; last-known values are never presented as live',
+    freshness: 'verified within 60s of dataUpdatedAt; 15s poll while positions are active',
+    owner: 'Smart-contract team',
+  },
+  'lp-capital-breakdown': {
+    metric: 'lp-capital-breakdown',
+    source: 'Direct RPC reads: `getAllInvoices` plus wallet token balances (RPC/Horizon)',
+    provenance: 'rpc',
+    fallback:
+      'none — unavailable wallet/withdrawal read is labelled; no fabricated withdrawable capital',
+    freshness:
+      'wallet balances refresh every 30s and on TX_SUCCESS_EVENT; invoices per useInvoices',
+    owner: 'Smart-contract team',
+  },
+  'lp-maturity-exposure': {
+    metric: 'lp-maturity-exposure',
+    source: 'Direct RPC reads: `getAllInvoices` `due_date` through `useInvoices`',
+    provenance: 'rpc',
+    fallback:
+      'none — missing/invalid due dates are bucketed as Missing due date; stale/unavailable reads are labelled',
+    freshness: 'verified within 60s of dataUpdatedAt; 15s poll while positions are active',
     owner: 'Smart-contract team',
   },
 };
