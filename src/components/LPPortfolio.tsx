@@ -20,6 +20,13 @@ import LPTokenMetricsCards from './LPTokenMetricsCards';
 import LPPortfolioAllocationChart from './LPPortfolioAllocationChart';
 import WeeklyYieldChart from './WeeklyYieldChart';
 
+interface PayerExposure {
+  payer: string;
+  totalFunded: bigint;
+  invoiceCount: number;
+  portfolioPercentage: number;
+}
+
 interface LPPortfolioProps {
   invoices: Invoice[];
   isLoading: boolean;
@@ -60,17 +67,31 @@ export default function LPPortfolio({
     [invoices, tokenMap, defaultToken]
   );
 
-  const capitalBreakdown = useMemo(() => calculateCapitalBreakdown(invoices), [invoices]);
-  const walletTokens = useMemo(
-    () => Array.from(tokenMap.values()).filter((token) => token.isAllowed),
-    [tokenMap]
-  );
+  // Calculate payer concentration metrics
+  const payerExposures = useMemo((): PayerExposure[] => {
+    const payerMap = new Map<string, { totalFunded: bigint; invoiceCount: number }>();
+    let totalFunded = 0n;
 
-  const formatCapital = (amount: bigint) =>
-    formatTokenAmount(amount, {
-      decimals: defaultToken?.decimals ?? 7,
-      symbol: defaultToken?.symbol ?? 'USDC',
+    invoices.forEach((invoice) => {
+      if (invoice.status === 'Funded' || invoice.status === 'Paid' || invoice.status === 'Disputed') {
+        totalFunded += invoice.amount;
+        const existing = payerMap.get(invoice.payer) || { totalFunded: 0n, invoiceCount: 0 };
+        payerMap.set(invoice.payer, {
+          totalFunded: existing.totalFunded + invoice.amount,
+          invoiceCount: existing.invoiceCount + 1,
+        });
+      }
     });
+
+    const exposures: PayerExposure[] = Array.from(payerMap.entries()).map(([payer, data]) => ({
+      payer,
+      totalFunded: data.totalFunded,
+      invoiceCount: data.invoiceCount,
+      portfolioPercentage: totalFunded > 0n ? Number((data.totalFunded * 100n) / totalFunded) : 0,
+    }));
+
+    return exposures.sort((a, b) => Number(b.totalFunded - a.totalFunded));
+  }, [invoices]);
 
   const totalYieldEarned = invoices
     .filter((invoice) => invoice.status === 'Paid')
@@ -198,90 +219,65 @@ export default function LPPortfolio({
         <p className="mt-1 text-2xl font-bold text-green-700">{formatUSDC(totalYieldEarned)}</p>
       </div>
 
-      {/* Capital breakdown (#1264): distinct, mutually exclusive categories. */}
-      <section
-        className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-4"
-        data-testid="lp-capital-breakdown"
-        data-status={walletBalanceStatus}
-        aria-label="LP capital breakdown"
-      >
-        <h3 className="text-lg font-bold text-on-surface">Capital Breakdown</h3>
-        <p className="mt-1 text-xs text-on-surface-variant">
-          Wallet balance is liquid funds; committed capital is locked in Funded/Disputed positions.
-          Settled capital is Paid principal. Totals are native units, not FX-converted.
-        </p>
-        <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div data-testid="lp-capital-wallet" data-status={walletBalanceStatus}>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
-              Wallet balance
-            </dt>
-            <dd className="mt-1 text-sm font-medium text-on-surface">
-              {walletBalanceStatus === 'not-connected' && 'Connect a wallet to read balances'}
-              {walletBalanceStatus === 'loading' && 'Loading wallet balance…'}
-              {walletBalanceStatus === 'unavailable' && 'Wallet balance unavailable'}
-              {walletBalanceStatus === 'verified' && walletTokens.length === 0 && (
-                <span data-status="unavailable">No approved token balances to display</span>
-              )}
-              {walletBalanceStatus === 'verified' &&
-                walletTokens.map((token) => {
-                  const balance = walletBalances?.get(token.contractId);
-                  return (
-                    <span key={token.contractId} className="mr-3 inline-block">
-                      {balance === undefined
-                        ? `${token.symbol}: unavailable`
-                        : formatTokenAmount(balance, {
-                            decimals: token.decimals,
-                            symbol: token.symbol,
-                          })}
+      {/* Payer Concentration Metrics */}
+      {payerExposures.length > 0 && (
+        <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest p-6">
+          <div className="mb-4">
+            <h3 className="text-lg font-bold text-on-surface flex items-center gap-2">
+              <span className="material-symbols-outlined">account_balance</span>
+              Payer Concentration
+            </h3>
+            <p className="text-sm text-on-surface-variant mt-1">
+              Exposure by payer across your portfolio
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {payerExposures.slice(0, 5).map((exposure) => (
+              <div key={exposure.payer} className="flex items-center gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-on-surface">
+                      {formatAddress(exposure.payer)}
                     </span>
-                  );
-                })}
-            </dd>
+                    <span className="text-xs font-semibold text-on-surface-variant">
+                      {exposure.portfolioPercentage.toFixed(1)}% ({exposure.invoiceCount}{' '}
+                      {exposure.invoiceCount === 1 ? 'invoice' : 'invoices'})
+                    </span>
+                  </div>
+                  <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-full ${
+                        exposure.portfolioPercentage > 40
+                          ? 'bg-red-500'
+                          : exposure.portfolioPercentage > 25
+                            ? 'bg-orange-500'
+                            : 'bg-green-500'
+                      }`}
+                      style={{ width: `${exposure.portfolioPercentage}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-          <div data-testid="lp-capital-committed">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
-              Committed capital ({capitalBreakdown.committedPositions})
-            </dt>
-            <dd className="mt-1 text-sm font-medium text-on-surface">
-              {formatCapital(capitalBreakdown.committedCapital)}
-            </dd>
-          </div>
-          <div data-testid="lp-capital-outstanding">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
-              Outstanding obligations
-            </dt>
-            <dd className="mt-1 text-sm font-medium text-on-surface">
-              {formatCapital(capitalBreakdown.outstandingObligations)}
-            </dd>
-          </div>
-          <div data-testid="lp-capital-settled">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
-              Settled capital ({capitalBreakdown.settledPositions})
-            </dt>
-            <dd className="mt-1 text-sm font-medium text-on-surface">
-              {formatCapital(capitalBreakdown.settledCapital)}
-            </dd>
-          </div>
-          <div
-            data-testid="lp-capital-withdrawable"
-            data-status="unavailable"
-            className="sm:col-span-2"
-          >
-            <dt className="text-xs font-semibold uppercase tracking-wide text-on-surface-variant">
-              Withdrawable capital
-            </dt>
-            <dd className="mt-1 text-sm font-medium text-on-surface-variant">
-              Unavailable — no on-chain withdrawal/claimable-balance read is implemented. Wallet
-              balance is the only verified liquid amount; do not infer withdrawable capital from
-              committed capital.
-            </dd>
-          </div>
-        </dl>
-        <DataSourceCaption
-          metric="lp-capital-breakdown"
-          provenance={walletBalanceStatus === 'unavailable' ? 'unavailable' : 'rpc'}
-        />
-      </section>
+
+          {payerExposures.some((e) => e.portfolioPercentage > 25) && (
+            <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex gap-2">
+                <span className="material-symbols-outlined text-orange-600 text-5">warning</span>
+                <div>
+                  <p className="text-sm font-medium text-orange-900">Concentration Risk</p>
+                  <p className="text-xs text-orange-800 mt-1">
+                    Your portfolio has significant exposure to individual payers. Consider
+                    diversifying your portfolio to reduce concentration risk.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Per-Token Metrics Cards */}
       {perTokenMetrics.length > 0 && (

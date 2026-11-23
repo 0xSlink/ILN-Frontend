@@ -126,15 +126,21 @@ export default function LPRiskSummaryPanel({
       const isDisputed = invoice.status === 'Disputed';
       const isFunded = invoice.status === 'Funded' || isDisputed;
 
-      if (!isFunded) return;
+      if (isFunded) {
+        // Count funded amount as total capital (using funded position value, not face value)
+        totalCapital += invoice.amount;
 
-      totalCapital += invoice.amount;
-      if (isDisputed) {
-        disputedPositions++;
-        capitalAtRisk += invoice.amount;
-      } else if (isNearExpiry || isOverdue) {
-        positionsAtRisk++;
-        capitalAtRisk += invoice.amount;
+        // Capital at risk includes:
+        // 1. Disputed positions: invoices under dispute resolution
+        // 2. Near-expiry positions: invoices due within 24 hours
+        // 3. Overdue positions: invoices past due date
+        if (isDisputed) {
+          disputedPositions++;
+          capitalAtRisk += invoice.amount;
+        } else if (isNearExpiry || isOverdue) {
+          positionsAtRisk++;
+          capitalAtRisk += invoice.amount;
+        }
       }
     });
 
