@@ -31,6 +31,13 @@ import { Select } from '@/components/Select';
 import { Textarea } from '@/components/Textarea';
 import FieldTooltip from '@/components/FieldTooltip';
 import GovernanceMockStatusBanner from '@/components/governance/GovernanceMockStatusBanner';
+import CreatedProposalRecoveryNotice from '@/components/governance/CreatedProposalRecoveryNotice';
+import {
+  currentGovernancePreview,
+  governancePreviewFingerprint,
+  stampGovernancePreview,
+  type StampedGovernancePreview,
+} from '@/lib/governance/simulation';
 import { Loader2 } from 'lucide-react';
 
 interface FormData {
@@ -120,7 +127,9 @@ export default function NewGovernanceProposalPage() {
   const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [resolvedToken, setResolvedToken] = useState<AcceptedToken | null>(null);
   const [tokenLookupError, setTokenLookupError] = useState<string | null>(null);
-  const [simulationResult, setSimulationResult] = useState<ProposalSimulationResult | null>(null);
+  const [previewState, setPreviewState] =
+    useState<StampedGovernancePreview<ProposalSimulationResult> | null>(null);
+  const [previewFailedFor, setPreviewFailedFor] = useState<string | null>(null);
   const [loadingSimulation, setLoadingSimulation] = useState(false);
   const [stage, setStage] = useState<CreateProposalStage | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -234,21 +243,37 @@ export default function NewGovernanceProposalPage() {
     };
   }, [formData, resolvedToken]);
 
+  // A preview is shown only for the exact payload that produced it (#1322).
+  const payloadFingerprint = useMemo(
+    () => (payload ? governancePreviewFingerprint(payload) : null),
+    [payload]
+  );
+  const simulationResult = currentGovernancePreview(previewState, payloadFingerprint);
+  const previewFailed = previewFailedFor !== null && previewFailedFor === payloadFingerprint;
+
   // Simulate proposal effect when form changes
   useEffect(() => {
     let cancelled = false;
     const debounceSimulation = setTimeout(async () => {
-      if (!payload || !formData.title) {
-        setSimulationResult(null);
+      if (!payload || !payloadFingerprint || !formData.title) {
+        setPreviewState(null);
+        setPreviewFailedFor(null);
+        setLoadingSimulation(false);
         return;
       }
       try {
         setLoadingSimulation(true);
         const result = await simulateProposalEffect(payload);
-        if (!cancelled) setSimulationResult(result);
+        if (!cancelled) {
+          setPreviewState(stampGovernancePreview(result, payloadFingerprint));
+          setPreviewFailedFor(null);
+        }
       } catch (err) {
         console.warn('Failed to simulate proposal effect:', err);
-        if (!cancelled) setSimulationResult(null);
+        if (!cancelled) {
+          setPreviewState(null);
+          setPreviewFailedFor(payloadFingerprint);
+        }
       } finally {
         if (!cancelled) setLoadingSimulation(false);
       }
@@ -258,7 +283,7 @@ export default function NewGovernanceProposalPage() {
       cancelled = true;
       clearTimeout(debounceSimulation);
     };
-  }, [payload, formData.title]);
+  }, [payload, payloadFingerprint, formData.title]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -446,6 +471,7 @@ export default function NewGovernanceProposalPage() {
   return (
     <main className="container mx-auto p-6 max-w-3xl">
       <GovernanceMockStatusBanner action="createProposal" />
+      <CreatedProposalRecoveryNotice />
 
       <h1 className="text-3xl font-bold mb-6">Create New Governance Proposal</h1>
 
@@ -686,6 +712,12 @@ export default function NewGovernanceProposalPage() {
                   </div>
                 )}
               </>
+            )}
+
+            {previewFailed && (
+              <p className="text-sm text-amber-700 dark:text-amber-300">
+                Preview unavailable. Your proposal will still be simulated before your wallet opens.
+              </p>
             )}
 
             {proposedParameterValue && (

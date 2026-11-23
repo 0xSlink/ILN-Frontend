@@ -32,6 +32,22 @@
  *    carries `resubmitSafe: false` — re-signing a governance vote whose
  *    outcome is unknown risks double-voting.
  *
+ * ## Replay and stale-state rules (#1323)
+ *
+ * The contract is the final authority; these client checks stop a doomed or
+ * duplicate transaction from reaching the wallet.
+ *
+ * | Case                         | Observable behavior                                  |
+ * | ---------------------------- | ---------------------------------------------------- |
+ * | Same operation, concurrent   | Callers share one transaction (`utils/governance`)   |
+ * | Retry, earlier tx SUCCESS    | Returns the settled hash; nothing is signed          |
+ * | Retry, earlier tx FAILED     | Pending entry cleared; a new attempt may proceed     |
+ * | Retry, earlier tx unsettled  | `DUPLICATE_PENDING`, `resubmitSafe: false`           |
+ * | Retry, RPC unreachable       | `DUPLICATE_PENDING`, `resubmitSafe: false`           |
+ * | Earlier tx past its time bound | Entry released; simulation re-checks contract state |
+ * | Send interrupted             | `TX_TIMEOUT` with the locally computed hash          |
+ * | Before ETA, vetoed, or stale | `PROPOSAL_NOT_EXECUTABLE` before the wallet prompt   |
+ *
  * The module owns no governance business logic: callers in
  * `src/utils/governance.ts` supply the method name and arguments, which keeps
  * the contract boundary in one place.
@@ -53,7 +69,11 @@ import {
   RPC_URL,
 } from '@/constants';
 import { isCancellationError } from './transaction-lifecycle';
-import { recordPendingTransaction, removePendingTransaction } from './pending-transactions';
+import {
+  findPendingOperation,
+  recordPendingTransaction,
+  removePendingTransaction,
+} from './pending-transactions';
 
 const server = new rpc.Server(RPC_URL);
 
@@ -108,6 +128,20 @@ export const GOVERNANCE_CONFIRMATION_INTERVAL_MS = 1_500;
  */
 export const GOVERNANCE_CONFIRMATION_TIMEOUT_MS = 40_000;
 
+/** Time bound set on every governance transaction. */
+export const GOVERNANCE_TX_VALIDITY_SECONDS = 60;
+/**
+ * How long after recording an unsettled transaction its operation stays locked.
+ * The transaction cannot apply after its time bound; the extra minute absorbs
+ * ledger-close and client-clock differences.
+ */
+export const GOVERNANCE_PENDING_LOCK_MS = (GOVERNANCE_TX_VALIDITY_SECONDS + 60) * 1_000;
+/**
+ * Tolerance for comparing a chain ETA with the client clock. Inside this window
+ * the contract simulation decides, so a skewed clock cannot block a valid call.
+ */
+export const GOVERNANCE_ETA_CLOCK_SKEW_SECONDS = 60;
+
 /** Statuses `sendTransaction` may return for a transaction the network accepted. */
 const ACCEPTED_SEND_STATUSES = new Set(['PENDING', 'DUPLICATE']);
 
@@ -139,7 +173,13 @@ export type GovernanceTxErrorCode =
   /** The network reported the transaction as failed. */
   | 'TX_FAILED'
   /** The confirmation bound was reached; the outcome is unknown. */
-  | 'TX_TIMEOUT';
+  | 'TX_TIMEOUT'
+  /** An earlier transaction for this operation is still unsettled (#1323). */
+  | 'DUPLICATE_PENDING'
+  /** Fresh proposal state shows it cannot be executed now (#1323). */
+  | 'PROPOSAL_NOT_EXECUTABLE'
+  /** A mock-only action was attempted in a production build (#1320). */
+  | 'MOCK_ACTION_BLOCKED';
 
 /** Which stage of the pipeline produced the error. */
 export type GovernanceTxPhase =
@@ -199,7 +239,10 @@ export class GovernanceUnavailableError extends GovernanceTxError {
   constructor(options: {
     code: Extract<
       GovernanceTxErrorCode,
-      'CONTRACT_NOT_CONFIGURED' | 'ENTRYPOINT_MISSING' | 'SOURCE_ACCOUNT_MISSING'
+      | 'CONTRACT_NOT_CONFIGURED'
+      | 'ENTRYPOINT_MISSING'
+      | 'SOURCE_ACCOUNT_MISSING'
+      | 'MOCK_ACTION_BLOCKED'
     >;
     message: string;
     remediation: string;
@@ -453,6 +496,68 @@ export function assertGovernanceWritesConfigured(method?: GovernanceMutationMeth
   });
 }
 
+/** Chain-derived proposal fields needed to decide whether execution is possible. */
+export interface ExecutableProposalSnapshot {
+  id: number;
+  status: string;
+  /** Earliest execution time (ETA), in Unix seconds, when the chain reports one. */
+  executableAfter?: number;
+}
+
+function proposalNotExecutable(message: string, remediation: string, diagnostics?: string) {
+  return new GovernanceTxError({
+    code: 'PROPOSAL_NOT_EXECUTABLE',
+    phase: 'preflight',
+    method: 'execute_proposal',
+    message: `PROPOSAL_NOT_EXECUTABLE: ${message}`,
+    remediation,
+    diagnostics,
+    // Nothing was signed. A retry is safe once fresh state allows it.
+    resubmitSafe: true,
+  });
+}
+
+/**
+ * Rejects execution from a freshly read proposal before the wallet opens.
+ *
+ * Only `Passed` proposals at or past their ETA continue. Missing, mismatched,
+ * vetoed, rejected, active, and already executed proposals fail closed.
+ */
+export function assertProposalExecutable(
+  proposal: ExecutableProposalSnapshot | null | undefined,
+  proposalId: number,
+  nowSeconds: number = Math.floor(Date.now() / 1000)
+): void {
+  const reload = 'Reload the proposal to see its current on-chain state.';
+  if (!proposal || proposal.id !== proposalId) {
+    throw proposalNotExecutable(`proposal ${proposalId} could not be confirmed on-chain.`, reload);
+  }
+  if (proposal.status !== 'Passed') {
+    throw proposalNotExecutable(
+      `proposal ${proposalId} is ${proposal.status}, so it cannot be executed.`,
+      reload
+    );
+  }
+  if (
+    proposal.executableAfter !== undefined &&
+    nowSeconds + GOVERNANCE_ETA_CLOCK_SKEW_SECONDS < proposal.executableAfter
+  ) {
+    throw proposalNotExecutable(
+      `proposal ${proposalId} is still inside its timelock.`,
+      'Wait until the timelock expires, then try again.'
+    );
+  }
+}
+
+/** Builds the typed failure for a proposal state read that could not complete. */
+export function proposalStateUnavailableError(err: unknown): GovernanceTxError {
+  return proposalNotExecutable(
+    'the latest proposal state could not be read.',
+    'Check your connection and try again. Nothing was signed or submitted.',
+    err instanceof Error ? err.message : String(err)
+  );
+}
+
 /** True when on-chain governance writes are possible in this deployment. */
 export function governanceWritesEnabled(): boolean {
   return GOVERNANCE_CONTRACT_CONFIGURED;
@@ -530,7 +635,7 @@ export async function simulateGovernanceMutation(options: {
         args,
       })
     )
-    .setTimeout(60)
+    .setTimeout(GOVERNANCE_TX_VALIDITY_SECONDS)
     .build();
 
   let simulation: rpc.Api.SimulateTransactionResponse;
@@ -602,6 +707,8 @@ export interface GovernanceSubmitOptions {
   onStage?: (stage: GovernanceSubmissionStage) => void;
   /** Label recorded on the pending entry so a reload can reconcile it. */
   pendingLabel?: string;
+  /** Stable key for the logical action; blocks replay across retries and reloads. */
+  operationKey?: string;
   attempts?: number;
   intervalMs?: number;
   timeoutMs?: number;
@@ -631,6 +738,7 @@ export async function submitGovernanceMutation(
     method,
     onStage,
     pendingLabel,
+    operationKey,
     attempts = GOVERNANCE_CONFIRMATION_ATTEMPTS,
     intervalMs = GOVERNANCE_CONFIRMATION_INTERVAL_MS,
     timeoutMs = GOVERNANCE_CONFIRMATION_TIMEOUT_MS,
@@ -667,19 +775,30 @@ export async function submitGovernanceMutation(
     });
   }
 
-  const sent = await client.sendTransaction(signedTx);
+  // Recorded before sending: a reload or dropped response during submission
+  // must still leave a hash that can be reconciled (#1323).
+  const pendingEntry = {
+    label: pendingLabel ?? method ?? 'governance',
+    ...(operationKey ? { operationKey } : {}),
+  };
+  const localHash = signedTx.hash().toString('hex');
+  recordPendingTransaction({ hash: localHash, ...pendingEntry });
 
-  if (!sent.hash || !sent.status) {
-    throw new GovernanceTxFailedError({
-      code: 'SUBMISSION_REJECTED',
-      phase: 'submission',
-      method,
-      message: 'SUBMISSION_REJECTED: the RPC server returned an invalid submission response.',
-      remediation: 'The network did not acknowledge the submission. Try again in a moment.',
-    });
+  let sent: rpc.Api.SendTransactionResponse;
+  try {
+    sent = await client.sendTransaction(signedTx);
+  } catch {
+    // The request may have reached the network, so the outcome is unknown.
+    throw new GovernanceTxTimeoutError({ txHash: localHash, attempts: 0, elapsedMs: 0, method });
+  }
+
+  if (!sent?.hash || !sent.status) {
+    // An unusable acknowledgement does not prove the transaction was refused.
+    throw new GovernanceTxTimeoutError({ txHash: localHash, attempts: 0, elapsedMs: 0, method });
   }
 
   if (!ACCEPTED_SEND_STATUSES.has(sent.status)) {
+    removePendingTransaction(localHash);
     throw new GovernanceTxFailedError({
       code: 'SUBMISSION_REJECTED',
       phase: 'submission',
@@ -694,18 +813,26 @@ export async function submitGovernanceMutation(
   }
 
   onStage?.('submitted');
-  // Recorded *before* polling: if the page reloads mid-confirmation, the hash
-  // is still reconcilable from network truth afterwards (#1143).
-  recordPendingTransaction({ hash: sent.hash, label: pendingLabel ?? method ?? 'governance' });
+  if (sent.hash !== localHash) {
+    removePendingTransaction(localHash);
+    recordPendingTransaction({ hash: sent.hash, ...pendingEntry });
+  }
   onStage?.('confirming');
 
   const startedAt = Date.now();
   let attempt = 0;
 
   while (attempt < attempts) {
-    const settled = await client.getTransaction(sent.hash);
+    // A failed status read says nothing about the transaction, so it counts
+    // as one more unsettled poll and remains subject to both bounds.
+    let settled: rpc.Api.GetTransactionResponse | null;
+    try {
+      settled = await client.getTransaction(sent.hash);
+    } catch {
+      settled = null;
+    }
 
-    if (settled.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+    if (settled?.status === rpc.Api.GetTransactionStatus.SUCCESS) {
       removePendingTransaction(sent.hash);
       return {
         txHash: sent.hash,
@@ -714,7 +841,7 @@ export async function submitGovernanceMutation(
       };
     }
 
-    if (settled.status === rpc.Api.GetTransactionStatus.FAILED) {
+    if (settled?.status === rpc.Api.GetTransactionStatus.FAILED) {
       // A settled failure is final: drop the pending entry so it is not
       // re-polled, and report it as a failure rather than a timeout.
       removePendingTransaction(sent.hash);
@@ -763,6 +890,8 @@ export interface GovernanceMutationOptions {
   signTx: (txXdr: string) => Promise<string>;
   onStage?: (stage: GovernanceSubmissionStage) => void;
   pendingLabel?: string;
+  /** Stable key for the logical action; see {@link submitGovernanceMutation}. */
+  operationKey?: string;
   attempts?: number;
   intervalMs?: number;
   timeoutMs?: number;
@@ -771,6 +900,58 @@ export interface GovernanceMutationOptions {
     'getAccount' | 'simulateTransaction' | 'sendTransaction' | 'getTransaction'
   >;
   sleep?: (ms: number) => Promise<void>;
+}
+
+/**
+ * Settles an earlier submission of the same operation from network truth.
+ *
+ * Returns its confirmation when it landed, `null` when a new attempt is safe,
+ * and throws `DUPLICATE_PENDING` while the outcome is still unknown.
+ */
+async function resolvePendingOperation(
+  operationKey: string,
+  client: Pick<rpc.Server, 'getTransaction'>,
+  method: GovernanceMutationMethod
+): Promise<GovernanceConfirmation | null> {
+  const pending = findPendingOperation(operationKey);
+  if (!pending) return null;
+
+  let settled: rpc.Api.GetTransactionResponse | null;
+  try {
+    settled = await client.getTransaction(pending.hash);
+  } catch {
+    settled = null;
+  }
+
+  if (settled?.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+    removePendingTransaction(pending.hash);
+    return {
+      txHash: pending.hash,
+      ledger: 'ledger' in settled ? settled.ledger : undefined,
+      returnValue: 'returnValue' in settled ? settled.returnValue : undefined,
+    };
+  }
+  if (settled?.status === rpc.Api.GetTransactionStatus.FAILED) {
+    removePendingTransaction(pending.hash);
+    return null;
+  }
+  if (settled && Date.now() - pending.createdAt > GOVERNANCE_PENDING_LOCK_MS) {
+    // NOT_FOUND past the time bound: it can no longer apply. If it applied and
+    // was pruned from RPC history, simulation still sees the contract state.
+    removePendingTransaction(pending.hash);
+    return null;
+  }
+
+  throw new GovernanceTxError({
+    code: 'DUPLICATE_PENDING',
+    phase: 'preflight',
+    method,
+    txHash: pending.hash,
+    message: `DUPLICATE_PENDING: transaction ${pending.hash} for this action is still unsettled.`,
+    remediation:
+      'Your earlier transaction may still confirm. Wait for it to settle before trying again.',
+    resubmitSafe: false,
+  });
 }
 
 /**
@@ -783,6 +964,15 @@ export interface GovernanceMutationOptions {
 export async function executeGovernanceMutation(
   options: GovernanceMutationOptions
 ): Promise<GovernanceConfirmation> {
+  if (options.operationKey) {
+    const replay = await resolvePendingOperation(
+      options.operationKey,
+      options.rpcServer ?? server,
+      options.method
+    );
+    if (replay) return replay;
+  }
+
   const { prepared } = await simulateGovernanceMutation({
     method: options.method,
     args: options.args,
@@ -796,6 +986,7 @@ export async function executeGovernanceMutation(
     method: options.method,
     onStage: options.onStage,
     pendingLabel: options.pendingLabel,
+    operationKey: options.operationKey,
     attempts: options.attempts,
     intervalMs: options.intervalMs,
     timeoutMs: options.timeoutMs,

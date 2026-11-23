@@ -10,6 +10,7 @@ import {
 import { resolveFederatedAddress } from '@/utils/federation';
 import { useWallet } from '@/context/WalletContext';
 import { useTransaction } from '@/hooks/useTransaction';
+import { governanceMocksAllowed } from '@/lib/governance/mock-guard';
 import {
   Users,
   UserPlus,
@@ -164,8 +165,11 @@ export const DelegationPanel: React.FC = () => {
     return false;
   }, [resolvedDelegate, address, contractCycleDetected]);
 
+  // Delegation has no on-chain submission path yet, so production is read-only (#1320).
+  const delegationWritable = governanceMocksAllowed();
+
   const handleDelegate = async () => {
-    if (!resolvedDelegate || isCycleDetected || !address) return;
+    if (!delegationWritable || !resolvedDelegate || isCycleDetected || !address) return;
 
     delegatingRef.current = true;
     const success = await execute(
@@ -182,7 +186,7 @@ export const DelegationPanel: React.FC = () => {
   };
 
   const handleUndelegate = async () => {
-    if (!address) return;
+    if (!delegationWritable || !address) return;
     delegatingRef.current = true;
     const success = await execute(
       async () => delegateVotingPower(null, address, signTx),
@@ -233,6 +237,15 @@ export const DelegationPanel: React.FC = () => {
             Retry
           </button>
         </div>
+      ) : null}
+      {!delegationWritable ? (
+        <p
+          role="status"
+          className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300"
+        >
+          Vote delegation is unavailable in this deployment until its on-chain transaction path
+          ships.
+        </p>
       ) : null}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center space-x-2">
@@ -335,9 +348,9 @@ export const DelegationPanel: React.FC = () => {
             </div>
             <button
               onClick={handleDelegate}
-              disabled={!resolvedDelegate || isCycleDetected || txLoading}
+              disabled={!delegationWritable || !resolvedDelegate || isCycleDetected || txLoading}
               className={`px-6 py-2 rounded-xl font-bold flex items-center space-x-2 transition-all ${
-                !resolvedDelegate || isCycleDetected || txLoading
+                !delegationWritable || !resolvedDelegate || isCycleDetected || txLoading
                   ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                   : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'
               }`}
@@ -383,8 +396,8 @@ export const DelegationPanel: React.FC = () => {
               </div>
               <button
                 onClick={handleUndelegate}
-                disabled={txLoading}
-                className="flex items-center space-x-1 text-sm font-bold text-red-600 hover:text-red-700 transition-colors"
+                disabled={!delegationWritable || txLoading}
+                className="flex items-center space-x-1 text-sm font-bold text-red-600 hover:text-red-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <UserMinus className="w-4 h-4" />
                 <span>Undelegate</span>

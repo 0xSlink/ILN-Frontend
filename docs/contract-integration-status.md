@@ -109,6 +109,10 @@ Remaining stubs in `src/utils/governance.ts`:
 - `ParameterUpdated` event log subscription (#656)
 - `getDelegationInfo` — reads and normalizes on-chain delegation state, or throws `DelegationError` so callers surface unavailable state instead of inventing figures (#111, #1324).
 - `castVote` (line 264)
+- `delegateVotingPower` and mock fallbacks are development/test only. Production builds reject the write with `MOCK_ACTION_BLOCKED` and never return mock proposals or signer rotations (#1320).
+- Proposal effect previews are labeled client estimates. They are withheld once the form changes, and `create_proposal` is still simulated before signing (#1322).
+- A created proposal's id comes only from the confirmed transaction return value. Its hash and recovery state persist locally across reload and retry, independent of event delay (#1321).
+- Execution re-reads proposal state before signing, and an unsettled transaction blocks a replay of the same operation (#1323).
 - `getVotingPower` — reads delegated voting power directly from governance contract authority (#1048); callers must reconcile with delegation and label read failures unavailable (#1324).
 - `delegateVotingPower` remains a stubbed client-side intent/hash path (no confirmed on-chain submission)
 - `getGovTokenBalance` (line 326)

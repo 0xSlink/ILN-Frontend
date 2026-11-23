@@ -21,6 +21,7 @@ import {
   type CreateProposalStage,
 } from '../create-proposal';
 import { ProposalValidationError, proposalDescriptionHash, toHex } from '../contract-schema';
+import { getTrackedProposals, proposalTrackingScope } from '../metadata';
 
 const GOV = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
 const PROPOSER = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
@@ -254,5 +255,75 @@ describe('decodeContractError', () => {
       name: 'GovernanceError#99',
     });
     expect(decodeContractError('timeout')).toBeNull();
+  });
+});
+
+describe('submitCreateProposal – proposal id persistence (#1321)', () => {
+  const scope = proposalTrackingScope(Networks.TESTNET, GOV);
+
+  it('clears tracking after the chain returns an id', async () => {
+    const { req } = request({ operationKey: 'proposal-key' });
+
+    await submitCreateProposal(req);
+
+    expect(getTrackedProposals(scope)).toEqual([]);
+  });
+
+  it('keeps a recoverable hash when sendTransaction is interrupted', async () => {
+    const { req, server } = request({ operationKey: 'proposal-key' });
+    server.sendTransaction.mockRejectedValueOnce(new Error('connection reset'));
+
+    const error = await submitCreateProposal(req).catch((err) => err);
+
+    expect(error).toMatchObject({ code: 'CONFIRMATION_TIMEOUT', stage: 'submitting' });
+    expect(getTrackedProposals(scope)).toEqual([
+      expect.objectContaining({ status: 'pending', txHash: error.details.txHash }),
+    ]);
+    expect(getPendingTransactions().map((entry) => entry.hash)).toContain(error.details.txHash);
+  });
+
+  it('keeps the tracked hash when status polling is interrupted', async () => {
+    const { req, server } = request({ operationKey: 'proposal-key' });
+    server.pollTransaction.mockRejectedValueOnce(new Error('offline'));
+
+    await expect(submitCreateProposal(req)).rejects.toMatchObject({
+      code: 'CONFIRMATION_TIMEOUT',
+    });
+    expect(getTrackedProposals(scope)).toEqual([
+      expect.objectContaining({ status: 'pending', txHash: HASH }),
+    ]);
+  });
+
+  it('marks a confirmed transaction without an id as unresolved', async () => {
+    const { req, server } = request({ operationKey: 'proposal-key' });
+    server.pollTransaction.mockResolvedValueOnce({
+      status: rpc.Api.GetTransactionStatus.SUCCESS,
+      ledger: 4321,
+    });
+
+    await expect(submitCreateProposal(req)).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+    expect(getTrackedProposals(scope)).toEqual([
+      expect.objectContaining({ status: 'unresolved', txHash: HASH }),
+    ]);
+  });
+
+  it('tracks two unsettled proposals independently', async () => {
+    for (const [operationKey, hash] of [
+      ['proposal-a', 'c'.repeat(64)],
+      ['proposal-b', 'd'.repeat(64)],
+    ]) {
+      const { req, server } = request({ operationKey });
+      server.sendTransaction.mockResolvedValueOnce({ hash, status: 'PENDING' });
+      server.pollTransaction.mockResolvedValueOnce({
+        status: rpc.Api.GetTransactionStatus.NOT_FOUND,
+      });
+      await expect(submitCreateProposal(req)).rejects.toMatchObject({
+        code: 'CONFIRMATION_TIMEOUT',
+      });
+    }
+
+    expect(getPendingTransactions().map((entry) => entry.hash)).toEqual(
+      expect.arrayContaining(['c'.repeat(64), 'd'.repeat(64)])
+    );
   });
 });

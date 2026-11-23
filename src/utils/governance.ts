@@ -3,7 +3,6 @@ import {
   xdr,
   nativeToScVal,
   scValToNative,
-  nativeToScVal,
   TransactionBuilder,
   Transaction,
   Account,
@@ -20,17 +19,23 @@ import {
   STELLAR_NETWORK,
 } from '@/constants';
 import {
+  assertProposalExecutable,
   executeGovernanceMutation,
   governanceWritesEnabled,
   GovernanceTxError,
+  GovernanceUnavailableError,
+  proposalStateUnavailableError,
+  type ExecutableProposalSnapshot,
   type GovernanceMutationMethod,
   type GovernanceSubmissionStage,
 } from '@/lib/governance-tx';
+import { recordPendingTransaction, removePendingTransaction } from '@/lib/pending-transactions';
 import { isCancellationError } from '@/lib/transaction-lifecycle';
 import { getConfiguredStellarNetwork, networksMatch } from '@/utils/network';
 import { sep10Session } from '@/lib/sep10Session';
 import {
   assertGovernanceSimulationPassed,
+  type GovernancePreviewProvenance,
   type GovernanceSimulationOutcome,
 } from '@/lib/governance/simulation';
 import {
@@ -52,7 +57,13 @@ import {
   parameterLabel,
   type ParameterUpdateEvent,
 } from '@/lib/governance/parameter-events';
-import { submitCreateProposal, type CreateProposalStage } from '@/lib/governance/create-proposal';
+import {
+  CreateProposalError,
+  submitCreateProposal,
+  type CreateProposalStage,
+} from '@/lib/governance/create-proposal';
+import { proposalTrackingScope, recoverTrackedProposal } from '@/lib/governance/metadata';
+import { governanceMocksAllowed } from '@/lib/governance/mock-guard';
 import { getApprovedTokenIds, getTokenMetadata } from '@/utils/soroban';
 
 export type { CreateProposalFormType, CreateProposalPayload, AcceptedToken, ProtocolParameters };
@@ -436,12 +447,6 @@ export const GOVERNANCE_INTEGRATION_STATUS: Record<
 
 export type GovernanceAction = keyof typeof GOVERNANCE_INTEGRATION_STATUS;
 
-export function clearGovernanceIdempotencyCache(): void {}
-
-export function getUserVote(_proposalId: number): VoteChoice | undefined {
-  return undefined;
-}
-
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -651,6 +656,23 @@ export function clearGovernanceIdempotencyCache(): void {
   delegateInFlight.clear();
 }
 
+/** Shares one in-progress write between identical concurrent requests (#1323). */
+async function coalesceInFlight(
+  inFlight: Map<string, Promise<string>>,
+  key: string,
+  run: () => Promise<string>
+): Promise<string> {
+  const active = inFlight.get(key);
+  if (active) return active;
+  const pending = run();
+  inFlight.set(key, pending);
+  try {
+    return await pending;
+  } finally {
+    inFlight.delete(key);
+  }
+}
+
 export function getUserVote(proposalId: number): VoteChoice | undefined {
   return userVotes.get(proposalId);
 }
@@ -709,6 +731,11 @@ export interface GovernanceMutationOptions {
   onConfirmed?: (txHash: string) => void | Promise<void>;
   votingPower?: number;
   walletNetwork?: string;
+  /**
+   * Reads current chain state immediately before an execution. When supplied,
+   * a vetoed, stale, or pre-ETA proposal fails before the wallet opens (#1323).
+   */
+  readProposal?: (proposalId: number) => Promise<ExecutableProposalSnapshot | null>;
   onStage?: (stage: GovernanceSubmissionStage) => void;
   attempts?: number;
   intervalMs?: number;
@@ -838,12 +865,14 @@ export interface FetchProposalsOptions {
 }
 
 export async function fetchProposals(options: FetchProposalsOptions = {}): Promise<Proposal[]> {
+  // A caller can never enable mock proposals in a production build (#1320).
+  const allowMockFallback = options.allowMockFallback === true && governanceMocksAllowed();
   let callResult: rpc.Api.SimulateTransactionResponse;
   try {
     const tx = buildGovernanceReadTransaction('list_proposals');
     callResult = await server.simulateTransaction(tx);
   } catch (err) {
-    if (options.allowMockFallback) {
+    if (allowMockFallback) {
       return MOCK_PROPOSALS.map((p) => ({
         ...p,
         userVote: userVotes.get(p.id),
@@ -867,7 +896,7 @@ export async function fetchProposals(options: FetchProposalsOptions = {}): Promi
     }
   }
 
-  if (options.allowMockFallback) {
+  if (allowMockFallback) {
     return MOCK_PROPOSALS.map((p) => ({
       ...p,
       userVote: userVotes.get(p.id),
@@ -999,7 +1028,7 @@ function requireSep10Session(signerAddress: string): void {
 
 /**
  * Deterministic stand-in transaction hash derived from the wallet signature.
- * Replaces the previous `Math.random()` hashes so no fabricated random value
+ * Replaces the previous random hashes so no fabricated random value
  * reaches the UI (#1141); the same signed intent always yields the same hash.
  * Emits a 64-character hex string so it satisfies the standard Stellar
  * transaction-hash shape enforced by `isValidTxHash` (#1148).
@@ -1009,7 +1038,7 @@ function parseCreatedProposalId(returnValue?: xdr.ScVal): number {
     try {
       const native = scValToNative(returnValue);
       const id = Number(typeof native === 'object' && native !== null ? native.id : native);
-      if (Number.isInteger(id) && id > 0) return id;
+      if (Number.isSafeInteger(id) && id > 0) return id;
     } catch {
       /* fall through to the explicit error below */
     }
@@ -1096,30 +1125,34 @@ export async function castVote(
     if (existingHash) return existingHash;
   }
 
-  // Dry-run before the wallet prompt: a failed simulation is rendered to the
-  // user without ever opening the wallet, and nothing is mutated (#1063).
-  if (options.simulate) {
-    await assertGovernanceSimulationPassed(options.simulate);
-  }
+  return coalesceInFlight(voteInFlight, `${voter}:${proposalId}:${choice}`, async () => {
+    // Dry-run before the wallet prompt: a failed simulation is rendered to the
+    // user without ever opening the wallet, and nothing is mutated (#1063).
+    if (options.simulate) {
+      await assertGovernanceSimulationPassed(options.simulate);
+    }
 
-  const { txHash } = await executeGovernanceMutation({
-    method: 'cast_vote',
-    args: [
-      Address.fromString(voter).toScVal(),
-      nativeToScVal(proposalId, { type: 'u64' }),
-      nativeToScVal(VOTE_CHOICE_CODE[choice], { type: 'u32' }),
-    ],
-    signerAddress: voter,
-    signTx,
-    pendingLabel: `cast_vote:${proposalId}`,
-    ...options,
+    const { txHash } = await executeGovernanceMutation({
+      method: 'cast_vote',
+      args: [
+        Address.fromString(voter).toScVal(),
+        nativeToScVal(proposalId, { type: 'u64' }),
+        nativeToScVal(VOTE_CHOICE_CODE[choice], { type: 'u32' }),
+      ],
+      signerAddress: voter,
+      signTx,
+      pendingLabel: `cast_vote:${proposalId}`,
+      ...options,
+      // Includes the choice so a recovered hash can never record the wrong vote.
+      operationKey: `${voter}:cast_vote:${proposalId}:${choice}`,
+    });
+
+    // Only a confirmed settlement updates local state (#1142).
+    userVotes.set(proposalId, choice);
+    proposalTxHashes.set(cacheKey, txHash);
+    await options.onConfirmed?.(txHash);
+    return txHash;
   });
-
-  // Only a confirmed settlement updates local state (#1142).
-  userVotes.set(proposalId, choice);
-  proposalTxHashes.set(cacheKey, txHash);
-  await options.onConfirmed?.(txHash);
-  return txHash;
 }
 
 /**
@@ -1146,24 +1179,38 @@ export async function executeProposal(
   const existing = proposalTxHashes.get(cacheKey);
   if (existing) return existing;
 
-  // Dry-run before the wallet prompt: a failed simulation is rendered to the
-  // user without ever opening the wallet, and nothing is mutated (#1063).
-  if (options.simulate) {
-    await assertGovernanceSimulationPassed(options.simulate);
-  }
+  return coalesceInFlight(executeInFlight, String(proposalId), async () => {
+    if (options.readProposal) {
+      let fresh: ExecutableProposalSnapshot | null;
+      try {
+        fresh = await options.readProposal(proposalId);
+      } catch (err) {
+        throw proposalStateUnavailableError(err);
+      }
+      assertProposalExecutable(fresh, proposalId);
+    }
 
-  const { txHash } = await executeGovernanceMutation({
-    method: 'execute_proposal',
-    args: [Address.fromString(caller).toScVal(), nativeToScVal(proposalId, { type: 'u64' })],
-    signerAddress: caller,
-    signTx,
-    pendingLabel: `execute_proposal:${proposalId}`,
-    ...options,
+    // Dry-run before the wallet prompt: a failed simulation is rendered to the
+    // user without ever opening the wallet, and nothing is mutated (#1063).
+    if (options.simulate) {
+      await assertGovernanceSimulationPassed(options.simulate);
+    }
+
+    const { txHash } = await executeGovernanceMutation({
+      method: 'execute_proposal',
+      args: [Address.fromString(caller).toScVal(), nativeToScVal(proposalId, { type: 'u64' })],
+      signerAddress: caller,
+      signTx,
+      pendingLabel: `execute_proposal:${proposalId}`,
+      ...options,
+      // Execution is global, so the key is shared by every wallet in this browser.
+      operationKey: `execute_proposal:${proposalId}`,
+    });
+
+    proposalTxHashes.set(cacheKey, txHash);
+    await options.onConfirmed?.(txHash);
+    return txHash;
   });
-
-  proposalTxHashes.set(cacheKey, txHash);
-  await options.onConfirmed?.(txHash);
-  return txHash;
 }
 
 /**
@@ -1191,35 +1238,30 @@ export async function vetoProposal(
   const existing = proposalTxHashes.get(cacheKey);
   if (existing) return existing;
 
-  // Simulation fails before signing: no wallet prompt, no veto record (#1063).
-  if (options.simulate) {
-    await assertGovernanceSimulationPassed(options.simulate);
-  }
+  return coalesceInFlight(vetoInFlight, `${proposalId}:${reasonHash}`, async () => {
+    // Simulation fails before signing: no wallet prompt, no veto record (#1063).
+    if (options.simulate) {
+      await assertGovernanceSimulationPassed(options.simulate);
+    }
 
-  const { txHash } = await executeGovernanceMutation({
-    method: 'veto_proposal',
-    args: [
-      Address.fromString(admin).toScVal(),
-      nativeToScVal(proposalId, { type: 'u64' }),
-      nativeToScVal(reasonHash, { type: 'string' }),
-    ],
-    signerAddress: admin,
-    signTx,
-    pendingLabel: `veto_proposal:${proposalId}`,
-    ...options,
+    const { txHash } = await executeGovernanceMutation({
+      method: 'veto_proposal',
+      args: [
+        Address.fromString(admin).toScVal(),
+        nativeToScVal(proposalId, { type: 'u64' }),
+        nativeToScVal(reasonHash, { type: 'string' }),
+      ],
+      signerAddress: admin,
+      signTx,
+      pendingLabel: `veto_proposal:${proposalId}`,
+      ...options,
+      operationKey: `veto_proposal:${proposalId}`,
+    });
+
+    proposalTxHashes.set(cacheKey, txHash);
+    await options.onConfirmed?.(txHash);
+    return txHash;
   });
-
-  // Confirmed on-chain: record the settled veto so the detail page can show
-  // it before the next contract read completes.
-  const record: VetoRecord = {
-    proposalId,
-    admin,
-    reasonHash,
-    createdAt: Math.floor(Date.now() / 1000),
-  };
-  proposalTxHashes.set(cacheKey, txHash);
-  await options.onConfirmed?.(txHash);
-  return txHash;
 }
 
 export function getVetoHistory(proposalId: number): VetoRecord[] {
@@ -1423,7 +1465,6 @@ async function requireGovernanceSignature(
   signerAddress: string,
   signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
-  if (!signerAddress) return `unsigned:${intent}`;
   try {
     return await signTx(intent);
   } catch (err) {
@@ -1462,6 +1503,16 @@ export async function delegateVotingPower(
   signTx: (xdr: string) => Promise<string>,
   options: GovernanceMutationOptions = {}
 ): Promise<string> {
+  // This path signs an intent and derives a local hash; it submits nothing.
+  // Production must not prompt the wallet or report that as a success (#1320).
+  if (!governanceMocksAllowed()) {
+    throw new GovernanceUnavailableError({
+      code: 'MOCK_ACTION_BLOCKED',
+      message: 'MOCK_ACTION_BLOCKED: vote delegation is not available on-chain in this build.',
+      remediation: 'Vote delegation is disabled until its on-chain transaction path ships.',
+    });
+  }
+
   requireSep10Session(signerAddress);
 
   if (!signerAddress || !isValidStellarAddress(signerAddress)) {
@@ -1730,6 +1781,38 @@ export async function createProposal(
   if (inFlight) return inFlight;
 
   const run = (async () => {
+    // A retry after a reload or timeout must recover the earlier transaction
+    // instead of creating a second proposal (#1321).
+    const recovery = await recoverTrackedProposal(
+      proposalTrackingScope(NETWORK_PASSPHRASE, GOVERNANCE_CONTRACT_ID),
+      idempotencyKey,
+      (hash) => server.getTransaction(hash)
+    );
+    if (recovery.kind === 'confirmed') {
+      proposalCreationCache.set(idempotencyKey, {
+        txHash: recovery.txHash,
+        proposalId: recovery.proposalId,
+        timestamp: Date.now(),
+      });
+      await options.onConfirmed?.(recovery.txHash);
+      return { txHash: recovery.txHash, proposalId: recovery.proposalId };
+    }
+    if (recovery.kind === 'blocked') {
+      throw recovery.reason === 'pending'
+        ? new CreateProposalError(
+            'CONFIRMATION_TIMEOUT',
+            'confirming',
+            'Your earlier proposal transaction has not settled. Wait before trying again.',
+            { txHash: recovery.txHash }
+          )
+        : new CreateProposalError(
+            'INVALID_RESPONSE',
+            'confirming',
+            'Your earlier proposal confirmed without a readable id. Check the proposal list.',
+            { txHash: recovery.txHash }
+          );
+    }
+
     const context = options.context ?? toValidationContext(await fetchProtocolParameters());
     const created = await submitCreateProposal({
       payload,
@@ -1741,6 +1824,7 @@ export async function createProposal(
       networkPassphrase: NETWORK_PASSPHRASE,
       onStage: options.onStage,
       walletNetwork: options.walletNetwork,
+      operationKey: idempotencyKey,
     });
     proposalCreationCache.set(idempotencyKey, {
       txHash: created.txHash,
@@ -1818,12 +1902,14 @@ export const MOCK_SIGNER_ROTATIONS: SignerRotatedEvent[] = [
 
 /**
  * Fetch multisig signer rotation events from Horizon / Soroban transactions.
- * Falls back to mock signer rotations if Horizon yields no events.
+ * Outside production, falls back to mock rotations when Horizon yields none.
+ * In production an empty history stays empty and a failed read throws (#1320).
  */
 export async function fetchSignerRotations(): Promise<SignerRotatedEvent[]> {
   const base = getHorizonBaseUrl();
   const url = `${base}/transactions?accounts=${encodeURIComponent(GOVERNANCE_CONTRACT_ID)}&order=desc&limit=${GOVERNANCE_PAGE_LIMIT}`;
   const events: SignerRotatedEvent[] = [];
+  let readError: unknown;
 
   try {
     let nextUrl = url;
@@ -1864,12 +1950,19 @@ export async function fetchSignerRotations(): Promise<SignerRotatedEvent[]> {
       if (!nextHref) break;
       nextUrl = nextHref;
     }
-  } catch {
-    // Fall through to mock data
+  } catch (err) {
+    readError = err;
   }
 
   if (events.length > 0) {
     return events.sort((a, b) => b.rotatedAt - a.rotatedAt);
+  }
+
+  if (!governanceMocksAllowed()) {
+    if (readError !== undefined) {
+      throw new GovernanceReadError('Failed to read signer rotation events', readError);
+    }
+    return [];
   }
 
   return [...MOCK_SIGNER_ROTATIONS].sort((a, b) => b.rotatedAt - a.rotatedAt);
@@ -1943,8 +2036,10 @@ export async function fetchVotesForAddress(address: string): Promise<VoteCastEve
           const proposalId = Number(decodeHexOrUtf8Topic(evt.topics?.[1]) ?? 0);
           const support = decodeHexOrUtf8Topic(evt.topics?.[3]);
           const vote: VoteChoice = support === 'true' || support === '1' ? 'For' : 'Against';
-          const proposalTitle =
-            MOCK_PROPOSALS.find((p) => p.id === proposalId)?.title ?? `Proposal #${proposalId}`;
+          const mockTitle = governanceMocksAllowed()
+            ? MOCK_PROPOSALS.find((p) => p.id === proposalId)?.title
+            : undefined;
+          const proposalTitle = mockTitle ?? `Proposal #${proposalId}`;
           const timestamp = tx.created_at ? Math.floor(Date.parse(tx.created_at) / 1000) : 0;
 
           votes.push({
@@ -1973,53 +2068,30 @@ export async function fetchVotesForAddress(address: string): Promise<VoteCastEve
 
 export interface ProposalSimulationResult {
   isContractVerified: boolean;
+  /** Where this preview came from; see `src/lib/governance/simulation.ts` (#1322). */
+  provenance?: GovernancePreviewProvenance;
   estimatedEffect: string;
   warnings?: string[];
 }
 
 /**
- * Simulate the effect of a proposed parameter change without executing it.
- * If the contract's `simulate_proposal_effect` function is available, returns
- * a contract-verified simulation. Otherwise, returns a client-side estimate with
- * a clear disclaimer.
+ * Builds a labeled, client-side preview of a proposed parameter change.
  *
- * @param payload - The proposal payload to simulate
- * @returns Simulation result with effect description and verification status
+ * No contract call is made. The previous `simulate_proposal_effect` read sent
+ * no arguments, so a successful response could not describe this payload and
+ * must not be labeled contract-verified (#1322). The real contract check is the
+ * `create_proposal` simulation that runs before the wallet opens.
+ *
+ * @param payload - The proposal payload to describe
+ * @returns Estimate with explicit `client-estimate` provenance
  */
 export async function simulateProposalEffect(
   payload: CreateProposalPayload
 ): Promise<ProposalSimulationResult> {
-  try {
-    // Attempt to call the contract's `simulate_proposal_effect` function
-    // TODO: Wire this to actual Soroban call once contract function is available
-    // Ref: #111
-    const tx = buildGovernanceReadTransaction('simulate_proposal_effect', [
-      // Would pass serialized payload to contract
-    ]);
-
-    const callResult = await server.simulateTransaction(tx);
-
-    // If contract call succeeds, return verified result
-    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
-      const native = scValToNative(callResult.result.retval);
-      return {
-        isContractVerified: true,
-        estimatedEffect: typeof native === 'string' ? native : JSON.stringify(native),
-      };
-    }
-
-    // Fall through to client-side estimate
-    console.warn('Contract simulate_proposal_effect not available, using client-side estimate');
-  } catch (err) {
-    console.warn('simulateProposalEffect contract call failed:', err);
-    // Fall through to client-side estimate
-  }
-
-  // Client-side estimation (not contract-verified)
-  const clientEstimate = generateClientSideEstimate(payload);
   return {
     isContractVerified: false,
-    estimatedEffect: clientEstimate,
+    provenance: 'client-estimate',
+    estimatedEffect: generateClientSideEstimate(payload),
     warnings: [
       'This is an estimated preview, not contract-verified. Actual on-chain effect may differ due to updates between proposal creation and execution.',
     ],
@@ -2028,7 +2100,7 @@ export async function simulateProposalEffect(
 
 /**
  * Generate a client-side estimate of the proposal effect.
- * Used as fallback when contract simulation is unavailable.
+ * It does not establish that the contract will accept the proposal.
  */
 function generateClientSideEstimate(payload: CreateProposalPayload): string {
   switch (payload.formType) {

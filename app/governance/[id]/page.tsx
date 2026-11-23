@@ -288,6 +288,8 @@ export default function ProposalDetailPage() {
       async (signTx) =>
         executeProposal(proposal.id, address, signTx, {
           walletNetwork: walletNetwork ?? undefined,
+          // Re-read chain state so a stale page cannot prompt for a doomed execution.
+          readProposal: (id) => fetchProposal(id),
           onConfirmed: async () => {
             await invalidateGovernanceQueries({
               proposalId: proposal.id,

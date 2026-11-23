@@ -21,7 +21,6 @@ import {
   Operation,
   TransactionBuilder,
   rpc,
-  scValToNative,
   type Transaction,
 } from '@stellar/stellar-sdk';
 import { isCancellationError } from '@/lib/transaction-lifecycle';
@@ -36,6 +35,13 @@ import {
   type CreateProposalPayload,
   type ProposalValidationContext,
 } from './contract-schema';
+import {
+  decodeCreatedProposalId,
+  forgetTrackedProposal,
+  proposalTrackingScope,
+  trackProposalSubmission,
+  updateTrackedProposal,
+} from './metadata';
 
 export type CreateProposalStage =
   | 'validating'
@@ -116,6 +122,8 @@ export interface CreateProposalRequest {
   onStage?: (stage: CreateProposalStage) => void;
   pollAttempts?: number;
   walletNetwork?: string;
+  /** Stable key for this logical proposal, persisted for retry and reload (#1321). */
+  operationKey?: string;
 }
 
 export interface CreatedProposal {
@@ -130,12 +138,6 @@ export interface CreatedProposal {
 const ACCEPTED_SEND_STATUSES = new Set(['PENDING', 'DUPLICATE']);
 const DEFAULT_POLL_ATTEMPTS = 20;
 
-function decodeProposalId(value: unknown): number | null {
-  const id = typeof value === 'bigint' ? value : typeof value === 'number' ? BigInt(value) : null;
-  if (id === null || id <= 0n || id > BigInt(Number.MAX_SAFE_INTEGER)) return null;
-  return Number(id);
-}
-
 export async function submitCreateProposal({
   payload,
   proposer,
@@ -147,6 +149,7 @@ export async function submitCreateProposal({
   onStage,
   pollAttempts = DEFAULT_POLL_ATTEMPTS,
   walletNetwork,
+  operationKey,
 }: CreateProposalRequest): Promise<CreatedProposal> {
   if (
     walletNetwork &&
@@ -242,26 +245,48 @@ export async function submitCreateProposal({
   // ── submitting ───────────────────────────────────────────────────────────
   onStage?.('submitting');
   const signedTx = TransactionBuilder.fromXDR(signedXdr, networkPassphrase) as Transaction;
+  // Tracked before sending so a reload during submission keeps a recoverable
+  // hash. Each transaction gets its own pending key: a shared label would make
+  // the store drop a second, unrelated proposal (#1321).
+  const localHash = signedTx.hash().toString('hex');
+  const recordPending = (hash: string) =>
+    recordPendingTransaction({
+      hash,
+      label: 'create_proposal',
+      operationKey: `create_proposal:${hash}`,
+    });
+  if (operationKey) {
+    trackProposalSubmission({
+      scope: proposalTrackingScope(networkPassphrase, governanceContractId),
+      operationKey,
+      txHash: localHash,
+    });
+  }
+
   let sent: rpc.Api.SendTransactionResponse;
   try {
     sent = await server.sendTransaction(signedTx);
   } catch (error) {
+    recordPending(localHash);
     throw new CreateProposalError(
-      'SUBMISSION_FAILED',
+      'CONFIRMATION_TIMEOUT',
       'submitting',
-      'The network did not accept the transaction.',
-      {},
+      'The submission was interrupted and may still confirm. Check its status before retrying.',
+      { txHash: localHash },
       { cause: error }
     );
   }
   if (!sent?.hash || !sent.status) {
+    recordPending(localHash);
     throw new CreateProposalError(
       'INVALID_RESPONSE',
       'submitting',
-      'RPC returned an invalid submission response.'
+      'RPC returned an invalid submission response. Check its status before retrying.',
+      { txHash: localHash }
     );
   }
   if (!ACCEPTED_SEND_STATUSES.has(sent.status)) {
+    forgetTrackedProposal(localHash);
     throw new CreateProposalError(
       'SUBMISSION_FAILED',
       'submitting',
@@ -269,16 +294,29 @@ export async function submitCreateProposal({
       { txHash: sent.hash }
     );
   }
+  if (sent.hash !== localHash) updateTrackedProposal(localHash, { txHash: sent.hash });
 
   // ── confirming ───────────────────────────────────────────────────────────
   // Recorded before polling so a reload mid-confirmation can be reconciled
   // from network truth instead of being forgotten (#1143).
-  recordPendingTransaction({ hash: sent.hash, label: 'create_proposal' });
+  recordPending(sent.hash);
   onStage?.('confirming');
-  const final = await server.pollTransaction(sent.hash, { attempts: pollAttempts });
+  let final: rpc.Api.GetTransactionResponse;
+  try {
+    final = await server.pollTransaction(sent.hash, { attempts: pollAttempts });
+  } catch (error) {
+    throw new CreateProposalError(
+      'CONFIRMATION_TIMEOUT',
+      'confirming',
+      'The transaction was submitted but its status could not be read. Check it before retrying.',
+      { txHash: sent.hash },
+      { cause: error }
+    );
+  }
 
   if (final.status === rpc.Api.GetTransactionStatus.FAILED) {
     removePendingTransaction(sent.hash);
+    forgetTrackedProposal(sent.hash);
     throw new CreateProposalError(
       'TRANSACTION_FAILED',
       'confirming',
@@ -301,14 +339,10 @@ export async function submitCreateProposal({
   removePendingTransaction(sent.hash);
 
   const success = final as rpc.Api.GetSuccessfulTransactionResponse;
-  let returned: unknown;
-  try {
-    returned = success.returnValue ? scValToNative(success.returnValue) : undefined;
-  } catch {
-    returned = undefined;
-  }
-  const proposalId = decodeProposalId(returned);
+  const proposalId = decodeCreatedProposalId(success.returnValue);
   if (proposalId === null) {
+    // It landed, so retrying must not create a second proposal.
+    updateTrackedProposal(sent.hash, { status: 'unresolved' });
     throw new CreateProposalError(
       'INVALID_RESPONSE',
       'confirming',
@@ -316,6 +350,7 @@ export async function submitCreateProposal({
       { txHash: sent.hash }
     );
   }
+  forgetTrackedProposal(sent.hash);
 
   onStage?.('confirmed');
   return {
