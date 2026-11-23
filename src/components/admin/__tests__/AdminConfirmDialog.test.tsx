@@ -127,4 +127,12 @@ describe('AdminConfirmDialog', () => {
     expect(DEFAULT_PROPS.onConfirm).not.toHaveBeenCalled();
     expect(DEFAULT_PROPS.onCancel).toHaveBeenCalledTimes(1);
   });
+  it('requires an explicit click before invoking a high-impact action', async () => {
+    const user = userEvent.setup();
+    render(<AdminConfirmDialog {...DEFAULT_PROPS} />);
+    expect(DEFAULT_PROPS.onConfirm).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Pause protocol' }));
+    expect(DEFAULT_PROPS.onConfirm).toHaveBeenCalledTimes(1);
+  });
+
 });

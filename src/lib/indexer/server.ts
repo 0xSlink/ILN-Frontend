@@ -60,6 +60,29 @@ function parseVersionPolicy(raw: string | undefined): IndexerVersionPolicy {
   throw new IndexerError('not_configured');
 }
 
+function isBlockedIndexerHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\\.$/, '');
+  if (
+    host === 'localhost' ||
+    host === 'metadata.google.internal' ||
+    host === 'metadata.google' ||
+    host === '0.0.0.0' ||
+    (host === '::1' || host === '[::1]')
+  ) {
+    return true;
+  }
+  const octets = host.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((octet) => !Number.isInteger(octet))) return false;
+  const [first, second] = octets;
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 169 && second === 254)
+  );
+}
+
 let warnedDeprecatedUrl = false;
 
 export function readIndexerServerConfig(source: EnvSource = process.env): IndexerServerConfig {
@@ -89,6 +112,9 @@ export function readIndexerServerConfig(source: EnvSource = process.env): Indexe
     throw new IndexerError('not_configured');
   }
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new IndexerError('not_configured');
+  }
+  if (parsed.username || parsed.password || isBlockedIndexerHost(parsed.hostname)) {
     throw new IndexerError('not_configured');
   }
 

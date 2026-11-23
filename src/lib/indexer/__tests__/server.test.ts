@@ -70,6 +70,18 @@ describe('readIndexerServerConfig', () => {
     }
   });
 
+  it.each([
+    'https://user:pass@indexer.example',
+    'http://127.0.0.1:8080',
+    'http://10.0.0.8:8080',
+    'http://169.254.169.254/latest/meta-data',
+    'http://metadata.google.internal',
+  ])('rejects unsafe proxy target %s', (url) => {
+    expect(() => readIndexerServerConfig({ INDEXER_URL: url })).toThrow(
+      expect.objectContaining({ code: 'not_configured' })
+    );
+  });
+
   it('falls back to the deprecated public URL with a warning', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const config = readIndexerServerConfig({

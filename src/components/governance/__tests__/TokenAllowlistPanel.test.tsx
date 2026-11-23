@@ -230,4 +230,16 @@ describe('TokenAllowlistPanel', () => {
       );
     });
   });
+  it('keeps allowlist controls disabled while the wallet is disconnected', async () => {
+    walletState.address = null;
+    walletState.isConnected = false;
+    render(<TokenAllowlistPanel />);
+    await screen.findByText('USDC');
+
+    expect(screen.getByText('Read-only')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Token contract address')).toBeDisabled();
+    expect(screen.getByText('Add Token')).toBeDisabled();
+    expect(createProposalMock).not.toHaveBeenCalled();
+  });
+
 });
