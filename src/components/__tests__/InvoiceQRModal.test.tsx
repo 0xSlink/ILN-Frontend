@@ -142,4 +142,63 @@ describe('InvoiceQRModal', () => {
 
     expect(() => fireEvent.click(screen.getByText('Print QR Code'))).not.toThrow();
   });
+
+  it('canonicalizes trailing slashes in baseUrl and marks unsigned links as unverified', () => {
+    render(
+      <InvoiceQRModal {...defaultProps} baseUrl="https://iln.example///" onClose={vi.fn()} />
+    );
+
+    expect(screen.getByTestId('qr-svg')).toHaveAttribute(
+      'data-value',
+      'https://iln.example/pay/42'
+    );
+    expect(screen.getByRole('note')).toHaveTextContent('Unsigned payment link');
+    expect(screen.getByRole('note')).toHaveTextContent('not a verified on-chain obligation');
+  });
+
+  it('appends canonical signature parameter when a valid signature is provided', () => {
+    const sig = 'AbCdEf1234567890_sig';
+    render(
+      <InvoiceQRModal
+        {...defaultProps}
+        baseUrl="https://iln.example"
+        signature={sig}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTestId('qr-svg')).toHaveAttribute(
+      'data-value',
+      `https://iln.example/pay/42?sig=${sig}`
+    );
+    expect(screen.getByRole('note')).toHaveTextContent('Signed payment link');
+  });
+
+  it('blocks QR rendering and actions for unsafe baseUrl schemes or invalid invoice amounts', () => {
+    render(
+      <InvoiceQRModal
+        {...defaultProps}
+        baseUrl="javascript:alert(1)"
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('only HTTP and HTTPS origins are allowed');
+    expect(screen.queryByTestId('qr-svg')).not.toBeInTheDocument();
+    expect(screen.queryByText('Download PNG')).not.toBeInTheDocument();
+  });
+
+  it('blocks QR rendering when signature format is invalid', () => {
+    render(
+      <InvoiceQRModal
+        {...defaultProps}
+        baseUrl="https://iln.example"
+        signature="bad sig!"
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Invalid QR payload signature format.');
+    expect(screen.queryByTestId('qr-svg')).not.toBeInTheDocument();
+  });
 });
