@@ -166,8 +166,11 @@ describe('governance – parseProposalStatus & contract parsers', () => {
     expect(parseProposalStatus('Passed')).toBe('Passed');
   });
 
-  it('falls back to Active for unknown status', () => {
-    expect(parseProposalStatus('UnknownVal')).toBe('Active');
+  it('rejects unknown contract statuses rather than presenting them as Active', () => {
+    expect(() => parseProposalStatus('UnknownVal')).toThrow(/unknown proposal status/i);
+    expect(() => parseProposalStatus({ Active: [], Rejected: [] })).toThrow(
+      /unknown proposal status/i
+    );
   });
 
   it('parseProposalFromNative parses native struct correctly', () => {
@@ -191,6 +194,36 @@ describe('governance – parseProposalStatus & contract parsers', () => {
     expect(parsed.type).toBe('ProtocolUpgrade');
     expect(parsed.status).toBe('Rejected');
     expect(parsed.proposer).toBe('GPROPOSER');
+  });
+
+  it('decodes the deployed governance contract proposal shape and rejects invalid IDs', () => {
+    const parsed = parseProposalFromNative({
+      id: 42n,
+      action_type: { UpdateFeeRate: [300] },
+      description_hash: 'a'.repeat(64),
+      status: { Passed: [] },
+      proposer: SIGNER,
+      created_at: 100,
+      voting_end: 200,
+      votes_for: 300,
+      votes_against: 150,
+      eta_ledger: 12,
+    });
+
+    expect(parsed).toMatchObject({
+      id: 42,
+      title: 'Proposal #42',
+      type: 'ParameterUpdate',
+      status: 'Passed',
+      createdAt: 100,
+      votingStartsAt: 100,
+      votingEndsAt: 200,
+      votesFor: 300,
+      votesAgainst: 150,
+    });
+    expect(() => parseProposalFromNative({ id: 0, status: { Active: [] }, type: 'TextProposal' })).toThrow(
+      /invalid proposal identifier/i
+    );
   });
 });
 

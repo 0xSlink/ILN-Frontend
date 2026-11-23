@@ -31,8 +31,9 @@ Governance action indicators read `GOVERNANCE_INTEGRATION_STATUS` in `src/utils/
 | **Insurance**  | `getInsurancePoolInfo`                                                                                                     | **Real**     | `src/utils/soroban.ts`           | Reads `get_total_reserve` / `get_premiums_paid` / `get_base_premium_rate_bps` (`insurance_pool` crate).                                                                               |
 | **Other**      | `getReputation` / `getPayerScore`                                                                                          | **Real**     | `src/utils/soroban.ts`           | Fully integrated.                                                                                                                                                                     |
 | **Reputation** | `getReputationEvents`, `getTopFreelancers`, `getTopLPs`                                                                    | **Derived**  | `src/utils/soroban.ts`           | No direct on-chain entry points; tolerant alias chains with defaults. Consumers treat empty results gracefully.                                                                       |
-| **Governance** | `getProposals`                                                                                                             | **Real**     | `src/utils/governance.ts`        | Fully integrated with deployed `iln_governance` contract `list_proposals()`.                                                                                                          |
-| **Governance** | `castVote` / `delegateVotingPower` / `createProposal` / `getGovTokenBalance` / `getQuorumThreshold` / `getProposalHistory` | **Stubbed**  | `src/utils/governance.ts`        | Mock implementations; need governance contract deployment.                                                                                                                            |
+| **Governance** | `getProposals` / `getProposal`                                                                                             | **Real**     | `src/utils/governance.ts`        | Reads `list_proposals(None, None, 20)` / `get_proposal(id)` and decodes contract enum statuses. Requires `NEXT_PUBLIC_GOVERNANCE_CONTRACT_ID`; errors are surfaced without mock fallback. |
+| **Governance** | `castVote` / `createProposal` / `executeProposal` / `vetoProposal`                                                        | **Real**     | `src/utils/governance.ts`        | Builds, signs, submits, and confirms Soroban contract calls. Proposal IDs come from the confirmed `create_proposal` return value; no in-memory proposal mutation.                         |
+| **Governance** | `getVotingPower`                                                                                                           | **Derived**  | `src/utils/governance.ts`        | Reads token balance through Soroban RPC; unavailable balances currently resolve to zero.                                                                                              |
 
 ## Details of Deferred / Derived Code & TODO Markers
 
@@ -60,15 +61,8 @@ There is no `list_invoices_by_payer` entry point in the current ABI. The direct 
 
 `getReputationEvents`, `getTopFreelancers`, and `getTopLPs` have no on-chain backing entry points yet; they use tolerant alias chains and return empty/default values when the reads fail. Consumers (e.g. the profile reputation sparkline, leaderboard) handle empty results gracefully.
 
-### 4. Governance Protocol Stubs
+### 4. Governance Configuration and Deferred Reads
 
-Stubs in `src/utils/governance.ts` marked with `TODO` comments:
+Governance reads and writes require an explicit `NEXT_PUBLIC_GOVERNANCE_CONTRACT_ID`. They validate the configured Stellar network/passphrase and contract address before calling Soroban. RPC, simulation, signing, submission, and confirmation failures are surfaced; proposal reads do not fall back to fixtures.
 
-- `castVote` (line 264)
-- `getVotingPower` - returns a fixed mock balance until ILN token contract integration.
-- `delegateVotingPower` (line 286)
-- `getGovTokenBalance` (line 326)
-- `getQuorumThreshold` (line 427)
-- `getProposalHistory` (line 444)
-- `createProposal` (line 491)
-- `ParameterUpdated` event logs subscription (line 625)
+Voting power remains a token-balance read and reports zero when the balance cannot be read. Protocol-parameter lookup, delegation, quorum threshold, and governance event-history surfaces remain outside this integration.

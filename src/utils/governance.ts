@@ -1,8 +1,10 @@
 import {
   rpc,
   xdr,
+  nativeToScVal,
   scValToNative,
   TransactionBuilder,
+  Transaction,
   Account,
   BASE_FEE,
   Operation,
@@ -16,26 +18,153 @@ import {
   STELLAR_NETWORK,
 } from '@/constants';
 import { isCancellationError } from '@/lib/transaction-lifecycle';
+import { recordPendingTransaction, removePendingTransaction } from '@/lib/pending-transactions';
 
 // ─── RPC & Contract helpers ───────────────────────────────────────────────────
 
 const server = new rpc.Server(RPC_URL);
 const READ_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
+const NETWORK_PASSPHRASES = {
+  testnet: 'Test SDF Network ; September 2015',
+  public: 'Public Global Stellar Network ; September 2015',
+} as const;
+
+function assertGovernanceConfiguration(): string {
+  if (!GOVERNANCE_CONTRACT_ID.trim()) {
+    throw new Error('Governance contract is not configured. Set NEXT_PUBLIC_GOVERNANCE_CONTRACT_ID.');
+  }
+  if (!GOVERNANCE_CONTRACT_ID.startsWith('C')) {
+    throw new Error('Governance contract ID must be a Stellar contract address.');
+  }
+  try {
+    Address.fromString(GOVERNANCE_CONTRACT_ID);
+  } catch {
+    throw new Error('Governance contract ID is not a valid Stellar contract address.');
+  }
+
+  const configuredNetwork = STELLAR_NETWORK.toLowerCase();
+  const publicNetwork = configuredNetwork === 'public' || configuredNetwork === 'mainnet';
+  if (configuredNetwork === 'testnet' || publicNetwork) {
+    const expectedPassphrase = publicNetwork
+      ? NETWORK_PASSPHRASES.public
+      : NETWORK_PASSPHRASES.testnet;
+    if (NETWORK_PASSPHRASE !== expectedPassphrase) {
+      throw new Error(
+        `Governance network configuration mismatch: ${publicNetwork ? 'public' : 'testnet'} requires its official network passphrase.`
+      );
+    }
+    const rpcUrl = RPC_URL.toLowerCase();
+    if (
+      (configuredNetwork === 'testnet' && /mainnet|public/.test(rpcUrl)) ||
+      (publicNetwork && /testnet|futurenet/.test(rpcUrl))
+    ) {
+      throw new Error(`Governance RPC endpoint does not match the configured ${configuredNetwork} network.`);
+    }
+    return GOVERNANCE_CONTRACT_ID;
+  }
+
+  if (configuredNetwork !== 'local') {
+    throw new Error(`Unsupported governance network configuration: ${STELLAR_NETWORK}.`);
+  }
+  return GOVERNANCE_CONTRACT_ID;
+}
+
+function getGovernanceAccount(address: string): Account {
+  if (!address.startsWith('G')) {
+    throw new Error('A valid Stellar wallet address is required for governance transactions.');
+  }
+  try {
+    Address.fromString(address);
+  } catch {
+    throw new Error('The governance signer address is not a valid Stellar account address.');
+  }
+  return new Account(address, '0');
+}
+
 function buildGovernanceReadTransaction(method: string, params: xdr.ScVal[] = []) {
+  const contractId = assertGovernanceConfiguration();
   return new TransactionBuilder(new Account(READ_ACCOUNT, '0'), {
     fee: BASE_FEE,
     networkPassphrase: NETWORK_PASSPHRASE,
   })
     .addOperation(
       Operation.invokeContractFunction({
-        contract: GOVERNANCE_CONTRACT_ID,
+        contract: contractId,
         function: method,
         args: params,
       })
     )
     .setTimeout(30)
     .build();
+}
+
+function buildGovernanceWriteTransaction(
+  account: Account,
+  method: string,
+  params: xdr.ScVal[]
+) {
+  const contractId = assertGovernanceConfiguration();
+  return new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      Operation.invokeContractFunction({
+        contract: contractId,
+        function: method,
+        args: params,
+      })
+    )
+    .setTimeout(30)
+    .build();
+}
+
+async function submitGovernanceTransaction(
+  account: Account,
+  method: string,
+  params: xdr.ScVal[],
+  signTx: (xdr: string) => Promise<string>
+): Promise<{ txHash: string; returnValue?: xdr.ScVal }> {
+  assertGovernanceConfiguration();
+  const sourceAccount = await server.getAccount(account.accountId());
+  const tx = buildGovernanceWriteTransaction(sourceAccount, method, params);
+  const prepared = await server.prepareTransaction(tx);
+  let signedXdr: string;
+  try {
+    signedXdr = await signTx(prepared.toXDR());
+  } catch (error) {
+    if (isCancellationError(error)) {
+      throw new Error(
+        'USER_REJECTED: Transaction signature was declined in wallet. No changes were applied.'
+      );
+    }
+    throw error;
+  }
+  const signedTx = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE) as Transaction;
+  const sent = await server.sendTransaction(signedTx);
+
+  if (!sent.hash || !['PENDING', 'DUPLICATE'].includes(sent.status)) {
+    throw new Error(
+      `Governance transaction submission failed with status ${String(sent.status || 'unknown')}.`
+    );
+  }
+
+  recordPendingTransaction({ hash: sent.hash, label: `governance:${method}`, address: account.accountId() });
+  const finalResult = await server.pollTransaction(sent.hash, { attempts: 20 });
+  if (finalResult.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    if (finalResult.status === rpc.Api.GetTransactionStatus.FAILED) {
+      removePendingTransaction(sent.hash);
+    }
+    throw new Error(`Governance transaction failed with status ${String(finalResult.status)}.`);
+  }
+  removePendingTransaction(sent.hash);
+
+  const result = finalResult as typeof finalResult & {
+    returnValue?: xdr.ScVal;
+    result?: { retval?: xdr.ScVal };
+  };
+  return { txHash: sent.hash, returnValue: result.returnValue ?? result.result?.retval };
 }
 
 function buildTokenReadTransaction(contractId: string, method: string, params: xdr.ScVal[] = []) {
@@ -172,7 +301,7 @@ export const GOVERNANCE_INTEGRATION_STATUS: Record<
   { status: 'Real' | 'Stubbed'; label: string }
 > = {
   castVote: {
-    status: 'Stubbed',
+    status: 'Real',
     label: 'Vote casting',
   },
   delegateVotingPower: {
@@ -180,15 +309,15 @@ export const GOVERNANCE_INTEGRATION_STATUS: Record<
     label: 'Vote delegation',
   },
   createProposal: {
-    status: 'Stubbed',
+    status: 'Real',
     label: 'Proposal creation',
   },
   executeProposal: {
-    status: 'Stubbed',
+    status: 'Real',
     label: 'Proposal execution',
   },
   vetoProposal: {
-    status: 'Stubbed',
+    status: 'Real',
     label: 'Proposal veto',
   },
   getVotingPower: {
@@ -210,6 +339,12 @@ export const GOVERNANCE_INTEGRATION_STATUS: Record<
 };
 
 export type GovernanceAction = keyof typeof GOVERNANCE_INTEGRATION_STATUS;
+
+export function clearGovernanceIdempotencyCache(): void {}
+
+export function getUserVote(_proposalId: number): VoteChoice | undefined {
+  return undefined;
+}
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
@@ -388,75 +523,92 @@ export function formatVotingPower(power: number): string {
   return power.toFixed(0) + ' ILN';
 }
 
-// ─── Mock voting state (per-session in-memory store) ──────────────────────────
-
-const userVotes: Map<number, VoteChoice> = new Map();
-const vetoHistory: VetoRecord[] = [];
-const proposalTxHashes: Map<string, string> = new Map();
-const proposalCreationCache: Map<
-  string,
-  { txHash: string; proposalId: number; timestamp: number }
-> = new Map();
-
-export function clearGovernanceIdempotencyCache(): void {
-  proposalTxHashes.clear();
-  proposalCreationCache.clear();
-}
-
-export function getUserVote(proposalId: number): VoteChoice | undefined {
-  return userVotes.get(proposalId);
-}
-
 // ─── Contract Parsers ─────────────────────────────────────────────────────────
 
 export function parseProposalStatus(status: unknown): ProposalStatus {
-  if (status && typeof status === 'object') {
-    const key = Object.keys(status as object)[0];
-    if (key === 'Rejected') return 'Rejected';
-    if (key === 'Active' || key === 'Passed' || key === 'Executed' || key === 'Vetoed') {
-      return key as ProposalStatus;
-    }
+  let value: unknown = status;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    value =
+      typeof record.tag === 'string'
+        ? record.tag
+        : Object.keys(record).length === 1
+          ? Object.keys(record)[0]
+          : undefined;
   }
-  const str = String(status);
-  if (str === 'Rejected') return 'Rejected';
-  if (str === 'Active' || str === 'Passed' || str === 'Executed' || str === 'Vetoed') {
-    return str as ProposalStatus;
+  if (
+    value === 'Active' ||
+    value === 'Passed' ||
+    value === 'Rejected' ||
+    value === 'Executed' ||
+    value === 'Vetoed'
+  ) {
+    return value;
   }
-  return 'Active';
+  throw new Error(`Unknown proposal status returned by governance contract: ${String(value)}`);
 }
 
 export function parseProposalType(action: unknown): ProposalType {
-  if (action && typeof action === 'object') {
-    const key = Object.keys(action as object)[0];
-    if (key === 'ParameterUpdate' || key === 'ProtocolUpgrade' || key === 'TextProposal') {
-      return key as ProposalType;
-    }
+  let value = action;
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    value =
+      typeof record.tag === 'string'
+        ? record.tag
+        : Object.keys(record).length === 1
+          ? Object.keys(record)[0]
+          : undefined;
   }
-  const str = String(action);
-  if (str === 'ParameterUpdate' || str === 'ProtocolUpgrade' || str === 'TextProposal') {
-    return str as ProposalType;
+  if (value === 'ParameterUpdate' || value === 'ProtocolUpgrade' || value === 'TextProposal') {
+    return value;
   }
-  return 'ParameterUpdate';
+  if (value === 'UpdateFeeRate' || value === 'UpdateMaxDiscountRate') return 'ParameterUpdate';
+  if (value === 'AddToken' || value === 'RemoveToken') return 'ProtocolUpgrade';
+  throw new Error(`Unknown proposal action returned by governance contract: ${String(value)}`);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function parseProposalFromNative(native: any): Proposal {
+export function parseProposalFromNative(value: unknown): Proposal {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Governance contract returned an invalid proposal record.');
+  }
+  const native = value as Record<string, unknown>;
+  const rawId = native.id;
+  const id = Number(rawId);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    throw new Error('Governance contract returned an invalid proposal identifier.');
+  }
+  const action = native.type ?? native.action_type ?? native.action;
+  const rawParameterChanges = native.parameter_changes ?? native.parameterChanges;
+  const parameterChanges = Array.isArray(rawParameterChanges)
+    ? rawParameterChanges.map((item) => {
+        if (!item || typeof item !== 'object') {
+          throw new Error('Governance contract returned invalid proposal parameter data.');
+        }
+        const change = item as Record<string, unknown>;
+        return {
+          parameter: String(change.parameter ?? ''),
+          currentValue: String(change.current_value ?? change.currentValue ?? ''),
+          newValue: String(change.new_value ?? change.newValue ?? ''),
+        };
+      })
+    : undefined;
+  const descriptionHash = native.description_hash;
   return {
-    id: Number(native.id ?? 0),
+    id,
     title:
-      typeof native.title === 'string' ? native.title : native.title ? String(native.title) : '',
+      typeof native.title === 'string' ? native.title : `Proposal #${id}`,
     description:
       typeof native.description === 'string'
         ? native.description
-        : native.description
-          ? String(native.description)
+        : typeof descriptionHash === 'string'
+          ? `Description hash: ${descriptionHash}`
           : '',
-    type: parseProposalType(native.type ?? native.action),
+    type: parseProposalType(action),
     status: parseProposalStatus(native.status),
     proposer: String(native.proposer ?? ''),
     createdAt: Number(native.created_at ?? native.createdAt ?? 0),
-    votingStartsAt: Number(native.voting_starts_at ?? native.votingStartsAt ?? 0),
-    votingEndsAt: Number(native.voting_ends_at ?? native.votingEndsAt ?? 0),
+    votingStartsAt: Number(native.voting_starts_at ?? native.votingStartsAt ?? native.created_at ?? 0),
+    votingEndsAt: Number(native.voting_ends_at ?? native.votingEndsAt ?? native.voting_end ?? 0),
     executableAfter: native.executable_after
       ? Number(native.executable_after)
       : native.executableAfter
@@ -465,160 +617,78 @@ export function parseProposalFromNative(native: any): Proposal {
     votesFor: Number(native.votes_for ?? native.votesFor ?? 0),
     votesAgainst: Number(native.votes_against ?? native.votesAgainst ?? 0),
     quorumRequired: Number(native.quorum_required ?? native.quorumRequired ?? 0),
-    parameterChanges: Array.isArray(native.parameter_changes ?? native.parameterChanges)
-      ? (native.parameter_changes ?? native.parameterChanges).map((pc: any) => ({
-          parameter: String(pc.parameter ?? ''),
-          currentValue: String(pc.current_value ?? pc.currentValue ?? ''),
-          newValue: String(pc.new_value ?? pc.newValue ?? ''),
-        }))
-      : undefined,
+    parameterChanges,
   };
 }
 
 // ─── Contract Integration Calls ────────────────────────────────────────────────
 
 export async function fetchProposals(): Promise<Proposal[]> {
-  try {
-    const tx = buildGovernanceReadTransaction('list_proposals');
-    const callResult = await server.simulateTransaction(tx);
-    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
-      const native = scValToNative(callResult.result.retval);
-      if (Array.isArray(native)) {
-        return native.map((p) => ({
-          ...parseProposalFromNative(p),
-          userVote: userVotes.get(Number(p.id)),
-          vetoHistory: getVetoHistory(Number(p.id)),
-        }));
-      }
-    }
-  } catch (err) {
-    console.warn(
-      'iln_governance list_proposals contract call failed, falling back to mock data:',
-      err
-    );
+  const tx = buildGovernanceReadTransaction('list_proposals', [
+    xdr.ScVal.scvVoid(),
+    xdr.ScVal.scvVoid(),
+    nativeToScVal(20, { type: 'u32' }),
+  ]);
+  const callResult = await server.simulateTransaction(tx);
+  if (!rpc.Api.isSimulationSuccess(callResult) || !callResult.result?.retval) {
+    throw new Error(`Governance proposal read failed: ${'error' in callResult ? String(callResult.error) : 'no result returned'}`);
   }
-
-  return MOCK_PROPOSALS.map((p) => ({
-    ...p,
-    userVote: userVotes.get(p.id),
-    vetoHistory: getVetoHistory(p.id),
+  const native = scValToNative(callResult.result.retval);
+  if (!Array.isArray(native)) {
+    throw new Error('Governance contract returned an invalid proposal list.');
+  }
+  return native.map((proposal) => ({
+    ...parseProposalFromNative(proposal),
+    vetoHistory: getVetoHistory(Number((proposal as Record<string, unknown>).id)),
   }));
 }
 
 export const getProposals = fetchProposals;
 
 export async function fetchProposal(id: number): Promise<Proposal | null> {
-  const proposals = await fetchProposals();
-  const proposal = proposals.find((p) => p.id === id);
-  if (!proposal) return null;
-  return { ...proposal, userVote: userVotes.get(id), vetoHistory: getVetoHistory(id) };
+  if (!Number.isSafeInteger(id) || id < 1) {
+    throw new Error('A valid on-chain proposal identifier is required.');
+  }
+  const tx = buildGovernanceReadTransaction('get_proposal', [
+    nativeToScVal(BigInt(id), { type: 'u64' }),
+  ]);
+  const callResult = await server.simulateTransaction(tx);
+  if (!rpc.Api.isSimulationSuccess(callResult)) {
+    throw new Error(
+      `Governance proposal read failed: ${
+        'error' in callResult ? String(callResult.error) : 'contract simulation failed'
+      }`
+    );
+  }
+  if (!callResult.result?.retval) return null;
+  return parseProposalFromNative(scValToNative(callResult.result.retval));
 }
 
 /**
  * The wallet signature is the point of no return for every governance write.
  * Local tallies / statuses must stay untouched when signing is declined or
- * the wallet closes, so the signature is collected BEFORE any mutation
- * (#1144). Without a signer address (read-only / test context) the intent is
- * returned unsigned and the pre-deployment mock path applies.
+ * the wallet closes, so no local state is changed before a confirmed ledger
+ * response.
  */
-async function requireGovernanceSignature(
-  intent: string,
-  signerAddress: string,
-  signTx: (xdr: string) => Promise<string>
-): Promise<string> {
-  if (!signerAddress) return `unsigned:${intent}`;
-  try {
-    return await signTx(intent);
-  } catch (err) {
-    if (isCancellationError(err)) {
-      throw new Error(
-        'USER_REJECTED: Transaction signature was declined in wallet. No changes were applied.'
-      );
-    }
-    throw err;
-  }
-}
-
-/**
- * Deterministic stand-in transaction hash derived from the wallet signature.
- * Replaces the previous `Math.random()` hashes so no fabricated random value
- * reaches the UI (#1141); the same signed intent always yields the same hash.
- * Emits a 64-character hex string so it satisfies the standard Stellar
- * transaction-hash shape enforced by `isValidTxHash` (#1148).
- */
-function deriveGovernanceTxHash(...seeds: string[]): string {
-  const mix = (salt: string): string => {
-    const seed = `${salt}|${seeds.join('|')}`;
-    let h1 = 0x811c9dc5;
-    let h2 = 0x01000193;
-    let h3 = 0xdeadbeef;
-    let h4 = 0x41c6ce57;
-    for (let i = 0; i < seed.length; i += 1) {
-      const code = seed.charCodeAt(i);
-      h1 = Math.imul(h1 ^ code, 16777619) >>> 0;
-      h2 = (Math.imul(h2 + code, 31) >>> 0) ^ (h1 >>> 3);
-      h3 = Math.imul(h3 ^ (code + i), 2654435761) >>> 0;
-      h4 = (Math.imul(h4 + code, 1597334677) >>> 0) ^ (h3 >>> 5);
-    }
-    const hex = (n: number) => (n >>> 0).toString(16).padStart(8, '0');
-    return `${hex(h1)}${hex(h2)}${hex(h3)}${hex(h4)}`;
-  };
-  return `${mix('iln:governance:a')}${mix('iln:governance:b')}`;
-}
-
 export async function castVote(
   proposalId: number,
   choice: VoteChoice,
   signerAddress: string,
   signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
-  // TODO: Replace with actual Soroban transaction once governance contract is deployed
-  // Ref: #111
-  await new Promise((r) => setTimeout(r, 2000));
-
-  const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
-  const cacheKey = `${signerAddress || 'anon'}:vote:${proposalId}`;
-  const previousVote = userVotes.get(proposalId);
-
-  // Idempotency: if user already voted with this exact choice, return confirmed hash without duplicate counting (#1146)
-  if (previousVote === choice) {
-    const existingHash = proposalTxHashes.get(cacheKey);
-    if (existingHash) return existingHash;
+  if (!Number.isSafeInteger(proposalId) || proposalId < 1) {
+    throw new Error('A valid on-chain proposal identifier is required to cast a vote.');
   }
-
-  // Signature gate before any mutation: a declined wallet changes nothing (#1144).
-  const signed = await requireGovernanceSignature(
-    `vote:${proposalId}:${choice}:${signerAddress}`,
-    signerAddress,
-    signTx
-  );
-
-  // If user changed their vote, adjust previous choice count
-  if (proposal && previousVote && previousVote !== choice) {
-    const power = 1250;
-    if (previousVote === 'For') {
-      proposal.votesFor = Math.max(0, proposal.votesFor - power);
-    } else if (previousVote === 'Against') {
-      proposal.votesAgainst = Math.max(0, proposal.votesAgainst - power);
-    } else if (previousVote === 'Abstain') {
-      proposal.votesAbstain = Math.max(0, (proposal.votesAbstain ?? 0) - power);
-    }
+  if (choice !== 'For' && choice !== 'Against') {
+    throw new Error(`Unsupported governance vote choice: ${String(choice)}.`);
   }
-
-  userVotes.set(proposalId, choice);
-
-  if (proposal && previousVote !== choice) {
-    const power = 1250;
-    if (choice === 'For') proposal.votesFor += power;
-    else if (choice === 'Against') proposal.votesAgainst += power;
-    else if (choice === 'Abstain') proposal.votesAbstain = (proposal.votesAbstain ?? 0) + power;
-  }
-
-  // Deterministic hash rooted in the collected signature; cached so an
-  // idempotent replay returns the identical confirmation (#1141, #1146).
-  const txHash = deriveGovernanceTxHash(signed, `vote:${proposalId}:${choice}:${signerAddress}`);
-  proposalTxHashes.set(cacheKey, txHash);
-  return txHash;
+  const account = getGovernanceAccount(signerAddress);
+  const result = await submitGovernanceTransaction(account, 'cast_vote', [
+    Address.fromString(signerAddress).toScVal(),
+    nativeToScVal(BigInt(proposalId), { type: 'u64' }),
+    nativeToScVal(choice === 'For', { type: 'bool' }),
+  ], signTx);
+  return result.txHash;
 }
 
 export async function executeProposal(
@@ -626,31 +696,14 @@ export async function executeProposal(
   signerAddress: string,
   signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
-  // TODO: Replace with actual Soroban transaction once governance contract is deployed
-  // Ref: #111
-  await new Promise((r) => setTimeout(r, 2000));
-
-  const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
-  if (!proposal) throw new Error('Proposal not found');
-
-  const cacheKey = `execute:${proposalId}`;
-  // Idempotent replay of an already-executed proposal: no mutation, return
-  // the cached confirmation without re-signing (#1146).
-  if (proposal.status === 'Executed') {
-    const existing = proposalTxHashes.get(cacheKey);
-    if (existing) return existing;
+  if (!Number.isSafeInteger(proposalId) || proposalId < 1) {
+    throw new Error('A valid on-chain proposal identifier is required to execute a proposal.');
   }
-
-  const executedSigned = await requireGovernanceSignature(
-    `execute:${proposalId}:${signerAddress}`,
-    signerAddress,
-    signTx
-  );
-
-  proposal.status = 'Executed';
-  const txHash = deriveGovernanceTxHash(executedSigned, `execute:${proposalId}`);
-  proposalTxHashes.set(cacheKey, txHash);
-  return txHash;
+  const account = getGovernanceAccount(signerAddress);
+  const result = await submitGovernanceTransaction(account, 'execute_proposal', [
+    nativeToScVal(BigInt(proposalId), { type: 'u64' }),
+  ], signTx);
+  return result.txHash;
 }
 
 export async function vetoProposal(
@@ -659,46 +712,28 @@ export async function vetoProposal(
   adminAddress: string,
   signTx: (xdr: string) => Promise<string>
 ): Promise<string> {
-  await new Promise((r) => setTimeout(r, 1200));
-
-  const proposal = MOCK_PROPOSALS.find((p) => p.id === proposalId);
-  if (!proposal) throw new Error('Proposal not found');
-
-  const cacheKey = `veto:${proposalId}:${reasonHash}`;
-  // Idempotent replay of an identical veto: no mutation, return the cached
-  // confirmation without re-signing (#1146).
-  const existingVeto = vetoHistory.find(
-    (record) => record.proposalId === proposalId && record.reasonHash === reasonHash
-  );
-  if (existingVeto && proposal.status === 'Vetoed') {
-    const existing = proposalTxHashes.get(cacheKey);
-    if (existing) return existing;
+  if (!Number.isSafeInteger(proposalId) || proposalId < 1) {
+    throw new Error('A valid on-chain proposal identifier is required to veto a proposal.');
   }
-
-  // Signature gate before any mutation (#1144).
-  const signed = await requireGovernanceSignature(
-    `veto:${proposalId}:${reasonHash}:${adminAddress}`,
-    adminAddress,
-    signTx
+  const normalizedHash = reasonHash.replace(/^0x/i, '');
+  if (!/^[\da-fA-F]{64}$/.test(normalizedHash)) {
+    throw new Error('Veto reason must be a 32-byte hexadecimal hash.');
+  }
+  const reasonBytes = Uint8Array.from(normalizedHash.match(/.{2}/g)!, (byte) =>
+    Number.parseInt(byte, 16)
   );
-
-  proposal.status = 'Vetoed';
-  const record: VetoRecord = {
-    proposalId,
-    admin: adminAddress,
-    reasonHash,
-    createdAt: Math.floor(Date.now() / 1000),
-  };
-  vetoHistory.unshift(record);
-  proposal.vetoHistory = [record, ...(proposal.vetoHistory ?? [])];
-
-  const vetoTxHash = deriveGovernanceTxHash(signed, `veto:${proposalId}:${reasonHash}`);
-  proposalTxHashes.set(cacheKey, vetoTxHash);
-  return vetoTxHash;
+  const account = getGovernanceAccount(adminAddress);
+  const result = await submitGovernanceTransaction(account, 'veto_proposal', [
+    Address.fromString(adminAddress).toScVal(),
+    nativeToScVal(BigInt(proposalId), { type: 'u64' }),
+    nativeToScVal(reasonBytes, { type: 'bytes' }),
+  ], signTx);
+  return result.txHash;
 }
 
 export function getVetoHistory(proposalId: number): VetoRecord[] {
-  return vetoHistory.filter((record) => record.proposalId === proposalId);
+  void proposalId;
+  return [];
 }
 
 export async function getVotingPower(address: string): Promise<number> {
@@ -897,122 +932,90 @@ export async function createProposal(
   signerAddress: string,
   signTx: (xdr: string) => Promise<string>
 ): Promise<{ txHash: string; proposalId: number }> {
-  await new Promise((r) => setTimeout(r, 2500));
-
-  // Idempotency check: deduplicate rapid duplicate submissions without
-  // mutating or re-signing (#1146).
-  const idempotencyKey = `${signerAddress}:${payload.title}:${payload.formType}:${
-    payload.newValueBps ?? payload.tokenAddress ?? payload.removeTokenAddress ?? ''
-  }`;
-  const cached = proposalCreationCache.get(idempotencyKey);
-  if (cached && Date.now() - cached.timestamp < 30_000) {
-    return {
-      txHash: cached.txHash,
-      proposalId: cached.proposalId,
-    };
+  assertGovernanceConfiguration();
+  const account = getGovernanceAccount(signerAddress);
+  if (!payload.title.trim() || !payload.description.trim()) {
+    throw new Error('Proposal title and description are required.');
   }
 
-  // Signature gate: a declined wallet must not append a proposal (#1144).
-  const signed = await requireGovernanceSignature(
-    `create:${payload.formType}:${payload.title}:${signerAddress}`,
-    signerAddress,
-    signTx
-  );
-
-  const newId = MOCK_PROPOSALS.length + 1;
-  const NOW_SEC = Math.floor(Date.now() / 1000);
-  const DAY_SEC = 86400;
-
-  // Map form type → internal ProposalType
-  const typeMap: Record<CreateProposalFormType, ProposalType> = {
-    FeeRate: 'ParameterUpdate',
-    MaxDiscountRate: 'ParameterUpdate',
-    AddToken: 'ProtocolUpgrade',
-    RemoveToken: 'ProtocolUpgrade',
-  };
-
-  // Map form type → parameter change
-  let parameterChanges: ParameterChange[] | undefined;
-  if (payload.formType === 'FeeRate' && payload.newValueBps !== undefined) {
-    parameterChanges = [
-      {
-        parameter: 'fee_rate_bps',
-        currentValue: `${MOCK_PROTOCOL_PARAMS.feeRateBps} (${
-          MOCK_PROTOCOL_PARAMS.feeRateBps / 100
-        }%)`,
-        newValue: `${payload.newValueBps} (${payload.newValueBps / 100}%)`,
-      },
-    ];
-  } else if (payload.formType === 'MaxDiscountRate' && payload.newValueBps !== undefined) {
-    parameterChanges = [
-      {
-        parameter: 'max_discount_rate_bps',
-        currentValue: `${MOCK_PROTOCOL_PARAMS.maxDiscountRateBps} (${
-          MOCK_PROTOCOL_PARAMS.maxDiscountRateBps / 100
-        }%)`,
-        newValue: `${payload.newValueBps} (${payload.newValueBps / 100}%)`,
-      },
-    ];
-  } else if (payload.formType === 'AddToken' && payload.tokenAddress) {
-    const existing = MOCK_PROTOCOL_PARAMS.acceptedTokens.map((t) => t.symbol);
-    parameterChanges = [
-      {
-        parameter: 'accepted_tokens',
-        currentValue: `[${existing.join(', ')}]`,
-        newValue: `[${existing.join(', ')}, ${
-          payload.tokenName ?? payload.tokenAddress.slice(0, 6)
-        }]`,
-      },
-    ];
-  } else if (payload.formType === 'RemoveToken' && payload.removeTokenAddress) {
-    const token = MOCK_PROTOCOL_PARAMS.acceptedTokens.find(
-      (t) => t.address === payload.removeTokenAddress
-    );
-    const remaining = MOCK_PROTOCOL_PARAMS.acceptedTokens
-      .filter((t) => t.address !== payload.removeTokenAddress)
-      .map((t) => t.symbol);
-    parameterChanges = [
-      {
-        parameter: 'accepted_tokens',
-        currentValue: `[${MOCK_PROTOCOL_PARAMS.acceptedTokens.map((t) => t.symbol).join(', ')}]`,
-        newValue: `[${remaining.join(', ')}]${token ? ` (removes ${token.symbol})` : ''}`,
-      },
-    ];
+  let action: xdr.ScVal;
+  let proposedValue = 0n;
+  switch (payload.formType) {
+    case 'FeeRate':
+    case 'MaxDiscountRate': {
+      const bps = payload.newValueBps;
+      if (bps === undefined || !Number.isSafeInteger(bps) || bps < 0 || bps > 0xffff_ffff) {
+        throw new Error('A valid basis-point value is required for this proposal.');
+      }
+      const actionName =
+        payload.formType === 'FeeRate' ? 'UpdateFeeRate' : 'UpdateMaxDiscountRate';
+      action = xdr.ScVal.scvVec([
+        xdr.ScVal.scvSymbol(actionName),
+        nativeToScVal(bps, { type: 'u32' }),
+      ]);
+      proposedValue = BigInt(bps);
+      break;
+    }
+    case 'AddToken': {
+      const tokenAddress = payload.tokenAddress?.trim();
+      if (!tokenAddress || !tokenAddress.startsWith('C')) {
+        throw new Error('A valid token contract address is required to add a token.');
+      }
+      const token = Address.fromString(tokenAddress);
+      const decimalsResult = await server.simulateTransaction(
+        buildTokenReadTransaction(tokenAddress, 'decimals')
+      );
+      if (!rpc.Api.isSimulationSuccess(decimalsResult) || !decimalsResult.result?.retval) {
+        throw new Error('Unable to verify token decimals from the token contract.');
+      }
+      const decimals = Number(scValToNative(decimalsResult.result.retval));
+      if (!Number.isInteger(decimals) || decimals < 0 || decimals > 0xffff_ffff) {
+        throw new Error('Token contract returned an invalid decimals value.');
+      }
+      action = xdr.ScVal.scvVec([
+        xdr.ScVal.scvSymbol('AddToken'),
+        token.toScVal(),
+        nativeToScVal(decimals, { type: 'u32' }),
+      ]);
+      break;
+    }
+    case 'RemoveToken': {
+      const tokenAddress = payload.removeTokenAddress?.trim();
+      if (!tokenAddress || !tokenAddress.startsWith('C')) {
+        throw new Error('A valid token contract address is required to remove a token.');
+      }
+      action = xdr.ScVal.scvVec([
+        xdr.ScVal.scvSymbol('RemoveToken'),
+        Address.fromString(tokenAddress).toScVal(),
+      ]);
+      break;
+    }
+    default:
+      throw new Error(`Unsupported proposal type: ${String(payload.formType)}.`);
   }
 
-  const newProposal: Proposal = {
-    id: newId,
-    title: payload.title,
-    description: payload.description,
-    type: typeMap[payload.formType],
-    status: 'Active',
-    proposer: signerAddress,
-    createdAt: NOW_SEC,
-    votingStartsAt: NOW_SEC,
-    votingEndsAt: NOW_SEC + 7 * DAY_SEC,
-    votesFor: 0,
-    votesAgainst: 0,
-    votesAbstain: 0,
-    quorumRequired: 100_000,
-    parameterChanges,
-  };
-
-  MOCK_PROPOSALS.push(newProposal);
-
-  const createdTxHash = deriveGovernanceTxHash(
-    signed,
-    `create:${newId}:${payload.formType}:${signerAddress}`
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) {
+    throw new Error('Secure SHA-256 support is required to create a governance proposal.');
+  }
+  const description = new TextEncoder().encode(
+    `${payload.title.trim()}\n${payload.description.trim()}`
   );
-  proposalCreationCache.set(idempotencyKey, {
-    txHash: createdTxHash,
-    proposalId: newId,
-    timestamp: Date.now(),
-  });
-
-  return {
-    txHash: createdTxHash,
-    proposalId: newId,
-  };
+  const descriptionHash = new Uint8Array(await subtle.digest('SHA-256', description));
+  const result = await submitGovernanceTransaction(account, 'create_proposal', [
+    Address.fromString(signerAddress).toScVal(),
+    action,
+    nativeToScVal(descriptionHash, { type: 'bytes' }),
+    nativeToScVal(proposedValue, { type: 'i128' }),
+  ], signTx);
+  if (!result.returnValue) {
+    throw new Error('Governance contract confirmed proposal creation without returning its identifier.');
+  }
+  const proposalId = Number(scValToNative(result.returnValue));
+  if (!Number.isSafeInteger(proposalId) || proposalId < 1) {
+    throw new Error('Governance contract returned an invalid proposal identifier.');
+  }
+  return { txHash: result.txHash, proposalId };
 }
 
 // ─── Parameter change announcements (#153) ────────────────────────────────────
