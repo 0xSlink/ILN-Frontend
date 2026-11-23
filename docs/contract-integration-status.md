@@ -92,7 +92,7 @@ There is no `list_invoices_by_payer` entry point in the current ABI. The direct 
 
 `getReputationEvents`, `getTopFreelancers`, and `getTopLPs` have no on-chain backing entry points yet; they use tolerant alias chains and return empty/default values when the reads fail. Consumers (e.g. the profile reputation sparkline, leaderboard) handle empty results gracefully.
 
-### 4. Governance Protocol Stubs
+### 4. Governance Configuration and Deferred Reads
 
 The four write paths — `castVote`, `createProposal`, `executeProposal` and
 `vetoProposal` — are no longer stubs (#1044, #1045). They build, simulate,
