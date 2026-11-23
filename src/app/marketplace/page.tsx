@@ -5,7 +5,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useInvoices } from '@/hooks/queries';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
 import { usePayerScores } from '@/hooks/usePayerScores';
-import { Invoice } from '@/utils/soroban';
+import { Invoice, getInvoice } from '@/utils/soroban';
 import { calculateYield, formatTokenAmount, formatAddress, formatDate } from '@/utils/format';
 import { RiskLevel } from '@/utils/risk';
 import Navbar from '@/components/Navbar';
@@ -503,6 +503,7 @@ export default function MarketplacePage() {
                   payerScore={payerScores.get(invoice.payer) ?? null}
                   payerRisk={payerRisks.get(invoice.payer) ?? 'Unknown'}
                   onFund={setSelectedInvoice}
+                  onVerifyFundable={(inv) => getInvoice(inv.id)}
                   isWalletConnected={isConnected}
                   minReputation={settings.minReputation}
                   isBookmarked={isBookmarked(invoice.id.toString())}
