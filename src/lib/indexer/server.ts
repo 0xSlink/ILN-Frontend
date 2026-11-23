@@ -67,7 +67,7 @@ function isBlockedIndexerHost(hostname: string): boolean {
     host === 'metadata.google.internal' ||
     host === 'metadata.google' ||
     host === '0.0.0.0' ||
-    host === '::1'
+    (host === '::1' || host === '[::1]')
   ) {
     return true;
   }
