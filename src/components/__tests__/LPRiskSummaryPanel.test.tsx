@@ -105,4 +105,42 @@ describe('LPRiskSummaryPanel', () => {
       screen.getByText('• Consider diversifying portfolio to reduce concentration risk')
     ).toBeInTheDocument();
   });
+
+  it('aggregates mixed payers and ignores pending capital in the portfolio totals', () => {
+    const nearExpiry = invoice({
+      id: 1n,
+      payer: 'GPAYER_A',
+      due_date: BigInt(Math.floor((NOW + 12 * 60 * 60 * 1000) / 1000)),
+    });
+    const healthy = invoice({ id: 2n, payer: 'GPAYER_B' });
+    const pending = invoice({ id: 3n, payer: 'GPAYER_C', status: 'Pending', amount: 5_000_000_000n });
+
+    render(
+      <LPRiskSummaryPanel invoices={[nearExpiry, healthy, pending]} onFilterByRisk={vi.fn()} />
+    );
+
+    expect(screen.getByText('Positions at Risk').previousSibling).toHaveTextContent('1');
+    expect(screen.getByText('50% of portfolio')).toBeInTheDocument();
+  });
+
+  it('handles funded positions with zero amount without dividing by zero', () => {
+    render(
+      <LPRiskSummaryPanel invoices={[invoice({ id: 1n, amount: 0n })]} onFilterByRisk={vi.fn()} />
+    );
+
+    expect(screen.getByText('0% of portfolio')).toBeInTheDocument();
+    expect(screen.queryByText('Risk Management Recommendations')).not.toBeInTheDocument();
+  });
+
+  it('treats funded records past due long ago as at risk rather than healthy', () => {
+    const stale = invoice({
+      id: 1n,
+      due_date: BigInt(Math.floor((NOW - 90 * 24 * 60 * 60 * 1000) / 1000)),
+    });
+
+    render(<LPRiskSummaryPanel invoices={[stale]} onFilterByRisk={vi.fn()} />);
+
+    expect(screen.getByText('Positions at Risk').previousSibling).toHaveTextContent('1');
+    expect(screen.getByText('100% of portfolio')).toBeInTheDocument();
+  });
 });
