@@ -66,14 +66,20 @@ describe('ReferralWidget', () => {
     );
   });
 
-  it('renders a history table capped at 5 entries', async () => {
+  it('shows an honest unavailable state instead of fabricated referral rows', async () => {
     useReferralStatsMock.mockReturnValue({
       data: { total_invoices: 8, total_volume: 500_000_000n },
       isLoading: false,
     });
     render(<ReferralWidget />);
 
-    await waitFor(() => expect(screen.getAllByText(/Referred User/).length).toBe(5));
+    await waitFor(() =>
+      expect(
+        screen.getByText('Recent referral records are unavailable from the current contract read.')
+      ).toBeInTheDocument()
+    );
+    expect(screen.queryByText(/Referred User/)).not.toBeInTheDocument();
+    expect(screen.getByText('Unavailable')).toBeInTheDocument();
   });
 
   it('copies the referral link and shows a success toast, then resets after a timeout', async () => {

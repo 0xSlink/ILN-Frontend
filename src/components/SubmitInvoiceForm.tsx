@@ -19,6 +19,7 @@ import FieldTooltip from './FieldTooltip';
 import { useWallet } from '@/context/WalletContext';
 import { useTransaction } from '@/hooks/useTransaction';
 import { useApprovedTokens } from '@/hooks/useApprovedTokens';
+import { useProtocolCaps } from '@/hooks/useProtocolCaps';
 import useAddressBook from '@/hooks/useAddressBook';
 import {
   getMinimumDueDate,
@@ -126,6 +127,12 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
     ? formatAmountEntryPreview(form.amount, selectedToken.symbol)
     : null;
 
+  const { data: caps } = useProtocolCaps({
+    tokenId: effectiveTokenId,
+    tokenSymbol: selectedToken?.symbol ?? 'USDC',
+    tokenDecimals: amountInputDecimals,
+  });
+
   const { usdPrice } = useTokenPrice(selectedToken?.symbol);
   const parsedAmount = Number.parseFloat(form.amount);
   const usdEquivalent =
@@ -143,7 +150,9 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
       { ...form, tokenId: effectiveTokenId },
       isConnected,
       selectedToken?.decimals ?? 7,
-      selectedToken?.symbol ?? 'token'
+      selectedToken?.symbol ?? 'token',
+      Math.floor(Date.now() / 1000),
+      caps?.maxInvoiceAmount
     );
     if (!selectedToken && !tokensLoading) {
       errs.tokenId = t('submitForm.noTokensAvailable');
@@ -152,7 +161,16 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
       errs.wallet = t('submitForm.walletError', { network: NETWORK_NAME });
     }
     return errs;
-  }, [form, effectiveTokenId, isConnected, selectedToken, tokensLoading, networkMismatch, t]);
+  }, [
+    form,
+    effectiveTokenId,
+    isConnected,
+    selectedToken,
+    tokensLoading,
+    networkMismatch,
+    caps?.maxInvoiceAmount,
+    t,
+  ]);
 
   const displayErrors = useMemo(() => {
     const combined: Record<string, string | undefined> = { ...errors };
@@ -308,7 +326,16 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
     );
 
     if (!result) {
-      setErrors({ submit: txError ?? 'The transaction did not complete successfully.' });
+      let submitError = txError ?? 'The transaction did not complete successfully.';
+      if (
+        /CapExceeded|MaxInvoiceAmountExceeded|GlobalVolumeCapExceeded|cap\s*exceeded/i.test(
+          submitError
+        )
+      ) {
+        submitError =
+          'The invoice amount exceeds the current governance launch cap. Please reduce the invoice amount and try again.';
+      }
+      setErrors({ submit: submitError });
       return;
     }
 
@@ -561,6 +588,23 @@ export default function SubmitInvoiceForm({ initialValues, prefillId }: SubmitIn
                         USD
                         <span className="ml-1 text-on-surface-variant/60">
                           · Price is approximate
+                        </span>
+                      </p>
+                    ) : null}
+                    {caps?.formattedMaxInvoiceAmount ? (
+                      <p
+                        className="mt-2 flex items-center gap-1.5 text-xs text-on-surface-variant font-medium"
+                        data-testid="max-invoice-cap-note"
+                      >
+                        <span
+                          className="material-symbols-outlined text-[15px] text-primary shrink-0"
+                          aria-hidden="true"
+                        >
+                          verified_user
+                        </span>
+                        <span>
+                          Maximum invoice amount during initial launch:{' '}
+                          {caps.formattedMaxInvoiceAmount}
                         </span>
                       </p>
                     ) : null}

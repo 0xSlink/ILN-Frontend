@@ -81,15 +81,116 @@ function formatFeedDate(timestampMs: number): string {
   });
 }
 
-/** Build the last N homepage feed items from contract events and invoice data. */
+/**
+ * Canonical deduplication key for a protocol feed event (#1282).
+ *
+ * Each feed-visible lifecycle transition (`InvoiceSubmitted`, `InvoiceFunded`,
+ * `InvoicePaid`, `InvoiceDisputed`) maps to one canonical key per
+ * `(eventType, invoiceId)`. Replayed polls that re-emit the same transition,
+ * or reorg / indexer backfills that re-deliver the transition at a corrected
+ * ledger or timestamp, collide on this key so the UI never displays duplicate
+ * rows or conflicting entries for the same transition.
+ */
+export function protocolFeedEventKey(event: ParsedContractEvent): string | null {
+  if (!isProtocolFeedEventType(event.type) || event.invoiceId === undefined) {
+    return null;
+  }
+  return `${event.type}:${event.invoiceId.toString()}`;
+}
+
+/**
+ * Decides whether `candidate` supersedes `existing` for the same canonical
+ * feed key during replay or reorg / corrected-data reconciliation (#1282):
+ *
+ * 1. Higher valid `ledger` wins (reorg or corrected canonical ledger replaces
+ *    the older/orphaned entry; stale replays at a lower ledger are ignored).
+ * 2. When `ledger` is equal (or absent on both), a strictly newer valid
+ *    `createdAt` timestamp wins (corrected metadata replaces stale/missing
+ *    timestamps).
+ * 3. When both `ledger` and `createdAt` match, the incoming event is an exact
+ *    replay and is discarded (first canonical record preserved).
+ */
+function shouldSupersedeFeedEvent(
+  existing: ParsedContractEvent,
+  candidate: ParsedContractEvent
+): boolean {
+  const existingLedger = typeof existing.ledger === 'number' && Number.isFinite(existing.ledger)
+    ? existing.ledger
+    : -1;
+  const candidateLedger = typeof candidate.ledger === 'number' && Number.isFinite(candidate.ledger)
+    ? candidate.ledger
+    : -1;
+
+  if (candidateLedger !== existingLedger) {
+    return candidateLedger > existingLedger;
+  }
+
+  const existingTs = eventTimestampMs(existing);
+  const candidateTs = eventTimestampMs(candidate);
+  return candidateTs > existingTs;
+}
+
+/**
+ * Deduplicate replayed protocol events and reconcile reorg / corrected event
+ * records before rendering (#1282).
+ *
+ * - Drops non-feed event types and malformed events missing `invoiceId`.
+ * - Collapses identical replays to a single entry.
+ * - Replaces superseded entries when a corrected/reorged record arrives with
+ *   a higher ledger (or newer valid timestamp on ledger tie).
+ * - Ignores stale replays whose ledger/timestamp is older than the accepted record.
+ */
+export function deduplicateProtocolFeedEvents(
+  events: ParsedContractEvent[]
+): ParsedContractEvent[] {
+  const byKey = new Map<string, ParsedContractEvent>();
+
+  for (const event of events) {
+    const key = protocolFeedEventKey(event);
+    if (!key) continue;
+
+    const existing = byKey.get(key);
+    if (!existing || shouldSupersedeFeedEvent(existing, event)) {
+      byKey.set(key, event);
+    }
+  }
+
+  return Array.from(byKey.values());
+}
+
+/**
+ * Merge a new poll batch into previously retained events using the same
+ * deduplication and reorg-replacement rules (#1282).
+ */
+export function mergeProtocolFeedEvents(
+  existing: ParsedContractEvent[],
+  incoming: ParsedContractEvent[]
+): ParsedContractEvent[] {
+  return deduplicateProtocolFeedEvents([...existing, ...incoming]);
+}
+
+/**
+ * Build the last N homepage feed items from contract events and invoice data.
+ *
+ * Replayed events are deduplicated by canonical `(eventType, invoiceId)` key
+ * and reorged/corrected records supersede stale ones before sorting and
+ * applying `limit` (#1282).
+ */
 export function buildProtocolFeedItems(
   events: ParsedContractEvent[],
   invoicesById: Map<string, Invoice>,
   limit = 10
 ): ProtocolFeedItem[] {
-  const sorted = [...events]
-    .filter((event) => isProtocolFeedEventType(event.type))
-    .sort((a, b) => eventTimestampMs(b) - eventTimestampMs(a));
+  if (limit <= 0) return [];
+
+  const deduped = deduplicateProtocolFeedEvents(events);
+  const sorted = deduped.sort((a, b) => {
+    const tsDiff = eventTimestampMs(b) - eventTimestampMs(a);
+    if (tsDiff !== 0) return tsDiff;
+    const ledgerDiff = (b.ledger ?? 0) - (a.ledger ?? 0);
+    if (ledgerDiff !== 0) return ledgerDiff;
+    return (b.invoiceId ?? 0n) > (a.invoiceId ?? 0n) ? 1 : (b.invoiceId ?? 0n) < (a.invoiceId ?? 0n) ? -1 : 0;
+  });
 
   const items: ProtocolFeedItem[] = [];
 

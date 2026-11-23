@@ -31,4 +31,4 @@ Follow-ups (not completed in this change)
 
 - Audit MSW mocks under `src/mocks/` (if present) to ensure handlers match real API contracts.
 - Add lightweight schema validation tests to guard against mock drift.
-- Investigate the Playwright smoke test failure against the live testnet deployment and record findings.
+- ~~Investigate the Playwright smoke test failure against the live testnet deployment and record findings.~~ Investigated: recurring nightly failures came from the hard-coded Vercel target serving a stale build plus one-shot heading probes that raced hydration. The target is now configurable (`TESTNET_SMOKE_URL` / manual `target_url`), 5xx is retried, and the smoke assertions auto-retry with Playwright `expect`. See `docs/troubleshooting.md`.

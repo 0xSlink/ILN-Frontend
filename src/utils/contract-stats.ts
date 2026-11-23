@@ -2,7 +2,14 @@ import { getAllInvoices, type Invoice } from './soroban';
 import { fetchProtocolParameters } from '@/utils/governance';
 import { TESTNET_USDC_TOKEN_ID, TESTNET_EURC_TOKEN_ID, TESTNET_XLM_TOKEN_ID } from '@/constants';
 import { fetchProtocolContractEvents } from '@/lib/fetch-protocol-contract-events';
+import type { ParsedContractEvent } from '@/lib/contract-events';
 import { computeDisputeRateMetrics, type DisputeRateMetrics } from '@/utils/dispute-rate';
+import type { MetricProvenance } from '@/utils/financial-metrics';
+import { toWholeUnits } from '@/utils/financial-metrics';
+import {
+  DEFAULT_INDEXER_STALE_AFTER_MS,
+  type IndexerFreshness,
+} from '@/lib/indexer/freshness';
 
 const FUNDED_STATUSES = new Set(['Funded', 'PartiallyFunded', 'Paid', 'Defaulted']);
 
@@ -39,6 +46,46 @@ export interface ContractStats {
   volume_by_token: TokenVolume[];
   daily_volume: DailyVolumeBucket[];
   dispute_rate: DisputeRateMetrics;
+  provenance?: MetricProvenance;
+  /** Indexer ledger and timestamp freshness metadata (#1279). */
+  indexerFreshness?: IndexerFreshness;
+}
+
+/**
+ * Derive honest indexer freshness metadata from observed protocol events.
+ * Missing or malformed ledger/timestamp values stay `null` ("unknown") and
+ * are never fabricated.
+ */
+export function deriveStatsIndexerFreshness(
+  events: ParsedContractEvent[],
+  staleAfterMs: number = DEFAULT_INDEXER_STALE_AFTER_MS
+): IndexerFreshness {
+  let maxLedger: number | null = null;
+  let latestTimestampMs: number | null = null;
+
+  for (const event of events) {
+    if (
+      typeof event.ledger === 'number' &&
+      Number.isSafeInteger(event.ledger) &&
+      event.ledger > 0 &&
+      (maxLedger === null || event.ledger > maxLedger)
+    ) {
+      maxLedger = event.ledger;
+    }
+
+    if (typeof event.createdAt === 'string') {
+      const parsed = Date.parse(event.createdAt);
+      if (Number.isFinite(parsed) && (latestTimestampMs === null || parsed > latestTimestampMs)) {
+        latestTimestampMs = parsed;
+      }
+    }
+  }
+
+  return {
+    lastIndexedLedger: maxLedger,
+    lastIndexedAt: latestTimestampMs !== null ? new Date(latestTimestampMs).toISOString() : null,
+    staleAfterMs,
+  };
 }
 
 interface TokenInfo {
@@ -64,7 +111,7 @@ function getTokenInfo(tokenId: string | undefined): TokenInfo {
 }
 
 function toUsd(amount: bigint, decimals: number, usdRate: number): number {
-  return (Number(amount) / 10 ** decimals) * usdRate;
+  return toWholeUnits(amount, decimals) * usdRate;
 }
 
 export function buildHistoricalVolume(invoices: Invoice[], days: number): DailyVolumeBucket[] {
@@ -90,7 +137,7 @@ export function buildHistoricalVolume(invoices: Invoice[], days: number): DailyV
 
     const { symbol, decimals, usdRate } = getTokenInfo(invoice.token);
     const usd = toUsd(invoice.amount, decimals, usdRate);
-    const whole = Number(invoice.amount) / 10 ** decimals;
+    const whole = toWholeUnits(invoice.amount, decimals);
     bucket.volume_usd += usd;
     if (symbol === 'USDC') bucket.usdc += whole;
     else if (symbol === 'EURC') bucket.eurc += whole;
@@ -121,7 +168,7 @@ export async function get_contract_stats(): Promise<ContractStats> {
       total_funded++;
       const { symbol, decimals, usdRate } = getTokenInfo(invoice.token);
       const usd = toUsd(invoice.amount, decimals, usdRate);
-      const whole = Number(invoice.amount) / 10 ** decimals;
+      const whole = toWholeUnits(invoice.amount, decimals);
       total_volume_usd += usd;
       if (!rawVolumes[symbol]) rawVolumes[symbol] = { amount_raw: 0, amount_usd: 0 };
       rawVolumes[symbol].amount_raw += whole;
@@ -147,6 +194,9 @@ export async function get_contract_stats(): Promise<ContractStats> {
     color: TOKEN_COLORS[symbol] ?? '#888888',
   }));
 
+  const staleAfterMs = DEFAULT_INDEXER_STALE_AFTER_MS;
+  const indexerFreshness = deriveStatsIndexerFreshness(contractEvents, staleAfterMs);
+
   return {
     total_invoices: invoices.length,
     total_funded,
@@ -157,5 +207,12 @@ export async function get_contract_stats(): Promise<ContractStats> {
     volume_by_token,
     daily_volume: buildHistoricalVolume(invoices, 90),
     dispute_rate: computeDisputeRateMetrics(contractEvents),
+    provenance: {
+      source: 'derived',
+      asOf: new Date().toISOString(),
+      unit: 'USD-equivalent; token amounts normalized before aggregation',
+      staleAfterMs,
+    },
+    indexerFreshness,
   };
 }

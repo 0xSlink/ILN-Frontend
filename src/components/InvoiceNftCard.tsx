@@ -5,19 +5,16 @@ import { useEffect } from 'react';
 import { NETWORK_NAME, NFT_CONTRACT_ID, NEXT_PUBLIC_NFT_ENABLED } from '@/constants';
 import { trackEvent } from '@/lib/analytics';
 import { formatAddress } from '@/utils/format';
+import { getExplorerAccountUrl, getExplorerContractUrl, getExplorerTxUrl } from '@/utils/explorer';
 import { useInvoiceNft } from '@/hooks/useInvoiceNft';
 import type { InvoiceNftState, InvoiceNftTransfer } from '@/lib/invoice-nft';
 
-function getExplorerNetworkPath() {
-  return NETWORK_NAME.toLowerCase();
-}
-
 function getContractUrl(contractId: string) {
-  return `https://stellar.expert/explorer/${getExplorerNetworkPath()}/contract/${contractId}`;
+  return getExplorerContractUrl(contractId, NETWORK_NAME);
 }
 
 function getTxUrl(txHash: string) {
-  return `https://stellar.expert/explorer/${getExplorerNetworkPath()}/tx/${txHash}`;
+  return getExplorerTxUrl(txHash, NETWORK_NAME);
 }
 
 function fallbackSvgDataUri(tokenId: bigint) {
@@ -61,6 +58,7 @@ function renderTransferRow(transfer: InvoiceNftTransfer) {
         : transfer.from
           ? `From ${formatAddress(transfer.from)}`
           : 'Token activity';
+  const txUrl = getTxUrl(transfer.txHash);
 
   return (
     <li
@@ -71,14 +69,16 @@ function renderTransferRow(transfer: InvoiceNftTransfer) {
         <p className="truncate font-mono text-sm text-on-surface">{label}</p>
         <p className="mt-1 text-xs text-on-surface-variant">{when ?? 'Unknown time'}</p>
       </div>
-      <a
-        href={getTxUrl(transfer.txHash)}
-        target="_blank"
-        rel="noreferrer"
-        className="shrink-0 text-sm font-bold text-primary hover:underline"
-      >
-        View tx
-      </a>
+      {txUrl && (
+        <a
+          href={txUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 text-sm font-bold text-primary hover:underline"
+        >
+          View tx
+        </a>
+      )}
     </li>
   );
 }
@@ -113,6 +113,7 @@ function NftBody({
     Boolean(walletAddress) &&
     ((invoiceFunder && walletAddress?.toLowerCase() === invoiceFunder.toLowerCase()) ||
       (state.currentHolder && walletAddress?.toLowerCase() === state.currentHolder.toLowerCase()));
+  const contractUrl = getContractUrl(NFT_CONTRACT_ID);
 
   return (
     <section className="mt-8 rounded-3xl border border-outline-variant/15 bg-surface-container-lowest p-6 shadow-xl">
@@ -127,15 +128,17 @@ function NftBody({
             <p className="mt-1 text-xs text-on-surface-variant">{description}</p>
           </div>
           <div className="mt-4 flex gap-3">
-            <a
-              href={getContractUrl(NFT_CONTRACT_ID)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container px-4 py-2.5 text-sm font-bold text-on-surface transition-colors hover:bg-surface-container-high"
-            >
-              <span className="material-symbols-outlined text-[18px]">open_in_new</span>
-              View on Stellar
-            </a>
+            {contractUrl && (
+              <a
+                href={contractUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container px-4 py-2.5 text-sm font-bold text-on-surface transition-colors hover:bg-surface-container-high"
+              >
+                <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+                View on Stellar
+              </a>
+            )}
             <button
               type="button"
               onClick={onRetry}
@@ -185,9 +188,7 @@ function NftBody({
               href={state.currentHolder ? `/profile/${state.currentHolder}` : undefined}
               externalHref={
                 state.currentHolder
-                  ? `https://stellar.expert/explorer/${getExplorerNetworkPath()}/account/${
-                      state.currentHolder
-                    }`
+                  ? (getExplorerAccountUrl(state.currentHolder, NETWORK_NAME) ?? undefined)
                   : undefined
               }
             />
@@ -203,14 +204,14 @@ function NftBody({
               <DetailRow
                 label="Mint Tx"
                 value={state.mintTxHash.slice(0, 10) + '…'}
-                externalHref={getTxUrl(state.mintTxHash)}
+                externalHref={getTxUrl(state.mintTxHash) ?? undefined}
               />
             ) : null}
             {state.burnTxHash ? (
               <DetailRow
                 label="Burn Tx"
                 value={state.burnTxHash.slice(0, 10) + '…'}
-                externalHref={getTxUrl(state.burnTxHash)}
+                externalHref={getTxUrl(state.burnTxHash) ?? undefined}
               />
             ) : null}
           </dl>

@@ -1,85 +1,139 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  isFinancialApiUrl,
+  isFinancialDocumentUrl,
+  purgeStaleFinancialCaches,
+  shouldBypassPwaCache,
+} from '@/lib/pwa-financial-policy';
 
-describe('Service Worker Offline Caching', () => {
+function createMockCacheStorage(initial: Record<string, string[]>) {
+  const store = new Map<string, Set<string>>(
+    Object.entries(initial).map(([name, urls]) => [name, new Set(urls)])
+  );
+
+  const storage = {
+    keys: vi.fn(async () => Array.from(store.keys())),
+    open: vi.fn(async (name: string) => {
+      const entries = store.get(name) ?? new Set<string>();
+      store.set(name, entries);
+      return {
+        keys: vi.fn(async () => Array.from(entries).map((url) => ({ url }) as Request)),
+        delete: vi.fn(async (req: Request) => entries.delete(req.url)),
+      };
+    }),
+  } as unknown as CacheStorage;
+
+  return { storage, store };
+}
+
+describe('Service Worker Offline Caching & Financial-Route Recovery (#1354)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('service worker is registered on app startup', async () => {
-    const mockRegister = vi.fn().mockResolvedValue({});
-    Object.defineProperty(navigator, 'serviceWorker', {
-      configurable: true,
-      value: {
-        register: mockRegister,
-        controller: null,
-        ready: Promise.resolve({}),
-      },
-    });
+  it('classifies financial API routes as cache-bypass (NetworkOnly)', () => {
+    const financialApis = [
+      'https://iln.app/api/indexer/analytics/defaults?period=12m',
+      'https://iln.app/api/invoices',
+      'https://iln.app/api/invoices/42',
+      'https://iln.app/api/transactions',
+      'https://iln.app/api/wallet/balance',
+      'https://iln.app/api/settlement/status',
+      'https://iln.app/api/payer/history',
+    ];
 
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      expect('serviceWorker' in navigator).toBe(true);
+    for (const url of financialApis) {
+      expect(isFinancialApiUrl(url)).toBe(true);
+      expect(shouldBypassPwaCache(url)).toBe(true);
     }
+
+    expect(isFinancialApiUrl('https://iln.app/api/health')).toBe(false);
+    expect(shouldBypassPwaCache('https://iln.app/static/logo.png', 'image')).toBe(false);
   });
 
-  it('offline page is cached for offline access', async () => {
-    const cacheNames = ['static-assets', 'api-cache', 'pages'];
-    expect(cacheNames).toContain('pages');
-    expect(cacheNames).toContain('static-assets');
+  it('classifies financial document routes as cache-bypass while allowing /offline and static pages', () => {
+    const financialDocs = [
+      'https://iln.app/dashboard',
+      'https://iln.app/invoices/batch',
+      'https://iln.app/i/101',
+      'https://iln.app/payer',
+      'https://iln.app/portfolio',
+      'https://iln.app/marketplace',
+      'https://iln.app/stats',
+      'https://iln.app/submit',
+      'https://iln.app/transactions',
+    ];
+
+    for (const url of financialDocs) {
+      expect(isFinancialDocumentUrl(url)).toBe(true);
+      expect(shouldBypassPwaCache(url, 'document')).toBe(true);
+    }
+
+    expect(isFinancialDocumentUrl('https://iln.app/offline')).toBe(false);
+    expect(shouldBypassPwaCache('https://iln.app/offline', 'document')).toBe(false);
+    expect(shouldBypassPwaCache('https://iln.app/assets/app.js', 'script')).toBe(false);
   });
 
-  it('network-first strategy applies to API calls', () => {
-    const apiPattern = /\/api\/.*$/i;
-    expect(apiPattern.test('/api/invoices')).toBe(true);
-    expect(apiPattern.test('/api/transactions')).toBe(true);
-  });
-
-  it('cache-first strategy applies to static assets', () => {
-    const staticPattern = /\.(?:js|css|woff|woff2|ttf|eot)$/i;
-    expect(staticPattern.test('app.js')).toBe(true);
-    expect(staticPattern.test('styles.css')).toBe(true);
-    expect(staticPattern.test('font.woff2')).toBe(true);
-  });
-
-  it('shows offline banner when network is unavailable', () => {
-    Object.defineProperty(navigator, 'onLine', {
-      configurable: true,
-      value: false,
+  it('purges stale transaction and invoice entries from api-cache and pages on recovery without touching static assets', async () => {
+    const { storage, store } = createMockCacheStorage({
+      'api-cache': [
+        'https://iln.app/api/invoices',
+        'https://iln.app/api/transactions?page=1',
+        'https://iln.app/api/indexer/stats',
+        'https://iln.app/api/health',
+      ],
+      pages: [
+        'https://iln.app/dashboard',
+        'https://iln.app/i/42',
+        'https://iln.app/offline',
+      ],
+      'static-assets': [
+        'https://iln.app/_next/static/chunks/main.js',
+        'https://iln.app/_next/static/css/app.css',
+      ],
+      'google-fonts': ['https://fonts.googleapis.com/css2?family=Inter'],
     });
-    expect(navigator.onLine).toBe(false);
+
+    const report = await purgeStaleFinancialCaches(storage);
+
+    expect(report.checkedCaches).toBe(2);
+    expect(report.deletedEntries).toBe(5);
+    expect(Array.from(store.get('api-cache') ?? [])).toEqual(['https://iln.app/api/health']);
+    expect(Array.from(store.get('pages') ?? [])).toEqual(['https://iln.app/offline']);
+    expect(Array.from(store.get('static-assets') ?? [])).toEqual([
+      'https://iln.app/_next/static/chunks/main.js',
+      'https://iln.app/_next/static/css/app.css',
+    ]);
+    expect(Array.from(store.get('google-fonts') ?? [])).toEqual([
+      'https://fonts.googleapis.com/css2?family=Inter',
+    ]);
   });
 
-  it('offline page contains guidance on available features', () => {
-    const offlineFeatures = ['cached invoices', 'portfolio', 'watchlist'];
-    expect(offlineFeatures.length).toBeGreaterThan(0);
+  it('degrades cleanly when CacheStorage is unavailable or throws', async () => {
+    const brokenStorage = {
+      keys: vi.fn(async () => {
+        throw new Error('SecurityError');
+      }),
+    } as unknown as CacheStorage;
+
+    const report = await purgeStaleFinancialCaches(brokenStorage);
+    expect(report).toEqual({ checkedCaches: 0, deletedEntries: 0 });
   });
 
-  it('resumes normal operation when network is restored', () => {
-    Object.defineProperty(navigator, 'onLine', {
-      configurable: true,
-      value: true,
-    });
-    expect(navigator.onLine).toBe(true);
-  });
+  it('configures NetworkOnly rules in next.config.ts ahead of generic api-cache and pages caches', () => {
+    const configSource = readFileSync(resolve(process.cwd(), 'next.config.ts'), 'utf8');
 
-  it('caches user invoice data for offline access', () => {
-    const invoiceCacheKey = 'api-cache';
-    expect(invoiceCacheKey).toBeTruthy();
-  });
+    const networkOnlyIdx = configSource.indexOf("handler: 'NetworkOnly'");
+    const apiCacheIdx = configSource.indexOf("cacheName: 'api-cache'");
+    const pagesCacheIdx = configSource.indexOf("cacheName: 'pages'");
 
-  it('caches portfolio data for offline access', () => {
-    const portfolioCacheKey = 'api-cache';
-    expect(portfolioCacheKey).toBeTruthy();
-  });
-
-  it('service worker has network timeout for API requests', () => {
-    const networkTimeoutSeconds = 10;
-    expect(networkTimeoutSeconds).toBeGreaterThan(0);
-    expect(networkTimeoutSeconds).toBeLessThanOrEqual(60);
-  });
-
-  it('cache expiration clears old data periodically', () => {
-    const maxAgeSeconds = 24 * 60 * 60;
-    const oneDay = 24 * 60 * 60;
-    expect(maxAgeSeconds).toBe(oneDay);
+    expect(networkOnlyIdx).toBeGreaterThan(-1);
+    expect(apiCacheIdx).toBeGreaterThan(networkOnlyIdx);
+    expect(pagesCacheIdx).toBeGreaterThan(networkOnlyIdx);
+    expect(configSource).toContain('skipWaiting: true');
+    expect(configSource).toContain('clientsClaim: true');
+    expect(configSource).toContain("value: 'no-store'");
   });
 });

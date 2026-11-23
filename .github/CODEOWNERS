@@ -33,3 +33,8 @@ src/types/ @Immex171
 
 # Documentation
 docs/ @Immex171
+
+# Malware indicator guard: changes need maintainer review
+.github/workflows/malware-indicators.yml        @Immex171
+.github/malware-indicators-allowlist.json       @Immex171
+scripts/check-malware-indicators.mjs            @Immex171

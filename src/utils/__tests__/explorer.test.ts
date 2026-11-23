@@ -4,6 +4,8 @@ import {
   isValidStellarAccountAddress,
   isValidStellarContractId,
   getExplorerNetworkPath,
+  resolveExplorerNetwork,
+  verifyExplorerUrl,
   getExplorerTxUrl,
   getExplorerAccountUrl,
   getExplorerContractUrl,
@@ -67,6 +69,63 @@ describe('explorer utils', () => {
     });
   });
 
+  describe('resolveExplorerNetwork', () => {
+    it('resolves only supported public/testnet aliases', () => {
+      expect(resolveExplorerNetwork('MAINNET')).toBe('public');
+      expect(resolveExplorerNetwork('main')).toBe('public');
+      expect(resolveExplorerNetwork('TESTNET')).toBe('testnet');
+    });
+
+    it('refuses unsupported networks instead of guessing testnet', () => {
+      expect(resolveExplorerNetwork('futurenet')).toBeNull();
+      expect(resolveExplorerNetwork('local')).toBeNull();
+      expect(getExplorerNetworkPath('futurenet')).toBe('testnet');
+    });
+  });
+
+  describe('verifyExplorerUrl', () => {
+    it('confirms network, transaction hash, account, and contract destination', () => {
+      expect(
+        verifyExplorerUrl(getExplorerTxUrl(validTxHash, 'testnet'), {
+          network: 'testnet',
+          txHash: validTxHash,
+        })
+      ).toBe(true);
+      expect(
+        verifyExplorerUrl(getExplorerAccountUrl(validAccount, 'public'), {
+          network: 'mainnet',
+          account: validAccount,
+        })
+      ).toBe(true);
+      expect(
+        verifyExplorerUrl(getExplorerContractUrl(validContract, 'public'), {
+          network: 'public',
+          contractId: validContract,
+        })
+      ).toBe(true);
+    });
+
+    it('rejects wrong network, wrong destination, malformed, and foreign-origin links', () => {
+      const url = getExplorerTxUrl(validTxHash, 'testnet');
+      expect(verifyExplorerUrl(url, { network: 'mainnet', txHash: validTxHash })).toBe(false);
+      expect(
+        verifyExplorerUrl(url, {
+          network: 'testnet',
+          txHash: 'a'.repeat(64),
+        })
+      ).toBe(false);
+      expect(verifyExplorerUrl('not-a-url', { network: 'testnet', txHash: validTxHash })).toBe(
+        false
+      );
+      expect(
+        verifyExplorerUrl(`https://example.com/explorer/testnet/tx/${validTxHash}`, {
+          network: 'testnet',
+          txHash: validTxHash,
+        })
+      ).toBe(false);
+    });
+  });
+
   describe('getExplorerTxUrl', () => {
     it('generates valid explorer url for valid hash', () => {
       const url = getExplorerTxUrl(validTxHash, 'testnet');
@@ -76,6 +135,10 @@ describe('explorer utils', () => {
     it('uses public for mainnet', () => {
       const url = getExplorerTxUrl(validTxHash, 'mainnet');
       expect(url).toBe(`https://stellar.expert/explorer/public/tx/${validTxHash}`);
+    });
+
+    it('returns null for an unsupported network', () => {
+      expect(getExplorerTxUrl(validTxHash, 'futurenet')).toBeNull();
     });
 
     it('returns null for invalid or mock tx hashes', () => {

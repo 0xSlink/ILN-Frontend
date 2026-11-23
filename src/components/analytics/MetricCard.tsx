@@ -1,5 +1,6 @@
 import React from 'react';
 import FieldTooltip from '@/components/FieldTooltip';
+import type { MetricProvenance } from '@/utils/financial-metrics';
 
 interface MetricCardProps {
   id: string;
@@ -10,6 +11,7 @@ interface MetricCardProps {
   accent?: boolean;
   tooltip?: string;
   badge?: React.ReactNode;
+  provenance?: MetricProvenance;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -21,6 +23,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
   accent = false,
   tooltip,
   badge,
+  provenance,
 }) => {
   return (
     <div
@@ -66,6 +69,15 @@ const MetricCard: React.FC<MetricCardProps> = ({
         {value}
       </p>
       {sub && <p className="text-xs text-on-surface-variant">{sub}</p>}
+      {provenance && (
+        <p
+          className="text-[10px] text-on-surface-variant"
+          data-testid={`${id}-provenance`}
+          title={`Source: ${provenance.source}; as of ${provenance.asOf}; unit: ${provenance.unit}`}
+        >
+          Source: {provenance.source} · {new Date(provenance.asOf).toLocaleTimeString()}
+        </p>
+      )}
     </div>
   );
 };

@@ -39,10 +39,16 @@ describe('Toast', () => {
     expect(screen.getByText('error')).toBeInTheDocument();
   });
 
-  it('links to Stellar Expert when a txHash is present', () => {
-    render(<Toast toast={makeToast({ txHash: 'abc123' })} onClose={vi.fn()} />);
+  it('links to Stellar Expert only for a verified tx hash on the configured network', () => {
+    const txHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    render(<Toast toast={makeToast({ txHash })} onClose={vi.fn()} />);
     const link = screen.getByText('View on Stellar Expert').closest('a');
-    expect(link).toHaveAttribute('href', 'https://stellar.expert/explorer/testnet/tx/abc123');
+    expect(link).toHaveAttribute('href', `https://stellar.expert/explorer/testnet/tx/${txHash}`);
+  });
+
+  it('omits the explorer link for a malformed tx hash', () => {
+    render(<Toast toast={makeToast({ txHash: 'abc123' })} onClose={vi.fn()} />);
+    expect(screen.queryByText('View on Stellar Expert')).not.toBeInTheDocument();
   });
 
   it('renders and triggers a custom action', () => {

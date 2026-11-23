@@ -8,33 +8,35 @@ a hypothetical XSS scenario (defense-in-depth, complementing the CSP work in Iss
 
 ## Complete Key Inventory
 
-| # | Key Pattern | Source File(s) | Data Shape | Sensitivity |
-|---|-------------|----------------|------------|-------------|
-| 1 | `iln_wallet_address` | `src/context/WalletContext.tsx` | `string` — full Stellar public key (e.g. `GABC…`) | **Sensitive** — wallet address |
-| 2 | `iln_wallet_provider` | `src/utils/walletStorage.ts` | `"freighter" \| "walletconnect"` | Low — provider name only |
-| 3 | `iln-notifications:{walletAddress}` | `src/context/NotificationContext.tsx` | `NotificationItem[]` — `{id, category, type, title, message, href, createdAt, read}` | Low — app-generated notification text |
-| 4 | `iln-notification-read:{walletAddress}` | `src/context/NotificationContext.tsx` | `Record<string, boolean>` — notification ID → read flag | Low |
-| 5 | `iln-notification-subscriptions` | `src/screens/settings/NotificationSettings.tsx` | `Subscription[]` — `{id, type, target, events, createdAt}` | **Sensitive** — `target` holds email addresses or webhook URLs |
-| 6 | `iln-address-book-{walletAddress}` | `src/hooks/useAddressBook.ts` | `AddressBookEntry[]` — `{id, address, nickname}` | **Sensitive** — wallet addresses + user-chosen nicknames (PII) |
-| 7 | `iln-bookmarks` | `src/hooks/useBookmarks.ts` | `string[]` — bookmarked invoice IDs | Low |
-| 8 | `watchlist_{walletAddress}` | `src/hooks/useWatchlist.ts` | `WatchlistItem[]` — `{id, addedAt, lastKnownStatus?}` | Low — invoice IDs and timestamps only |
-| 9 | `iln:last-seen-version` | `src/hooks/useWhatsNew.ts` | `string` — app version label | Low |
-| 10 | `iln_lp_widget_layout_{userId}` | `src/hooks/useLPWidgetLayout.ts` | `Widget[]` — `{id, label, visible, order}` | Low — layout preferences only |
-| 11 | `iln-lp-settings` | `src/hooks/useLPSettings.ts` | `{minReputation, notificationPreferences: {categories, inAppEnabled, emailEnabled, email}}` | **Sensitive** — contains `email` field |
-| 12 | `iln-sound-prefs` | `src/hooks/useSoundNotifications.ts` | `{enabled, volume, muted}` | Low |
-| 13 | `iln_recent_commands` | `src/hooks/useCommandPalette.ts` | `string[]` — command IDs | Low |
-| 14 | `iln_export_columns_{prefix}` | `src/utils/exportColumns.ts` | `string[]` — selected column keys | Low |
-| 15 | `iln_table_config_{tableId}` | `src/components/InvoiceTable.tsx`, `src/components/DataTable.tsx` | `{order: string[], visibility: string[]}` | Low |
-| 16 | `iln-referral-{invoiceId}` | `src/components/SubmitInvoiceForm.tsx` | `string` — referral code | Low |
-| 17 | `iln_lp_onboarding_completed_{address}` | `src/components/LPDashboard.tsx` | `"true"` | Low (key contains wallet address) |
-| 18 | `iln_onboarding_completed_{address}` | `src/components/onboarding/OnboardingFlow.tsx` | `"true"` | Low (key contains wallet address) |
-| 19 | `iln:dismissed-decay-warning` | `src/components/DecayWarningBanner.tsx` | epoch timestamp `string` | Low |
-| 20 | `iln_top_funders_30d` | `src/components/TopFundersWidget.tsx` | `{savedAt, rows: Funder[]}` — public leaderboard cache | Low — public on-chain data |
-| 21 | `iln_invoice_reminders` | `src/components/invoice/InvoiceNotificationPrompt.tsx` | `Record<string, boolean>` — invoice ID → opted-in | Low |
-| 22 | `iln_saved_invoice_filters` | `src/components/InvoiceFilterBar.tsx` | `SavedFilter[]` — `{id, name, filters}` | Low |
-| 23 | `iln:dismissed-parameter-updates` | `src/components/ParameterUpdateBanner.tsx` | `string[]` — dismissed announcement IDs | Low |
-| 24 | `freelancer_view_mode` | `src/screens/Dashboard.tsx` | `"table" \| "timeline"` | Low |
-| 25 | `theme` | `app/layout.tsx` | `"dark" \| "light"` | Low |
+| #   | Key Pattern                                                                                                             | Source File(s)                                                    | Data Shape                                                                                                         | Sensitivity                                                    |
+| --- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| 1   | `iln_wallet_address`                                                                                                    | `src/context/WalletContext.tsx`                                   | `string` — full Stellar public key (e.g. `GABC…`)                                                                  | **Sensitive** — wallet address                                 |
+| 2   | `iln_wallet_provider`                                                                                                   | `src/utils/walletStorage.ts`                                      | `"freighter" \| "walletconnect"`                                                                                   | Low — provider name only                                       |
+| 3   | `iln-notifications:{walletAddress}`                                                                                     | `src/context/NotificationContext.tsx`                             | `NotificationItem[]` — `{id, category, type, title, message, href, createdAt, read}`                               | Low — app-generated notification text                          |
+| 4   | `iln-notification-read:{walletAddress}`                                                                                 | `src/context/NotificationContext.tsx`                             | `Record<string, boolean>` — notification ID → read flag                                                            | Low                                                            |
+| 5   | `iln-notification-subscriptions`                                                                                        | `src/screens/settings/NotificationSettings.tsx`                   | `Subscription[]` — `{id, type, target, events, createdAt}`                                                         | **Sensitive** — `target` holds email addresses or webhook URLs |
+| 6   | `iln-address-book-v1-{originNetworkTag}-{walletAddress}` (legacy: `iln-address-book-{walletAddress}`, migrated on read) | `src/hooks/useAddressBook.ts`, `src/utils/walletRecordStore.ts`   | Integrity-checked envelope wrapping `AddressBookEntry[]` — `{id, address, nickname}`, expires after 90 days unused | **Sensitive** — wallet addresses + user-chosen nicknames (PII) |
+| 7   | `iln-bookmarks`                                                                                                         | `src/hooks/useBookmarks.ts`                                       | `string[]` — bookmarked invoice IDs                                                                                | Low                                                            |
+| 8   | `watchlist_{walletAddress}`                                                                                             | `src/hooks/useWatchlist.ts`                                       | `WatchlistItem[]` — `{id, addedAt, lastKnownStatus?}`                                                              | Low — invoice IDs and timestamps only                          |
+| 9   | `iln:last-seen-version`                                                                                                 | `src/hooks/useWhatsNew.ts`                                        | `string` — app version label                                                                                       | Low                                                            |
+| 10  | `iln_lp_widget_layout_{userId}`                                                                                         | `src/hooks/useLPWidgetLayout.ts`                                  | `Widget[]` — `{id, label, visible, order}`                                                                         | Low — layout preferences only                                  |
+| 11  | `iln-lp-settings`                                                                                                       | `src/hooks/useLPSettings.ts`                                      | `{minReputation, notificationPreferences: {categories, inAppEnabled, emailEnabled, email}}`                        | **Sensitive** — contains `email` field                         |
+| 12  | `iln-sound-prefs`                                                                                                       | `src/hooks/useSoundNotifications.ts`                              | `{enabled, volume, muted}`                                                                                         | Low                                                            |
+| 13  | `iln_recent_commands`                                                                                                   | `src/hooks/useCommandPalette.ts`                                  | `string[]` — command IDs                                                                                           | Low                                                            |
+| 14  | `iln_export_columns_{prefix}`                                                                                           | `src/utils/exportColumns.ts`                                      | `string[]` — selected column keys                                                                                  | Low                                                            |
+| 15  | `iln_table_config_{tableId}`                                                                                            | `src/components/InvoiceTable.tsx`, `src/components/DataTable.tsx` | `{order: string[], visibility: string[]}`                                                                          | Low                                                            |
+| 16  | `iln-referral-{invoiceId}`                                                                                              | `src/components/SubmitInvoiceForm.tsx`                            | `string` — referral code                                                                                           | Low                                                            |
+| 17  | `iln_lp_onboarding_completed_{address}`                                                                                 | `src/components/LPDashboard.tsx`                                  | `"true"`                                                                                                           | Low (key contains wallet address)                              |
+| 18  | `iln_onboarding_completed_{address}`                                                                                    | `src/components/onboarding/OnboardingFlow.tsx`                    | `"true"`                                                                                                           | Low (key contains wallet address)                              |
+| 19  | `iln:dismissed-decay-warning`                                                                                           | `src/components/DecayWarningBanner.tsx`                           | epoch timestamp `string`                                                                                           | Low                                                            |
+| 20  | `iln_top_funders_30d`                                                                                                   | `src/components/TopFundersWidget.tsx`                             | `{savedAt, rows: Funder[]}` — public leaderboard cache                                                             | Low — public on-chain data                                     |
+| 21  | `iln_invoice_reminders`                                                                                                 | `src/components/invoice/InvoiceNotificationPrompt.tsx`            | `Record<string, boolean>` — invoice ID → opted-in                                                                  | Low                                                            |
+| 22  | `iln_saved_invoice_filters`                                                                                             | `src/components/InvoiceFilterBar.tsx`                             | `SavedFilter[]` — `{id, name, filters}`                                                                            | Low                                                            |
+| 23  | `iln:dismissed-parameter-updates`                                                                                       | `src/components/ParameterUpdateBanner.tsx`                        | `string[]` — dismissed announcement IDs                                                                            | Low                                                            |
+| 24  | `freelancer_view_mode`                                                                                                  | `src/screens/Dashboard.tsx`                                       | `"table" \| "timeline"`                                                                                            | Low                                                            |
+| 25  | `theme`                                                                                                                 | `app/layout.tsx`                                                  | `"dark" \| "light"`                                                                                                | Low                                                            |
+| 26  | `iln_wallet_session`                                                                                                    | `src/utils/wallet-session-sync.ts`, `src/utils/walletStorage.ts`  | `{address, provider, network, updatedAt, tabId}` — cross-tab session intent (5m TTL)                               | Low-Medium — public wallet address, cleared on disconnect      |
+| 27  | `iln_pending_transactions_v1`                                                                                           | `src/lib/pending-transactions.ts`, `src/utils/walletStorage.ts`   | `PendingTransaction[]` — strict allowlist `{hash, label?, operationKey?, address?, createdAt, lastCheckedAt?, status}` (24h TTL) | Low-Medium — public tx hashes & operation labels; secrets/XDR/PII stripped (#1293) |
 
 ---
 
@@ -44,7 +46,7 @@ a hypothetical XSS scenario (defense-in-depth, complementing the CSP work in Iss
 
 **Risk level: LOW-MEDIUM**
 
-The stored value is a Stellar *public* key — not a private key, seed, or signing
+The stored value is a Stellar _public_ key — not a private key, seed, or signing
 credential. Stellar public keys are already visible on-chain for any active account,
 so exposure via XSS does not grant an attacker asset control. The wallet extension
 (Freighter / WalletConnect) holds the private key in its own isolated storage and
@@ -63,6 +65,7 @@ The `target` field in subscription entries contains plaintext email addresses or
 webhook URLs that the user explicitly opted into sharing.
 
 **Mitigation already present:**
+
 - Written only after explicit user opt-in via the notification settings UI.
 - Cleared on wallet disconnect (not in `WALLET_SCOPED_PREFIXES`, but the key is
   non-wallet-specific and resets per browser profile).
@@ -80,7 +83,10 @@ Contains user-supplied nicknames mapped to Stellar addresses. The nicknames are
 optional, user-provided PII (e.g. "Alice's Savings").
 
 **Mitigation already present:**
-- Scoped per wallet address; cleared on disconnect via `clearWalletStorage()`.
+
+- Scoped per wallet address, page origin and Stellar network; cleared on disconnect via `clearWalletStorage()`.
+- SHA-256 integrity digest; corrupt, tampered, cross-scope and expired records are discarded with a user-visible notice.
+- 90-day inactivity retention, swept on every app load. See [wallet-storage-integrity.md](./wallet-storage-integrity.md).
 - Nicknames are voluntarily entered — the user accepts that they are stored locally.
 
 [AddressBook implementation](../src/hooks/useAddressBook.ts) – ensures proper handling of duplicate entries and max‑size enforcement.
@@ -99,11 +105,42 @@ defense.
 The `notificationPreferences.email` field stores the user's email in plaintext.
 
 **Mitigation already present:**
+
 - Written only after the user enters their email in the LP settings panel.
 - Not wallet-scoped (persists across wallet switches).
 
 **Accepted risk:** Same as subscription email — privacy exposure, not credential
 leak. The email is already transmitted to the ILN backend for reminder delivery.
+
+### 5. `iln_pending_transactions_v1` — unsettled pending transaction records (#1293)
+
+**Risk level: LOW-MEDIUM**
+
+Stores locally-submitted transaction hashes awaiting network confirmation so
+reloads and wallet reconnects do not blindly resubmit unsettled operations (#1287).
+
+**Verified safeguards (#1293):**
+
+- **Strict field allowlisting & secret/PII scrubbing:** `sanitizePendingTransactionRecord()`
+  in `src/utils/walletStorage.ts` permits only `{hash, label?, operationKey?, address?,
+  createdAt, lastCheckedAt?, status}`. Any unknown keys (e.g. `signedXdr`, `envelopeXdr`,
+  `secretKey`, `memo`) are stripped before persistence and on read; Stellar secret seeds
+  (`S...`), private key PEM blocks, Bearer/JWT tokens, raw base64 XDR envelopes, and
+  email addresses are rejected or scrubbed.
+- **24-hour TTL expiry with explicit recovery:** Entries older than `PENDING_TRANSACTION_TTL_MS`
+  (24 hours) or carrying invalid/future timestamps expire on read and during disconnect
+  audits (`auditPendingTransactionsStorage()`), removing stale locks and returning an
+  actionable `recoveryMessage` instructing the user to verify settlement on Stellar
+  Explorer before retrying.
+- **Disconnect behavior:** `clearWalletStorage()` always scrubs expired, corrupted, or
+  tainted pending records while preserving fresh unsettled transaction hashes by default
+  so reconnect idempotency locks remain effective (callers may pass
+  `{ clearPendingTransactions: true }` for a full wipe).
+
+**Residual risk:** Because `localStorage` is readable by same-origin JavaScript, an XSS
+compromise could read public transaction hashes or inject synthetic entries; the CSP
+remains the primary XSS boundary, and local pending entries are never treated as
+authoritative for settlement (network RPC truth always governs finality).
 
 ---
 
@@ -111,14 +148,14 @@ leak. The email is already transmitted to the ILN backend for reminder delivery.
 
 The following sensitive categories are **never written to localStorage**:
 
-| Category | Status |
-|----------|--------|
-| Private keys / seed phrases | **Not stored** — held exclusively by the wallet extension |
-| Session tokens / JWTs | **Not stored** — wallet signing is handled by Freighter/WalletConnect in their own context; Supabase anon key is public by design |
-| Transaction signing payloads | **Not stored** — passed in-memory only |
-| On-chain invoice amounts / financial data | **Not stored** in localStorage (fetched from Soroban RPC / Horizon) |
-| Supabase service role key | **Not stored** — server-only via `SUPABASE_SERVICE_ROLE_KEY` env var |
-| WalletConnect session URI / pairing data | **Not stored** — managed by `@walletconnect/sign-client` internally |
+| Category                                  | Status                                                                                                                            |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Private keys / seed phrases               | **Not stored** — held exclusively by the wallet extension                                                                         |
+| Session tokens / JWTs                     | **Not stored** — wallet signing is handled by Freighter/WalletConnect in their own context; Supabase anon key is public by design |
+| Transaction signing payloads              | **Not stored** — passed in-memory only                                                                                            |
+| On-chain invoice amounts / financial data | **Not stored** in localStorage (fetched from Soroban RPC / Horizon)                                                               |
+| Supabase service role key                 | **Not stored** — server-only via `SUPABASE_SERVICE_ROLE_KEY` env var                                                              |
+| WalletConnect session URI / pairing data  | **Not stored** — managed by `@walletconnect/sign-client` internally                                                               |
 
 ---
 
@@ -133,6 +170,7 @@ The following sensitive categories are **never written to localStorage**:
 
 **Note:** The following keys persist across wallet disconnects (they are user-
 preferences, not session data):
+
 - `theme`, `freelancer_view_mode`, `iln-notification-subscriptions`,
   `iln-lp-settings`, `iln-sound-prefs`, `iln-bookmarks`, `iln_recent_commands`,
   `iln:last-seen-version`, `iln:dismissed-*`, `iln_invoice_reminders`,

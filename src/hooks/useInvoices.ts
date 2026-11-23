@@ -12,7 +12,7 @@ import { useWallet } from '@/context/WalletContext';
 import { useToast } from '@/context/ToastContext';
 import { isContractEventStreamingActive } from '@/lib/contract-event-stream-state';
 import { invoiceKeys, QUERY_TIMINGS } from '@/hooks/queries/keys';
-import { createQueryConfig } from '@/hooks/queries/defaultConfig';
+import { createFinancialQueryConfig } from '@/hooks/queries/defaultConfig';
 
 const TERMINAL_STATUSES = ['Paid', 'Defaulted', 'Cancelled'];
 
@@ -20,7 +20,7 @@ export function useInvoices() {
   return useQuery<Invoice[], Error>({
     queryKey: invoiceKeys.all,
     queryFn: getAllInvoices,
-    ...createQueryConfig({
+    ...createFinancialQueryConfig({
       ...QUERY_TIMINGS.invoices,
       refetchInterval: (query) => {
         const data = query.state.data as Invoice[] | undefined;
@@ -42,7 +42,7 @@ export function useInvoice(id: bigint | null) {
     queryKey: invoiceKeys.detail(id),
     queryFn: () => (id ? getInvoice(id) : Promise.reject('Invalid ID')),
     enabled: !!id,
-    ...createQueryConfig({
+    ...createFinancialQueryConfig({
       ...QUERY_TIMINGS.invoiceDetail,
       refetchInterval: (query) => {
         const data = query.state.data as Invoice | undefined;

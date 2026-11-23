@@ -14,6 +14,7 @@ import {
   LeaderboardTab,
 } from '@/utils/soroban';
 import { resolveFederatedAddress } from '@/utils/federation';
+import { getExplorerAccountUrl } from '@/utils/explorer';
 import { NETWORK_NAME } from '@/constants';
 
 const DEFAULT_LEADERBOARD_LIMIT = 50;
@@ -21,8 +22,7 @@ const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const ITEMS_PER_PAGE = 20;
 
 function getStellarExpertProfileUrl(address: string) {
-  const networkPath = NETWORK_NAME.toUpperCase() === 'TESTNET' ? 'testnet' : 'public';
-  return `https://stellar.expert/explorer/${networkPath}/account/${address}`;
+  return getExplorerAccountUrl(address, NETWORK_NAME);
 }
 
 function getDisplayAddress(name: string, address: string) {
@@ -219,6 +219,7 @@ export default function LeaderboardPage() {
     const displayName = getDisplayAddress(federatedNames[item.address] ?? '', item.address);
     const globalRank = (currentPage - 1) * ITEMS_PER_PAGE + index + 1;
     const rankChange = getRankChange(item.address, globalRank);
+    const explorerUrl = getStellarExpertProfileUrl(item.address);
 
     return (
       <tr
@@ -279,14 +280,16 @@ export default function LeaderboardPage() {
             >
               View Profile
             </Link>
-            <a
-              href={getStellarExpertProfileUrl(item.address)}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="text-xs text-on-surface-variant hover:underline"
-            >
-              Stellar Expert
-            </a>
+            {explorerUrl && (
+              <a
+                href={explorerUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-xs text-on-surface-variant hover:underline"
+              >
+                Stellar Expert
+              </a>
+            )}
           </div>
         </td>
       </tr>

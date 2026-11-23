@@ -3,13 +3,18 @@
 import { useMemo, useState, useCallback } from 'react';
 import { Invoice } from '@/utils/soroban';
 import { formatAddress, formatDate, formatUSDC } from '@/utils/format';
+import { NETWORK_NAME } from '@/constants';
+import { getExplorerTxUrl } from '@/utils/explorer';
 import InvoiceStatusBadge from './InvoiceStatusBadge';
 import Link from 'next/link';
 
 interface InvoiceTimelineProps {
   invoices: Invoice[];
   loading: boolean;
+  /** Legacy override for non-Stellar-Expert deployments. */
   explorerBaseUrl?: string;
+  /** Network that produced the invoice transaction. Defaults to the app network. */
+  network?: string;
 }
 
 type DateMarker = 'Today' | 'Yesterday' | 'This week' | 'Last month' | 'Older';
@@ -51,11 +56,19 @@ function getStatusLabel(invoice: Invoice): string {
 interface DetailPanelProps {
   invoice: Invoice;
   explorerBaseUrl: string;
+  network: string;
   onClose: () => void;
 }
 
-function DetailPanel({ invoice, explorerBaseUrl, onClose }: DetailPanelProps) {
+function DetailPanel({ invoice, explorerBaseUrl, network, onClose }: DetailPanelProps) {
   const txHash = (invoice as Invoice & { tx_hash?: string }).tx_hash;
+  const verifiedExplorerUrl = getExplorerTxUrl(txHash, network);
+  const explorerUrl =
+    explorerBaseUrl === STELLAR_EXPERT_BASE
+      ? verifiedExplorerUrl
+      : txHash
+        ? `${explorerBaseUrl}${txHash.trim()}`
+        : null;
 
   return (
     <div
@@ -145,9 +158,9 @@ function DetailPanel({ invoice, explorerBaseUrl, onClose }: DetailPanelProps) {
           View Invoice
         </Link>
 
-        {txHash && (
+        {explorerUrl && (
           <a
-            href={`${explorerBaseUrl}${txHash}`}
+            href={explorerUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-lg border border-outline-variant/30 px-4 py-2 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-low"
@@ -197,6 +210,7 @@ export default function InvoiceTimeline({
   invoices,
   loading,
   explorerBaseUrl = STELLAR_EXPERT_BASE,
+  network = NETWORK_NAME,
 }: InvoiceTimelineProps) {
   const [pageSize, setPageSize] = useState(20);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -325,6 +339,7 @@ export default function InvoiceTimeline({
                     <DetailPanel
                       invoice={invoice}
                       explorerBaseUrl={explorerBaseUrl}
+                      network={network}
                       onClose={() => setExpandedId(null)}
                     />
                   </div>

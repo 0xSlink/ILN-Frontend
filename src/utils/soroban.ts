@@ -189,6 +189,42 @@ async function readTokenContractValue(tokenId: string, method: string): Promise<
 
 // ─── Read functions ───────────────────────────────────────────────────────────
 
+/**
+ * Reads the contract's staged-rollout max invoice amount (0 = uncapped).
+ */
+export async function getMaxInvoiceAmount(): Promise<bigint> {
+  try {
+    const callResult = await server.simulateTransaction(
+      buildReadTransaction(CONTRACT_ID, 'max_invoice_amount', [])
+    );
+    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
+      return BigInt(scValToNative(callResult.result.retval));
+    }
+  } catch {
+    // Falls back to 0n when contract entrypoint is missing or RPC fails
+  }
+  return 0n;
+}
+
+/**
+ * Reads the contract's staged-rollout cumulative volume cap for a token (0 = uncapped).
+ */
+export async function getTokenVolumeCap(tokenId: string): Promise<bigint> {
+  if (!tokenId) return 0n;
+  try {
+    const params: xdr.ScVal[] = [Address.fromString(tokenId).toScVal()];
+    const callResult = await server.simulateTransaction(
+      buildReadTransaction(CONTRACT_ID, 'token_volume_cap', params)
+    );
+    if (rpc.Api.isSimulationSuccess(callResult) && callResult.result?.retval) {
+      return BigInt(scValToNative(callResult.result.retval));
+    }
+  } catch {
+    // Falls back to 0n when contract entrypoint is missing or RPC fails
+  }
+  return 0n;
+}
+
 export async function getInvoiceCount(): Promise<bigint> {
   const result = await server.getHealth();
   if (result.status !== 'healthy') {

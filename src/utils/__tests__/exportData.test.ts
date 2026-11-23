@@ -5,6 +5,7 @@ import {
   downloadFile,
   exportToCSV,
   exportToJSON,
+  sanitizeExportValue,
 } from '../exportData';
 
 describe('filterByDateRange', () => {
@@ -66,14 +67,91 @@ describe('formatAsCSV', () => {
     const csv = formatAsCSV([{ a: null, b: undefined }], ['a', 'b']);
     expect(csv).toBe('a,b\n"",""');
   });
+
+  // ─── Metadata & Masked/Unavailable value tests ─────────────────────────────
+
+  it('includes source and as-of metadata headers when requested', () => {
+    const csv = formatAsCSV([{ id: 'inv-1', amount: 500 }], ['id', 'amount'], {
+      metadata: {
+        source: 'Stellar Soroban Mainnet',
+        asOf: '2026-11-19T00:00:00.000Z',
+      },
+    });
+
+    expect(csv).toContain('# Source: Stellar Soroban Mainnet');
+    expect(csv).toContain('# As-Of: 2026-11-19T00:00:00.000Z');
+    expect(csv).toContain('id,amount\n"inv-1","500"');
+  });
+
+  it('never exports masked or unavailable values as zero in CSV', () => {
+    const testRecords = [
+      {
+        id: '1',
+        balance: null,
+        fee: undefined,
+        discountRate: Number.NaN,
+        privateKey: '[MASKED]',
+        secretToken: '***',
+        status: 'Unavailable',
+        realZeroAmount: 0,
+        realZeroString: '0',
+      },
+    ];
+
+    const csv = formatAsCSV(testRecords);
+
+    // null, undefined, and NaN must export as empty string, NOT "0" or 0
+    expect(csv).toContain('"","","","[MASKED]","***","Unavailable","0","0"');
+
+    // Make sure genuine zeroes are preserved as "0"
+    const lines = csv.split('\n');
+    expect(lines[0]).toBe(
+      'id,balance,fee,discountRate,privateKey,secretToken,status,realZeroAmount,realZeroString'
+    );
+    expect(lines[1]).toBe('"1","","","","[MASKED]","***","Unavailable","0","0"');
+
+    // Assert that balance, fee, and discountRate are not exported as 0
+    const values = lines[1].split(',');
+    expect(values[1]).toBe('""'); // balance (null) -> ""
+    expect(values[2]).toBe('""'); // fee (undefined) -> ""
+    expect(values[3]).toBe('""'); // discountRate (NaN) -> ""
+    expect(values[4]).toBe('"[MASKED]"'); // privateKey ([MASKED]) -> "[MASKED]"
+    expect(values[7]).toBe('"0"'); // realZeroAmount (0) -> "0"
+  });
+});
+
+describe('sanitizeExportValue', () => {
+  it('preserves null and undefined as null without converting to zero', () => {
+    expect(sanitizeExportValue(null)).toBeNull();
+    expect(sanitizeExportValue(undefined)).toBeNull();
+    expect(sanitizeExportValue(Number.NaN)).toBeNull();
+    expect(sanitizeExportValue(Number.POSITIVE_INFINITY)).toBeNull();
+  });
+
+  it('preserves masked and unavailable string representations without converting to zero', () => {
+    expect(sanitizeExportValue('[MASKED]')).toBe('[MASKED]');
+    expect(sanitizeExportValue('***')).toBe('***');
+    expect(sanitizeExportValue('Unavailable')).toBe('Unavailable');
+    expect(sanitizeExportValue('N/A')).toBe('N/A');
+  });
+
+  it('preserves actual zero values accurately', () => {
+    expect(sanitizeExportValue(0)).toBe(0);
+    expect(sanitizeExportValue('0')).toBe('0');
+  });
 });
 
 describe('downloadFile / exportToCSV / exportToJSON', () => {
-  const createObjectURLMock = vi.fn(() => 'blob:url');
+  let capturedBlob: Blob | null = null;
+  const createObjectURLMock = vi.fn((blob: Blob) => {
+    capturedBlob = blob;
+    return 'blob:url';
+  });
   const revokeObjectURLMock = vi.fn();
   const clickMock = vi.fn();
 
   beforeEach(() => {
+    capturedBlob = null;
     createObjectURLMock.mockClear();
     revokeObjectURLMock.mockClear();
     clickMock.mockClear();
@@ -89,23 +167,40 @@ describe('downloadFile / exportToCSV / exportToJSON', () => {
     expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:url');
   });
 
-  it('exportToCSV downloads a CSV file', () => {
-    exportToCSV([{ a: 1 }], 'data.csv');
-    expect(clickMock).toHaveBeenCalled();
-  });
-
-  it('exportToJSON downloads all columns by default', () => {
-    exportToJSON([{ a: 1, b: 2 }], 'data.json');
-    expect(clickMock).toHaveBeenCalled();
-  });
-
-  it('exportToJSON restricts to the given columns', () => {
-    let capturedHref = '';
-    createObjectURLMock.mockImplementation((blob: Blob) => {
-      capturedHref = 'blob:url';
-      return capturedHref;
+  it('exportToCSV downloads a CSV file with metadata when specified', async () => {
+    exportToCSV([{ id: 1, amount: null, masked: '[MASKED]' }], 'data.csv', undefined, {
+      metadata: { source: 'ILN Soroban Contract', asOf: '2026-11-19T00:00:00.000Z' },
     });
-    exportToJSON([{ a: 1, b: 2, c: 3 }], 'data.json', ['a', 'c']);
     expect(clickMock).toHaveBeenCalled();
+    expect(capturedBlob).not.toBeNull();
+    const text = await capturedBlob!.text();
+    expect(text).toContain('# Source: ILN Soroban Contract');
+    expect(text).toContain('# As-Of: 2026-11-19T00:00:00.000Z');
+    expect(text).toContain('"1","","[MASKED]"');
+  });
+
+  it('exportToJSON downloads all columns by default without clobbering unavailable values', async () => {
+    exportToJSON([{ a: 1, b: null, c: Number.NaN, d: '[MASKED]' }], 'data.json');
+    expect(clickMock).toHaveBeenCalled();
+    expect(capturedBlob).not.toBeNull();
+    const text = await capturedBlob!.text();
+    const parsed = JSON.parse(text);
+    expect(parsed).toEqual([{ a: 1, b: null, c: null, d: '[MASKED]' }]);
+    expect(parsed[0].b).not.toBe(0);
+    expect(parsed[0].c).not.toBe(0);
+  });
+
+  it('exportToJSON wraps payload with source and as-of metadata envelope when requested', async () => {
+    exportToJSON([{ id: 10, value: 50 }], 'data.json', ['id', 'value'], {
+      metadata: { source: 'ILN Subgraph Indexer', asOf: '2026-11-19T12:00:00.000Z' },
+    });
+    expect(clickMock).toHaveBeenCalled();
+    expect(capturedBlob).not.toBeNull();
+    const text = await capturedBlob!.text();
+    const parsed = JSON.parse(text);
+    expect(parsed.metadata).toBeDefined();
+    expect(parsed.metadata.source).toBe('ILN Subgraph Indexer');
+    expect(parsed.metadata.asOf).toBe('2026-11-19T12:00:00.000Z');
+    expect(parsed.data).toEqual([{ id: 10, value: 50 }]);
   });
 });

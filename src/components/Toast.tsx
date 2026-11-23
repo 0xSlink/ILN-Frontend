@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import { NETWORK_NAME } from '@/constants';
 import type { ToastMessage } from '@/context/ToastContext';
+import { getExplorerTxUrl } from '@/utils/explorer';
 
 interface ToastProps {
   toast: ToastMessage;
@@ -16,6 +18,7 @@ export default function Toast({ toast, onClose }: ToastProps) {
   const isPending = type === 'pending';
   const isSuccess = type === 'success';
   const isError = type === 'error';
+  const explorerUrl = getExplorerTxUrl(txHash, NETWORK_NAME);
 
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -115,9 +118,9 @@ export default function Toast({ toast, onClose }: ToastProps) {
           <div className="flex-1">
             <h4 className="font-bold text-sm tracking-wide">{title}</h4>
             {message && <p className="text-xs mt-1 opacity-90">{message}</p>}
-            {txHash && (
+            {explorerUrl && (
               <a
-                href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
+                href={explorerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[10px] underline mt-2 block opacity-80 hover:opacity-100 uppercase tracking-widest"

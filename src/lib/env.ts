@@ -23,7 +23,8 @@ export const env = {
   RESEND_API_KEY: process.env.RESEND_API_KEY || '',
   CRON_SECRET: process.env.CRON_SECRET || '',
   NOTIFICATION_API: process.env.NOTIFICATION_API || '',
-  INDEXER_URL: process.env.INDEXER_URL || '',
+  // Indexer REST config is server-only and read solely by src/lib/indexer/server.ts;
+  // it is deliberately absent here because this module is reachable from browser code.
 
   // Stellar / Contract – have testnet defaults in constants.ts but validated here
   NEXT_PUBLIC_CONTRACT_ID: optionalEnv(
@@ -37,6 +38,8 @@ export const env = {
   NEXT_PUBLIC_RPC_URL: optionalEnv('NEXT_PUBLIC_RPC_URL', 'https://soroban-testnet.stellar.org'),
   NEXT_PUBLIC_NETWORK_NAME: optionalEnv('NEXT_PUBLIC_NETWORK_NAME', 'TESTNET'),
   NEXT_PUBLIC_STELLAR_NETWORK: optionalEnv('NEXT_PUBLIC_STELLAR_NETWORK', 'testnet'),
+  NEXT_PUBLIC_SEP10_HOME_DOMAIN: process.env.NEXT_PUBLIC_SEP10_HOME_DOMAIN || '',
+  NEXT_PUBLIC_SEP10_WEB_AUTH_ENDPOINT: process.env.NEXT_PUBLIC_SEP10_WEB_AUTH_ENDPOINT || '',
 
   // Tokens
   NEXT_PUBLIC_TESTNET_USDC_TOKEN_ID: optionalEnv(
@@ -65,18 +68,23 @@ export const env = {
     'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
   ),
 
-  // Indexer
+  // Indexer WebSocket and REST endpoints
+  NEXT_PUBLIC_INDEXER_WS_URL: optionalEnv('NEXT_PUBLIC_INDEXER_WS_URL', 'ws://localhost:8080/ws'),
   NEXT_PUBLIC_INDEXER_API_URL: optionalEnv(
     'NEXT_PUBLIC_INDEXER_API_URL',
     'https://api.iln.example.com'
   ),
-  NEXT_PUBLIC_INDEXER_WS_URL: optionalEnv('NEXT_PUBLIC_INDEXER_WS_URL', 'ws://localhost:8080/ws'),
 
   // WalletConnect
   NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
 
   // App
   NEXT_PUBLIC_APP_URL: optionalEnv('NEXT_PUBLIC_APP_URL', 'https://app.iln.finance'),
+
+  // Auth
+  SEP10_SERVER_SECRET_KEY: process.env.SEP10_SERVER_SECRET_KEY || '',
+  SEP10_HOME_DOMAIN: process.env.SEP10_HOME_DOMAIN || '',
+  JWT_SECRET_KEY: process.env.JWT_SECRET_KEY || '',
 
   // Real-User Monitoring (RUM) – optional beacon endpoint for Core Web Vitals
   NEXT_PUBLIC_RUM_ENDPOINT: process.env.NEXT_PUBLIC_RUM_ENDPOINT || '',

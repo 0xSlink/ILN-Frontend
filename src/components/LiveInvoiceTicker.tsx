@@ -1,14 +1,9 @@
 'use client';
 
 import AnimatedNumber from '@/components/AnimatedNumber';
+import DataSourceCaption from '@/components/DataSourceCaption';
 import { useInvoiceCount } from '@/hooks/queries/useInvoiceCount';
 import { useContractStats } from '@/hooks/useContractStats';
-
-/**
- * Static fallback shown when the contract query fails, so the hero never
- * renders an empty or broken ticker. Kept deliberately modest.
- */
-const FALLBACK_COUNT = 0;
 
 function formatUsd(value: number): string {
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
@@ -17,48 +12,63 @@ function formatUsd(value: number): string {
 }
 
 /**
- * Live, animated invoice counter for the homepage hero (#133).
+ * Live, animated invoice counter for the homepage hero (#133, #1271).
  *
  * - Polls `get_invoice_count` every 30s (via {@link useInvoiceCount}).
- * - Smoothly animates the number on each update with {@link AnimatedNumber}.
- * - Shows total funded volume (USD-equivalent) alongside the count.
- * - Falls back to a static number if the contract query fails, rather than
- *   hiding or crashing the hero.
+ * - Shows total funded volume (USD-equivalent) from `get_contract_stats`.
+ * - Renders an explicit unavailable state when either RPC read fails; it never
+ *   substitutes a fabricated zero for a missing financial value.
  */
 export default function LiveInvoiceTicker() {
   const { data: count, isError: countError } = useInvoiceCount();
-  const { data: stats } = useContractStats();
+  const { data: stats, isError: statsError } = useContractStats();
 
-  const displayCount = countError || count === undefined ? FALLBACK_COUNT : count;
-  const volumeUsd = stats?.total_volume_usd ?? 0;
+  const countUnavailable = countError || count === undefined;
+  const volumeUnavailable = statsError || !stats;
+  const volumeUsd = stats && !statsError ? stats.total_volume_usd : null;
+  const unavailable = countUnavailable && volumeUnavailable;
 
   return (
     <div
-      className="flex flex-wrap items-center gap-x-8 gap-y-3 mb-10"
+      className="mb-10"
       aria-live="polite"
       data-testid="live-invoice-ticker"
+      data-status={unavailable ? 'unavailable' : 'verified'}
     >
-      <div className="flex items-baseline gap-2">
-        <AnimatedNumber
-          value={displayCount}
-          className="text-3xl lg:text-4xl font-bold text-on-primary-container font-headline tabular-nums"
-          formatter={(v) => Math.round(v).toLocaleString()}
-        />
-        <span className="text-sm text-on-primary-container/70 font-body">
-          invoices financed and counting
-        </span>
-      </div>
-
-      {volumeUsd > 0 && (
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
         <div className="flex items-baseline gap-2">
-          <span className="text-3xl lg:text-4xl font-bold text-on-primary-container font-headline tabular-nums">
-            {formatUsd(volumeUsd)}
-          </span>
+          {count === undefined || countError ? (
+            <span className="text-3xl lg:text-4xl font-bold text-on-primary-container font-headline">
+              Unavailable
+            </span>
+          ) : (
+            <AnimatedNumber
+              value={count}
+              className="text-3xl lg:text-4xl font-bold text-on-primary-container font-headline tabular-nums"
+              formatter={(v) => Math.round(v).toLocaleString()}
+            />
+          )}
           <span className="text-sm text-on-primary-container/70 font-body">
-            total funded volume
+            invoices financed and counting
           </span>
         </div>
-      )}
+
+        {volumeUsd !== null && volumeUsd > 0 && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl lg:text-4xl font-bold text-on-primary-container font-headline tabular-nums">
+              {formatUsd(volumeUsd)}
+            </span>
+            <span className="text-sm text-on-primary-container/70 font-body">
+              total funded volume
+            </span>
+          </div>
+        )}
+      </div>
+      <DataSourceCaption
+        metric="homepage-protocol-metrics"
+        provenance={unavailable ? 'unavailable' : 'rpc'}
+        className="mt-2 text-on-primary-container/70"
+      />
     </div>
   );
 }

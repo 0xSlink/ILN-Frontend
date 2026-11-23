@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRecentProtocolFeed } from '@/hooks/useRecentProtocolFeed';
+import DataSourceCaption from '@/components/DataSourceCaption';
 import type { ProtocolFeedItem } from '@/utils/protocol-feed';
 
 function FeedRow({ item, isNew }: { item: ProtocolFeedItem; isNew: boolean }) {
@@ -94,6 +95,11 @@ export default function RecentTransactionsPanel() {
         <p className="mt-1 text-sm text-on-surface-variant">
           Live invoice submissions, fundings, settlements, and disputes on the network.
         </p>
+        <DataSourceCaption
+          metric="recent-protocol-activity"
+          provenance={isError ? 'unavailable' : 'rpc'}
+          className="mt-2"
+        />
 
         {isLoading ? (
           <ul className="mt-6 flex flex-col gap-3" aria-label="Loading recent transactions">

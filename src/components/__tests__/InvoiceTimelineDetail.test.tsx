@@ -67,6 +67,30 @@ describe('InvoiceTimeline detail panel and pagination', () => {
     expect(link).toHaveAttribute('href', 'https://explorer.example/tx/deadbeef');
   });
 
+  it('uses the shared verifier for the default Stellar Expert link', () => {
+    const txHash = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    const withHash = { ...invoice({ id: 10n }), tx_hash: txHash } as Invoice & {
+      tx_hash: string;
+    };
+    render(<InvoiceTimeline invoices={[withHash]} loading={false} />);
+
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.getByText('Explorer').closest('a')).toHaveAttribute(
+      'href',
+      `https://stellar.expert/explorer/testnet/tx/${txHash}`
+    );
+  });
+
+  it('omits the default explorer link for a malformed transaction hash', () => {
+    const withHash = { ...invoice({ id: 12n }), tx_hash: 'deadbeef' } as Invoice & {
+      tx_hash: string;
+    };
+    render(<InvoiceTimeline invoices={[withHash]} loading={false} />);
+
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.queryByText('Explorer')).not.toBeInTheDocument();
+  });
+
   it('omits the explorer link and Funded-only actions for a Pending invoice', () => {
     render(<InvoiceTimeline invoices={[invoice({ id: 9n, status: 'Pending' })]} loading={false} />);
 

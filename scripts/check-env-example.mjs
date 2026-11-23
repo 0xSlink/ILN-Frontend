@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +18,8 @@ export const CONFIG_DIFF_SPEC = {
   // Environment variables that MUST differ between testnet and mainnet
   mustDiffer: {
     NEXT_PUBLIC_STELLAR_NETWORK: {
-      description: "Stellar network identifier (must be 'public' on mainnet, never 'mainnet' or 'testnet')",
+      description:
+        "Stellar network identifier (must be 'public' on mainnet, never 'mainnet' or 'testnet')",
       validateProd: (val, testnetVal) => {
         if (!val) return 'Missing production value';
         if (val === testnetVal) return `Must differ from testnet value (${testnetVal})`;
@@ -71,7 +73,8 @@ export const CONFIG_DIFF_SPEC = {
       description: 'Mainnet invoice factoring contract ID',
       validateProd: (val, testnetVal) => {
         if (!val) return 'Missing production contract ID';
-        if (val === testnetVal) return `Production contract ID cannot match testnet contract ID (${testnetVal})`;
+        if (val === testnetVal)
+          return `Production contract ID cannot match testnet contract ID (${testnetVal})`;
         if (!/^C[A-Z0-9]{55}$/.test(val)) {
           return `Invalid Stellar contract ID format (must be 56 uppercase alphanumeric characters starting with C, received: '${val}')`;
         }
@@ -98,7 +101,8 @@ export const CONFIG_DIFF_SPEC = {
       description: 'Contract version identifier',
       validateProd: (val, testnetVal) => {
         if (!val) return 'Missing production contract version';
-        if (val === testnetVal) return `Production contract version cannot match testnet version (${testnetVal})`;
+        if (val === testnetVal)
+          return `Production contract version cannot match testnet version (${testnetVal})`;
         if (val.startsWith('testnet:')) {
           return `Production contract version cannot start with 'testnet:' ('${val}')`;
         }
@@ -120,7 +124,7 @@ export const CONFIG_DIFF_SPEC = {
     },
     NEXT_PUBLIC_APP_VERSION: {
       description: 'Public app version label',
-      validateProd: (val, testnetVal) => {
+      validateProd: (val, _testnetVal) => {
         if (val === 'dev') {
           return "Production app version should not be 'dev'";
         }
@@ -129,9 +133,68 @@ export const CONFIG_DIFF_SPEC = {
     },
     NEXT_PUBLIC_GOVERNANCE_ADMIN_ADDRESS: {
       description: 'Governance admin public key',
-      validateProd: (val, testnetVal) => {
+      validateProd: (val, _testnetVal) => {
         if (val && val === 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF') {
           return 'Production governance admin address cannot use dummy default testnet public key';
+        }
+        return null;
+      },
+    },
+    NEXT_PUBLIC_INDEXER_API_URL: {
+      description: 'Mainnet indexer API endpoint',
+      validateProd: (val, testnetVal) => {
+        if (!val) return 'Missing production indexer API URL';
+        if (val === testnetVal || /localhost|127\.0\.0\.1/.test(val)) {
+          return `Production indexer API URL cannot point to localhost or testnet default ('${val}')`;
+        }
+        if (!val.startsWith('https://')) {
+          return `Production indexer API URL must use HTTPS ('${val}')`;
+        }
+        return null;
+      },
+    },
+    INDEXER_URL: {
+      description: 'Production server-side indexer URL',
+      validateProd: (val, testnetVal) => {
+        if (!val) return 'Missing production indexer server URL';
+        if (val === testnetVal || /localhost|127\.0\.0\.1/.test(val)) {
+          return `Production indexer server URL cannot point to localhost or testnet default ('${val}')`;
+        }
+        if (!val.startsWith('https://')) {
+          return `Production indexer server URL must use HTTPS ('${val}')`;
+        }
+        return null;
+      },
+    },
+    NEXT_PUBLIC_SEP10_WEB_AUTH_ENDPOINT: {
+      description: 'Production SEP-10 Web Auth endpoint',
+      validateProd: (val, testnetVal) => {
+        if (!val) return 'Missing production SEP-10 Web Auth endpoint';
+        if (val === testnetVal || /localhost|127\.0\.0\.1|example\.com/i.test(val)) {
+          return `Production SEP-10 endpoint cannot point to testnet/example domain ('${val}')`;
+        }
+        if (!val.startsWith('https://')) {
+          return `Production SEP-10 endpoint must use HTTPS ('${val}')`;
+        }
+        return null;
+      },
+    },
+    NEXT_PUBLIC_SEP10_HOME_DOMAIN: {
+      description: 'Production SEP-10 public home domain',
+      validateProd: (val) => {
+        if (!val) return 'Missing production SEP-10 public home domain';
+        if (/localhost|example\.com/i.test(val)) {
+          return `Production SEP-10 home domain cannot use example or localhost domain ('${val}')`;
+        }
+        return null;
+      },
+    },
+    SEP10_HOME_DOMAIN: {
+      description: 'Production SEP-10 server home domain',
+      validateProd: (val) => {
+        if (!val) return 'Missing production SEP-10 server home domain';
+        if (/localhost|example\.com/i.test(val)) {
+          return `Production SEP-10 home domain cannot use example or localhost domain ('${val}')`;
         }
         return null;
       },
@@ -166,6 +229,151 @@ export const CONFIG_DIFF_SPEC = {
     'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
   ],
 };
+
+/**
+ * Required domain specifications for Indexer, RPC, Wallet, and Authentication.
+ * Fails closed if any required variable is missing, empty, or misconfigured.
+ */
+export const REQUIRED_DOMAIN_VARIABLES = {
+  indexer: {
+    name: 'Indexer',
+    required: ['INDEXER_URL', 'NEXT_PUBLIC_INDEXER_WS_URL', 'NEXT_PUBLIC_INDEXER_API_URL'],
+    validate: (key, val, isProd) => {
+      if (val === undefined || (isProd && !val.trim())) {
+        return `Required indexer variable '${key}' is missing or empty`;
+      }
+      if (isProd) {
+        if (/localhost|127\.0\.0\.1/.test(val)) {
+          return `Production indexer variable '${key}' cannot point to localhost ('${val}')`;
+        }
+        if (key.includes('URL') && !key.includes('WS') && !val.startsWith('https://')) {
+          return `Production indexer URL '${key}' must use HTTPS ('${val}')`;
+        }
+        if (key.includes('WS') && !val.startsWith('wss://')) {
+          return `Production indexer WebSocket URL '${key}' must use WSS ('${val}')`;
+        }
+      }
+      return null;
+    },
+  },
+  rpc: {
+    name: 'RPC & Stellar Protocol',
+    required: [
+      'NEXT_PUBLIC_RPC_URL',
+      'NEXT_PUBLIC_CONTRACT_ID',
+      'NEXT_PUBLIC_NETWORK_PASSPHRASE',
+      'NEXT_PUBLIC_STELLAR_NETWORK',
+      'NEXT_PUBLIC_NETWORK_NAME',
+    ],
+    validate: (key, val, isProd) => {
+      if (val === undefined || (isProd && !val.trim())) {
+        return `Required RPC variable '${key}' is missing or empty`;
+      }
+      if (isProd) {
+        if (key === 'NEXT_PUBLIC_RPC_URL') {
+          if (!val.startsWith('https://'))
+            return `Production RPC endpoint must use HTTPS ('${val}')`;
+          if (/testnet|futurenet|localhost|127\.0\.0\.1/i.test(val)) {
+            return `Production RPC endpoint cannot point to testnet, futurenet, or localhost ('${val}')`;
+          }
+        }
+        if (key === 'NEXT_PUBLIC_CONTRACT_ID' && !/^C[A-Z0-9]{55}$/.test(val)) {
+          return `Production contract ID must be 56 uppercase alphanumeric chars starting with C ('${val}')`;
+        }
+        if (key === 'NEXT_PUBLIC_STELLAR_NETWORK' && val !== 'public') {
+          return `Production Stellar network must be 'public' ('${val}')`;
+        }
+        if (
+          key === 'NEXT_PUBLIC_NETWORK_PASSPHRASE' &&
+          val !== 'Public Global Stellar Network ; September 2015'
+        ) {
+          return `Production passphrase does not match SDF public network passphrase`;
+        }
+      }
+      return null;
+    },
+  },
+  wallet: {
+    name: 'Wallet',
+    required: ['NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID'],
+    validate: (key, val, isProd, strictSecrets) => {
+      if (val === undefined) return `Required wallet variable '${key}' is not documented`;
+      if (isProd && !val.trim()) {
+        return `Production wallet variable '${key}' cannot be empty`;
+      }
+      if (isProd && strictSecrets && (!val || val.includes('placeholder'))) {
+        return `Production wallet variable '${key}' must be configured (found placeholder or empty)`;
+      }
+      return null;
+    },
+  },
+  authentication: {
+    name: 'Authentication (SEP-10 / JWT)',
+    required: [
+      'SEP10_SERVER_SECRET_KEY',
+      'SEP10_HOME_DOMAIN',
+      'JWT_SECRET_KEY',
+      'NEXT_PUBLIC_SEP10_HOME_DOMAIN',
+      'NEXT_PUBLIC_SEP10_WEB_AUTH_ENDPOINT',
+    ],
+    validate: (key, val, isProd, strictSecrets) => {
+      if (val === undefined) return `Required authentication variable '${key}' is not documented`;
+      if (isProd) {
+        if (!val.trim()) {
+          return `Production authentication variable '${key}' cannot be empty`;
+        }
+        if (strictSecrets && (!val || val.includes('placeholder'))) {
+          return `Production authentication secret '${key}' is missing or unconfigured placeholder`;
+        }
+        if (key === 'NEXT_PUBLIC_SEP10_WEB_AUTH_ENDPOINT' && !val.startsWith('https://')) {
+          return `Production SEP-10 Web Auth endpoint must use HTTPS ('${val}')`;
+        }
+        if (key.includes('HOME_DOMAIN') && /example\.com|localhost/i.test(val)) {
+          return `Production SEP-10 domain '${key}' cannot use example or localhost domain ('${val}')`;
+        }
+      }
+      return null;
+    },
+  },
+};
+
+/**
+ * Validates that all required indexer, RPC, wallet, and authentication variables
+ * are documented and fail closed.
+ */
+export function verifyDomainRequirements(env, options = {}) {
+  const isProduction = Boolean(options.isProduction);
+  const strictSecrets = Boolean(options.strictSecrets);
+  const errors = [];
+  const passed = [];
+
+  for (const [domainKey, domain] of Object.entries(REQUIRED_DOMAIN_VARIABLES)) {
+    for (const varName of domain.required) {
+      const val = env[varName];
+      const validationError = domain.validate(varName, val, isProduction, strictSecrets);
+      if (validationError) {
+        errors.push({
+          domain: domainKey,
+          domainName: domain.name,
+          key: varName,
+          message: validationError,
+        });
+      } else {
+        passed.push({
+          domain: domainKey,
+          domainName: domain.name,
+          key: varName,
+        });
+      }
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    errors,
+    passed,
+  };
+}
 
 /**
  * Walk directory recursively to find source files
@@ -288,9 +496,12 @@ export function checkEnvExampleSync(options = {}) {
     .filter((name) => !documented.has(name) && !allowlisted.has(name))
     .sort();
 
+  const domainCheck = verifyDomainRequirements(documentedMap, { isProduction: false });
+
   return {
-    success: missing.length === 0,
+    success: missing.length === 0 && domainCheck.success,
     missing,
+    domainErrors: domainCheck.errors,
     documentedCount: documented.size,
     referencedCount: referenced.size,
   };
@@ -316,7 +527,12 @@ export function maskValue(key, val) {
 /**
  * Compare testnet and mainnet (production) configuration sets and check for drift
  */
-export function detectConfigurationDrift(testnetEnv, prodEnv, spec = CONFIG_DIFF_SPEC) {
+export function detectConfigurationDrift(
+  testnetEnv,
+  prodEnv,
+  spec = CONFIG_DIFF_SPEC,
+  options = {}
+) {
   const errors = [];
   const warnings = [];
   const passed = [];
@@ -431,6 +647,27 @@ export function detectConfigurationDrift(testnetEnv, prodEnv, spec = CONFIG_DIFF
     }
   }
 
+  // 6. Fail-closed verification of required Indexer, RPC, Wallet, and Authentication domains
+  const domainValidation = verifyDomainRequirements(prodEnv, {
+    isProduction: true,
+    strictSecrets: Boolean(options.strictSecrets),
+  });
+
+  for (const err of domainValidation.errors) {
+    errors.push({
+      key: err.key,
+      type: 'DOMAIN_REQUIREMENT_VIOLATION',
+      message: `[${err.domainName}] ${err.message}`,
+    });
+  }
+  for (const p of domainValidation.passed) {
+    passed.push({
+      key: p.key,
+      type: 'DOMAIN_REQUIREMENT_PASSED',
+      message: `Verified required ${p.domainName} variable fail-closed invariant`,
+    });
+  }
+
   return {
     success: errors.length === 0,
     errors,
@@ -528,9 +765,13 @@ async function main() {
     console.log('🌐 Fetching live production environment variables from Vercel API...');
     try {
       prodEnv = await fetchVercelProductionEnv(vercelToken, vercelProjectId, vercelTeamId);
-      console.log(`✅ Loaded ${Object.keys(prodEnv).length} production variables from Vercel API\n`);
+      console.log(
+        `✅ Loaded ${Object.keys(prodEnv).length} production variables from Vercel API\n`
+      );
     } catch (err) {
-      console.warn(`⚠️ Vercel API fetch failed: ${err.message}. Falling back to ${PROD_EXAMPLE_FILE}\n`);
+      console.warn(
+        `⚠️ Vercel API fetch failed: ${err.message}. Falling back to ${PROD_EXAMPLE_FILE}\n`
+      );
       prodEnv = parseEnvFile(PROD_EXAMPLE_FILE);
     }
   } else {
@@ -538,7 +779,10 @@ async function main() {
       prodEnv = parseEnvFile(PROD_EXAMPLE_FILE);
       console.log(`📄 Comparing against checked-in production snapshot: ${PROD_EXAMPLE_FILE}\n`);
     } catch (err) {
-      console.error(`❌ Failed to read production snapshot file (${PROD_EXAMPLE_FILE}):`, err.message);
+      console.error(
+        `❌ Failed to read production snapshot file (${PROD_EXAMPLE_FILE}):`,
+        err.message
+      );
       process.exit(1);
     }
   }
@@ -582,7 +826,9 @@ async function main() {
     console.error(
       '\n🚨 Configuration drift check FAILED. Prevented shipping testnet-convenience values to mainnet.'
     );
-    console.error('Review docs/mainnet-deployment-runbook.md for the required mainnet diff specification.\n');
+    console.error(
+      'Review docs/mainnet-deployment-runbook.md for the required mainnet diff specification.\n'
+    );
     process.exit(1);
   }
 
@@ -591,8 +837,7 @@ async function main() {
 
 // Execute main if run directly
 const isDirectRun =
-  process.argv[1] &&
-  fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+  process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
 if (isDirectRun) {
   main().catch((err) => {

@@ -382,4 +382,142 @@ test.describe('Core user journeys', () => {
       }
     });
   });
+
+  /**
+   * Transaction timeout unknown-outcome handling (#1285).
+   *
+   * When confirmation polling times out after a transaction was already handed
+   * to Soroban RPC, the outcome is unknown (it may still confirm on-chain).
+   * These tests verify that:
+   * 1. The persisted transaction hash under `iln_pending_transactions_v1` is
+   *    preserved across reloads while RPC still reports `NOT_FOUND` / timeout.
+   * 2. No automatic `sendTransaction` blind resubmission occurs and no unsafe
+   *    blind retry prompt is rendered for an unsettled timed-out hash.
+   * 3. Once RPC reports a terminal `SUCCESS` verdict, reconciliation removes
+   *    the pending entry without issuing any second `sendTransaction`.
+   */
+  test.describe('Transaction timeout unknown-outcome handling (#1285)', () => {
+    const PENDING_KEY = 'iln_pending_transactions_v1';
+    const TIMED_OUT_HASH =
+      'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+
+    test('preserves timed-out transaction hash across reload and avoids blind retry', async ({
+      page,
+    }) => {
+      let sendTxCount = 0;
+
+      await page.route('**/*soroban*', async (route) => {
+        const postData = route.request().postData() ?? '';
+        if (postData.includes('"sendTransaction"')) {
+          sendTxCount += 1;
+        }
+        if (postData.includes('"getTransaction"')) {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              result: { status: 'NOT_FOUND' },
+            }),
+          });
+          return;
+        }
+        await route.continue();
+      });
+
+      await page.addInitScript(
+        ({ key, hash }) => {
+          if (!window.localStorage.getItem(key)) {
+            window.localStorage.setItem(
+              key,
+              JSON.stringify([
+                {
+                  hash,
+                  label: 'fund_invoice:42',
+                  operationKey: 'fund_invoice:42',
+                  createdAt: Date.now() - 60_000,
+                  status: 'confirming',
+                },
+              ])
+            );
+          }
+        },
+        { key: PENDING_KEY, hash: TIMED_OUT_HASH }
+      );
+
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await waitForHydration(page);
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await waitForHydration(page);
+
+      // Persisted hash must still be intact after reload while outcome is unknown.
+      const stored = await page.evaluate((key) => {
+        const raw = window.localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : [];
+      }, PENDING_KEY);
+
+      expect(stored).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            hash: TIMED_OUT_HASH,
+            label: 'fund_invoice:42',
+          }),
+        ])
+      );
+
+      // Unknown-outcome timeout must never trigger an automatic blind resubmit.
+      expect(sendTxCount).toBe(0);
+      const blindRetryPrompt = page.getByRole('button', {
+        name: /retry transaction|resubmit transaction|try submitting again/i,
+      });
+      await expect(blindRetryPrompt).toHaveCount(0);
+    });
+
+    test('preserves hash on RPC timeout error without dropping pending entry', async ({ page }) => {
+      let sendTxCount = 0;
+
+      await page.route('**/*soroban*', async (route) => {
+        const postData = route.request().postData() ?? '';
+        if (postData.includes('"sendTransaction"')) {
+          sendTxCount += 1;
+        }
+        if (postData.includes('"getTransaction"')) {
+          await route.abort('timedout');
+          return;
+        }
+        await route.continue();
+      });
+
+      await page.addInitScript(
+        ({ key, hash }) => {
+          window.localStorage.setItem(
+            key,
+            JSON.stringify([
+              {
+                hash,
+                label: 'settle_invoice:42',
+                operationKey: 'settle_invoice:42',
+                createdAt: Date.now() - 30_000,
+                status: 'submitted',
+              },
+            ])
+          );
+        },
+        { key: PENDING_KEY, hash: TIMED_OUT_HASH }
+      );
+
+      await page.goto('/dashboard', { waitUntil: 'domcontentloaded' });
+      await waitForHydration(page);
+
+      const stored = await page.evaluate((key) => {
+        const raw = window.localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : [];
+      }, PENDING_KEY);
+
+      expect(stored).toHaveLength(1);
+      expect(stored[0]?.hash).toBe(TIMED_OUT_HASH);
+      expect(sendTxCount).toBe(0);
+    });
+  });
 });

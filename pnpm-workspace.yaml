@@ -2,7 +2,7 @@ packages:
   - '.'
 allowBuilds:
   '@parcel/watcher': true
-  '@sentry/cli': set this to true or false
+  '@sentry/cli': true
   '@swc/core': true
   core-js: true
   esbuild: true

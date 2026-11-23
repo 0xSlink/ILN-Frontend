@@ -47,6 +47,14 @@ describe('Contract Error Mapping', () => {
       expect(parseContractError(err)).toBe('ContractPaused');
     });
 
+    it('extracts CapExceeded and staged-rollout cap codes correctly', () => {
+      expect(parseContractError('Transaction failed: CapExceeded')).toBe('CapExceeded');
+      expect(parseContractError(new Error('CapExceeded: amount above initial launch threshold'))).toBe('CapExceeded');
+      expect(parseContractError('Error: cap exceeded for staged rollout')).toBe('CapExceeded');
+      expect(parseContractError('HostError: Error(Contract, #44)')).toBe('MaxInvoiceAmountExceeded');
+      expect(parseContractError('HostError: Error(Contract, #45)')).toBe('GlobalVolumeCapExceeded');
+    });
+
     it('returns null for unknown error', () => {
       expect(parseContractError(new Error('Network disconnect'))).toBeNull();
       expect(parseContractError('Something went wrong')).toBeNull();

@@ -13,15 +13,23 @@ import {
   type TooltipProps,
 } from 'recharts';
 import {
+  assessDefaultRateHistory,
   calculateMovingAverage,
+  DEFAULT_RATE_MIN_FUNDED_SAMPLE,
+  DEFAULT_RATE_OBSERVATION_WINDOW_MONTHS,
   MonthlyDefaultBucket,
   MonthlyDefaultWithMA,
 } from '@/utils/defaultRate';
-import { fetchDefaultRate } from '@/lib/indexer';
 import IndexerUnavailableNotice, {
   shouldUseDevMockFallback,
+  type IndexerNoticeStatus,
 } from '@/components/IndexerUnavailableNotice';
 import DataSourceCaption from '@/components/DataSourceCaption';
+import {
+  fetchDefaultAnalytics,
+  classifyIndexerClientError,
+  isAbortError,
+} from '@/lib/indexer-client';
 
 const CHART_TICK_STYLE = {
   fill: 'var(--color-on-surface-variant, #94a3b8)',
@@ -37,6 +45,8 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) 
 
   const defaultRateEntry = payload.find((p) => p.dataKey === 'defaultRate');
   const maEntry = payload.find((p) => p.dataKey === 'movingAverage');
+  const bucket = payload[0]?.payload as MonthlyDefaultWithMA | undefined;
+  const hasDenominator = bucket ? bucket.funded > 0 : true;
 
   return (
     <div className="rounded-xl border border-outline-variant/20 bg-surface-container-lowest px-4 py-3 shadow-xl">
@@ -51,7 +61,7 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) 
               <span className="text-xs font-medium text-on-surface">Default Rate</span>
             </div>
             <span className="text-xs font-bold text-on-surface">
-              {(defaultRateEntry.value as number).toFixed(2)}%
+              {hasDenominator ? `${(defaultRateEntry.value as number).toFixed(2)}%` : 'N/A'}
             </span>
           </div>
         )}
@@ -59,12 +69,19 @@ function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) 
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full" style={{ backgroundColor: '#6366f1' }} />
-              <span className="text-xs font-medium text-on-surface">30-day MA</span>
+              <span className="text-xs font-medium text-on-surface">1-month MA</span>
             </div>
             <span className="text-xs font-bold text-on-surface">
-              {(maEntry.value as number).toFixed(2)}%
+              {hasDenominator ? `${(maEntry.value as number).toFixed(2)}%` : 'N/A'}
             </span>
           </div>
+        )}
+        {bucket && (
+          <p className="mt-1 border-t border-outline-variant/15 pt-1 text-[11px] text-on-surface-variant">
+            {bucket.funded > 0
+              ? `${bucket.defaulted} defaulted / ${bucket.funded} funded invoices`
+              : 'Insufficient history (0 funded invoices)'}
+          </p>
         )}
       </div>
     </div>
@@ -100,20 +117,19 @@ export default function DefaultRateChart() {
   const [chartData, setChartData] = useState<MonthlyDefaultWithMA[]>([]);
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
+  const [errorStatus, setErrorStatus] = useState<IndexerNoticeStatus>('unavailable');
   const [requestId, setRequestId] = useState(0);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setUnavailable(false);
     try {
-      const result = await fetchDefaultRate('12m');
-      if (result.unavailable || result.error || !result.data) {
-        throw new Error('Failed to fetch default rate');
-      }
-      const json = result.data;
-      const withMA = calculateMovingAverage(json.monthly || json, 1);
+      const withMA = await fetchDefaultAnalytics('12m', { signal });
       setChartData(withMA);
-    } catch {
+    } catch (err) {
+      if (isAbortError(err)) {
+        return;
+      }
       // Only substitute demo data in development; otherwise show an honest
       // "temporarily unavailable" state instead of fabricating metrics.
       if (shouldUseDevMockFallback()) {
@@ -121,6 +137,12 @@ export default function DefaultRateChart() {
         const withMA = calculateMovingAverage(mockData, 1);
         setChartData(withMA);
       } else {
+        const boundary = classifyIndexerClientError(err);
+        setErrorStatus(
+          boundary === 'rate-limited' || boundary === 'unauthorized' || boundary === 'malformed'
+            ? boundary
+            : 'unavailable'
+        );
         setChartData([]);
         setUnavailable(true);
       }
@@ -130,35 +152,31 @@ export default function DefaultRateChart() {
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: initial chart load on mount/retry.
-    void fetchData();
+    void fetchData(controller.signal);
+    return () => {
+      controller.abort();
+    };
   }, [requestId, fetchData]);
 
-  const currentRate = useMemo(() => {
-    if (chartData.length === 0) return 0;
-    return chartData[chartData.length - 1].defaultRate;
-  }, [chartData]);
-
-  const allTimeRate = useMemo(() => {
-    if (chartData.length === 0) return 0;
-    const totalDefaulted = chartData.reduce((sum, b) => sum + b.defaulted, 0);
-    const totalFunded = chartData.reduce((sum, b) => sum + b.funded, 0);
-    if (totalFunded === 0) return 0;
-    return (totalDefaulted / totalFunded) * 100;
-  }, [chartData]);
+  const assessment = useMemo(() => assessDefaultRateHistory(chartData), [chartData]);
 
   const trend = useMemo(() => {
     if (chartData.length < 2) return null;
-    const current = chartData[chartData.length - 1].defaultRate;
-    const previous = chartData[chartData.length - 2].defaultRate;
-    if (current > previous) return 'up';
-    if (current < previous) return 'down';
+    const currentBucket = chartData[chartData.length - 1];
+    const previousBucket = chartData[chartData.length - 2];
+    if (currentBucket.funded <= 0 || previousBucket.funded <= 0) return null;
+    if (currentBucket.defaultRate > previousBucket.defaultRate) return 'up';
+    if (currentBucket.defaultRate < previousBucket.defaultRate) return 'down';
     return 'flat';
   }, [chartData]);
 
-  const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→';
+  const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : trend === 'flat' ? '→' : '—';
   const trendClass =
     trend === 'up' ? 'text-error' : trend === 'down' ? 'text-green-500' : 'text-on-surface-variant';
+
+  const hasData = !loading && !unavailable && chartData.length > 0;
 
   return (
     <div className="flex flex-col gap-6 rounded-[24px] border border-outline-variant/15 bg-surface-container-lowest p-6 shadow-sm">
@@ -167,8 +185,42 @@ export default function DefaultRateChart() {
           <h3 className="font-headline text-xl font-bold text-on-surface">Default Rate Trend</h3>
           <p className="text-sm text-on-surface-variant">Protocol health indicator</p>
           <DataSourceCaption metric="default-rate" />
+          <p
+            data-testid="default-rate-methodology"
+            className="mt-1 text-[11px] text-on-surface-variant/80"
+          >
+            Methodology: count-weighted defaulted / funded invoices over a trailing{' '}
+            {DEFAULT_RATE_OBSERVATION_WINDOW_MONTHS}-month observation window (1-month MA).
+          </p>
         </div>
       </div>
+
+      {hasData && assessment.insufficientHistory && (
+        <div
+          role="status"
+          data-testid="default-rate-insufficient-history"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-300"
+        >
+          Insufficient payer history ({assessment.totalFunded} funded invoice
+          {assessment.totalFunded === 1 ? '' : 's'} in window; minimum{' '}
+          {DEFAULT_RATE_MIN_FUNDED_SAMPLE} required for reliable rate interpretation
+          {assessment.zeroDenominatorBuckets > 0
+            ? `, ${assessment.zeroDenominatorBuckets} month${assessment.zeroDenominatorBuckets === 1 ? '' : 's'} with 0 funded invoices`
+            : ''}
+          ).
+        </div>
+      )}
+
+      {hasData && assessment.staleHistory && assessment.latestBucketDate && (
+        <div
+          role="status"
+          data-testid="default-rate-stale-history"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-700 dark:text-amber-300"
+        >
+          Stale payer history: latest observed monthly bucket is {assessment.latestBucketDate} (
+          {assessment.staleMonthsLag} months behind current month).
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-4">
         <div className="flex flex-col gap-1 rounded-xl bg-surface-container p-4">
@@ -176,15 +228,19 @@ export default function DefaultRateChart() {
             Current
           </span>
           <span className="font-headline text-2xl font-bold text-on-surface">
-            {currentRate.toFixed(2)}%
+            {assessment.currentDefaultRate !== null
+              ? `${assessment.currentDefaultRate.toFixed(2)}%`
+              : 'N/A'}
           </span>
         </div>
         <div className="flex flex-col gap-1 rounded-xl bg-surface-container p-4">
           <span className="text-[11px] font-bold uppercase tracking-wider text-on-surface-variant">
-            All-time
+            12m Window
           </span>
           <span className="font-headline text-2xl font-bold text-on-surface">
-            {allTimeRate.toFixed(2)}%
+            {assessment.windowDefaultRate !== null
+              ? `${assessment.windowDefaultRate.toFixed(2)}%`
+              : 'N/A'}
           </span>
         </div>
         <div className="flex flex-col gap-1 rounded-xl bg-surface-container p-4">
@@ -206,6 +262,7 @@ export default function DefaultRateChart() {
           <div className="flex h-full items-center">
             <IndexerUnavailableNotice
               dataSource="Default-rate history"
+              status={errorStatus}
               onRetry={() => setRequestId((id) => id + 1)}
             />
           </div>
@@ -263,7 +320,7 @@ export default function DefaultRateChart() {
               <Line
                 type="monotone"
                 dataKey="movingAverage"
-                name="30-day MA"
+                name="1-month MA"
                 stroke="#6366f1"
                 strokeWidth={2}
                 dot={{ fill: '#6366f1', r: 3 }}
